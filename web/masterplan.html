@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Trazo · Masterplan</title>
+<style>
+:root{--bg:#f6f7f9;--pan:#fff;--ink:#1b2430;--mut:#667085;--line:#d9dee6;--acc:#2f6fed;--ok:#1a9d5b;--bad:#d63b3b}
+@media (prefers-color-scheme:dark){:root{--bg:#12161c;--pan:#1a2029;--ink:#e6eaf0;--mut:#98a2b3;--line:#2c3542;--acc:#6b9bff}}
+*{box-sizing:border-box}body{margin:0;font:14px system-ui,sans-serif;background:var(--bg);color:var(--ink);display:grid;grid-template-columns:330px 1fr 290px;height:100vh}
+aside{background:var(--pan);overflow:auto;padding:14px;border-right:1px solid var(--line)}aside.r{border-right:0;border-left:1px solid var(--line)}
+h1{font-size:16px;margin:0 0 4px}h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin:16px 0 6px}
+label{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:4px 0}input,select{background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:4px 6px;font:inherit}
+input[type=number]{width:72px}button{background:var(--acc);color:#fff;border:0;border-radius:6px;padding:7px 10px;font:inherit;cursor:pointer;margin:2px 2px 2px 0}
+button.s{background:transparent;color:var(--ink);border:1px solid var(--line)}button.on{outline:2px solid var(--acc);background:var(--acc);color:#fff}
+a{color:var(--acc)}main{position:relative;overflow:hidden}main>svg{width:100%;height:100%;display:block;touch-action:none;user-select:none}
+.viewbar{position:absolute;left:10px;right:10px;top:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;z-index:2}
+.grp{display:inline-flex;gap:8px;align-items:center;background:var(--pan);border:1px solid var(--line);border-radius:6px;padding:3px 8px;font-size:12px;color:var(--mut)}
+.tag{position:absolute;left:10px;bottom:10px;background:var(--pan);border:1px solid var(--line);border-radius:6px;padding:4px 8px;color:var(--mut);font-size:12px;max-width:70%}
+.ctx{position:absolute;right:10px;top:52px;background:var(--pan);border:1px solid var(--line);border-radius:8px;padding:10px;width:260px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:3;font-size:13px;display:none}
+.hint{color:var(--mut);font-size:12px;margin:4px 0}.w{color:var(--bad);font-size:12px;margin:3px 0}.k{display:flex;justify-content:space-between;margin:3px 0}.k b{font-variant-numeric:tabular-nums}
+.row{display:grid;grid-template-columns:1fr 54px 54px 22px;gap:4px;margin:3px 0}.row input{width:100%}
+.prow{display:grid;grid-template-columns:14px 1fr auto;gap:6px;align-items:center;padding:2px 0;font-size:12px}.sw{width:12px;height:12px;border-radius:3px;display:inline-block}
+table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:3px 4px;border-bottom:1px solid var(--line);text-align:left}
+@media(max-width:900px){body{grid-template-columns:1fr;height:auto}main{height:60vh}}
+</style></head><body>
+<aside>
+ <h1>Trazo · Masterplan <small id="ver" style="color:var(--mut);font-weight:400"></small></h1>
+ <div class="hint">Modo predio: calles, veredas, manzanas, lotes y construcciones. <a href="/">→ Modo Edificio</a></div>
+ <h2>1 · Predio</h2>
+ <label>Ejemplo <select id="sample"></select></label>
+ <button class="s" id="tPredio" onclick="setTool('predio')">Dibujar predio</button>
+ <button class="s" id="tFront" onclick="setTool('front')">Bordes con calle existente</button>
+ <div class="hint">Los bordes en azul dan a una calle existente (los lotes pueden tener frente allí). Clic sobre un borde para cambiarlo.</div>
+ <h2>2 · Calles</h2>
+ <label>Calzada (m) <input type="number" id="calzada" step="0.5" value="9"></label>
+ <label>Vereda, cada lado (m) <input type="number" id="vereda" step="0.5" value="4"></label>
+ <label>Manzana ancho × largo (m) <span><input type="number" id="mzW" value="80" style="width:58px"> × <input type="number" id="mzL" value="120" style="width:58px"></span></label>
+ <button onclick="damero()">Trazar damero</button>
+ <button class="s" id="tStreet" onclick="setTool('street')">Dibujar calle</button>
+ <button class="s" onclick="streets=[];renderStreets();gen()">Borrar calles</button>
+ <div class="hint">Cada tramo debe atravesar la manzana: quiebra una calle solo en un cruce o en el borde del predio. Las T funcionan terminando el tramo sobre el eje de la otra calle.</div>
+ <div id="streetList"></div>
+ <h2>3 · Manzanas</h2>
+ <label>Ochava (m por lado) <input type="number" id="ochava" step="0.5" value="3"></label>
+ <div class="hint">Clic en una manzana: Lotes → Espacio verde → Equipamiento.</div>
+ <h2>4 · Lotes</h2>
+ <div id="mix"></div><button class="s" onclick="mix.push({name:'Lote '+(mix.length+1),frente:18,percent:10});renderMix();gen()">+ tipo</button>
+ <label>Área mínima (m²) <input type="number" id="lote_area_min" value="300"></label>
+ <label>Frente mínimo (m) <input type="number" id="lote_frente_min" value="12" step="0.5"></label>
+ <label>Fondo mín. para 2 filas (m) <input type="number" id="fondo_min" value="25"></label>
+ <label>Fondo máx. sugerido (m) <input type="number" id="fondo_max" value="50"></label>
+ <label>Reserva verde + equip. mín. (%) <input type="number" id="reserva_min_pct" value="10" step="1"></label>
+ <h2>5 · Construcción por lote</h2>
+ <label>Retiro frontal (m) <input type="number" id="retiro_frontal" value="4" step="0.5"></label>
+ <label>Retiro lateral (m) <input type="number" id="retiro_lateral" value="0" step="0.5"></label>
+ <label>Retiro de fondo (% del fondo) <input type="number" id="retiro_fondo_pct" value="20"></label>
+ <label>FOS (%) <input type="number" id="fos" value="60"></label>
+ <label>Pisos <input type="number" id="pisos" value="3" min="1"></label>
+ <label>Altura de piso (m) <input type="number" id="altura_piso" value="3" step="0.1"></label>
+ <div class="hint">Valores de partida: Ley 10.723 (lote ≥ 300 m²; frente 12 m en su texto original) y Ley 18.308 art. 38 (reserva ≥ 10 % para espacios libres y equipamiento, sin contar calles). Calle de 17 m, ochava, retiros y FOS son criterios editables: ajústalos a la normativa del departamento.</div>
+</aside>
+<main>
+ <div class="viewbar">
+  <button class="s on" id="vPlan" onclick="setView('plan')">Planta 2D</button><button class="s" id="vAxo" onclick="setView('axo')">Axonometría 3D</button>
+  <span class="grp"><label style="margin:0;gap:4px"><input type="checkbox" id="showLots" checked onchange="render()">Lotes</label>
+   <label style="margin:0;gap:4px"><input type="checkbox" id="showBld" checked onchange="render()">Construcciones</label>
+   <button class="s" style="padding:2px 7px" id="rotL" onclick="az-=Math.PI/4;render()">⟲</button><button class="s" style="padding:2px 7px" onclick="az+=Math.PI/4;render()">⟳</button>
+   <button class="s" style="padding:2px 7px" title="Encuadrar" onclick="zoom=1;pan=[0,0];render()">⤢</button></span>
+ </div>
+ <div class="ctx" id="ctx"></div>
+ <div class="tag" id="tag">Listo</div>
+ <svg id="svg"></svg>
+</main>
+<aside class="r">
+ <h2>Usos del suelo</h2><div id="donut"></div><div id="useList"></div>
+ <h2>Métricas</h2><div id="metrics"></div>
+ <h2>Avisos</h2><div id="warns"></div>
+ <h2>Lotes</h2><div id="lots"></div>
+</aside>
+<script>
+const $=id=>document.getElementById(id), NS='http://www.w3.org/2000/svg';
+let predio=[[0,0],[260,0],[260,180],[0,180]], frontage=null, streets=[], uses={}, result=null, samples={};
+let mix=[{name:'Lote 12 m',frente:12,percent:50},{name:'Lote 15 m',frente:15,percent:35},{name:'Lote 20 m',frente:20,percent:15}];
+let tool=null, cur=[], mouse=null, hover=null, viewMode='plan', zoom=1, pan=[0,0], view=null, az=-0.7, el3=0.62, selLot=null;
+/* ---------- colores (mismo criterio que el modo Edificio) ---------- */
+function hexToHsl(hex){ const n=parseInt(hex.slice(1),16); let r=(n>>16&255)/255,g=(n>>8&255)/255,b=(n&255)/255; const mx=Math.max(r,g,b),mn=Math.min(r,g,b); let h=0,s=0,l=(mx+mn)/2;
+ if(mx!==mn){ const d=mx-mn; s=l>0.5?d/(2-mx-mn):d/(mx+mn); h=mx===r?(g-b)/d+(g<b?6:0):mx===g?(b-r)/d+2:(r-g)/d+4; h/=6; } return [h,s,l]; }
+function hslToHex(h,s,l){ const f=n=>{ const k=(n+h*12)%12, a=s*Math.min(l,1-l); const c=l-a*Math.max(-1,Math.min(k-3,9-k,1)); return Math.round(c*255).toString(16).padStart(2,'0'); }; return '#'+f(0)+f(8)+f(4); }
+function tone(hex,L){ const [h,s]=hexToHsl(hex); return hslToHex(h,Math.min(1,s*(L>0.85?0.65:1)),L); }
+let COLS={lotes:'#f2a93b',verde:'#4caf50',equipamiento:'#4f8fe6',calle:'#8a94a6'};
+try{ const sv=JSON.parse(localStorage.getItem('trazo.progs')||'null'); if(Array.isArray(sv)){ const r=sv.find(p=>p.key==='Residential'); if(r) COLS.lotes=r.color; const c=sv.find(p=>p.key==='Circulation'); if(c) COLS.calle=c.color; const a=sv.find(p=>p.key==='Amenities'); if(a) COLS.verde=a.color; } }catch(e){}
+const LOT_L=[0.66,0.76,0.56,0.84,0.48];
+const lotColor=l=>tone(COLS.lotes,LOT_L[Math.max(0,mix.findIndex(m=>m.name===l.type))%LOT_L.length]);
+const useColor=u=>u==='verde'?tone(COLS.verde,0.62):u==='equipamiento'?tone(COLS.equipamiento,0.70):tone(COLS.lotes,0.86);
+/* ---------- datos ---------- */
+function settings(){ const g=id=>+$(id).value; return {calzada:g('calzada'),vereda:g('vereda'),ochava:g('ochava'),manzana:[g('mzW'),g('mzL')],lote_area_min:g('lote_area_min'),lote_frente_min:g('lote_frente_min'),fondo_min:g('fondo_min'),fondo_max:g('fondo_max'),reserva_min_pct:g('reserva_min_pct'),retiro_frontal:g('retiro_frontal'),retiro_lateral:g('retiro_lateral'),retiro_fondo_pct:g('retiro_fondo_pct'),fos:g('fos'),pisos:g('pisos'),altura_piso:g('altura_piso')}; }
+let genTimer=null;
+async function gen(){ clearTimeout(genTimer); genTimer=setTimeout(async()=>{ $('tag').textContent='Calculando…';
+ const r=await fetch('/api/masterplan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({predio,streets,frontage,block_uses:uses,lot_mix:mix,params:{masterplan:settings()}})});
+ const j=await r.json(); if(j.error){ $('tag').textContent='Error: '+j.error; return; } result=j; $('tag').textContent='Listo'; render(); panels(); lotPanel(); },120); }
+async function damero(){ const r=await fetch('/api/damero',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({predio,masterplan:settings()})}); const j=await r.json(); streets=j.streets; uses={}; renderStreets(); gen(); }
+document.querySelectorAll('aside input').forEach(i=>{ if(!i.closest('#mix')&&!i.closest('#streetList')) i.addEventListener('change',gen); });
+function renderMix(){ $('mix').innerHTML='<div class="row" style="color:var(--mut);font-size:11px"><span>Tipo</span><span>Frente</span><span>%</span><span></span></div>'+mix.map((m,i)=>`<div class="row"><input value="${m.name}" onchange="mix[${i}].name=this.value;gen()"><input type="number" step="0.5" value="${m.frente}" onchange="mix[${i}].frente=+this.value;gen()"><input type="number" value="${m.percent}" onchange="mix[${i}].percent=+this.value;gen()"><button class="s" style="padding:0" onclick="mix.splice(${i},1);renderMix();gen()">×</button></div>`).join(''); }
+function renderStreets(){ $('streetList').innerHTML=streets.map((s,i)=>`<div class="prow" style="grid-template-columns:1fr auto"><span>Calle ${i+1} · calzada <input type="number" step="0.5" value="${s.calzada??''}" placeholder="${$('calzada').value}" style="width:50px" onchange="streets[${i}].calzada=this.value===''?null:+this.value;gen()"> vereda <input type="number" step="0.5" value="${s.vereda??''}" placeholder="${$('vereda').value}" style="width:50px" onchange="streets[${i}].vereda=this.value===''?null:+this.value;gen()"></span><button class="s" style="padding:0 6px" onclick="streets.splice(${i},1);renderStreets();gen()">×</button></div>`).join(''); }
+/* ---------- vista 2D ---------- */
+function el(t,a,txt){ const e=document.createElementNS(NS,t); for(const k in a)e.setAttribute(k,a[k]); if(txt!=null)e.textContent=txt; return e; }
+function fit(){ const xs=predio.map(p=>p[0]),ys=predio.map(p=>p[1]); const x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys); const W=$('svg').clientWidth||800,H=$('svg').clientHeight||600,m=60;
+ const s=Math.min((W-2*m)/((x1-x0)||1),(H-2*m)/((y1-y0)||1)); view={s:s*zoom,ox:0,oy:0}; const ox=m-x0*s+((W-2*m)-(x1-x0)*s)/2, oy=H-m+y0*s-((H-2*m)-(y1-y0)*s)/2;
+ view.ox=W/2+(ox-W/2)*zoom+pan[0]; view.oy=H/2+(oy-H/2)*zoom+pan[1]; }
+const X=p=>view.ox+p[0]*view.s, Y=p=>view.oy-p[1]*view.s, pts=pl=>pl.map(p=>X(p).toFixed(1)+','+Y(p).toFixed(1)).join(' ');
+const cen=pl=>{ let x=0,y=0; pl.forEach(p=>{x+=p[0];y+=p[1];}); return [x/pl.length,y/pl.length]; };
+function render(){ if(viewMode==='axo') drawAxo(); else draw(); }
+function draw(){ const g=$('svg'); g.innerHTML=''; fit();
+ g.appendChild(el('polygon',{points:pts(predio),fill:tone(COLS.calle,0.86),stroke:'#667085','stroke-width':1}));
+ if(result){
+  result.streets.forEach(s=>{ if(s.band.length) g.appendChild(el('polygon',{points:pts(s.band),fill:tone(COLS.calle,0.82),stroke:'none'})); });
+  result.streets.forEach(s=>{ if(s.calzada.length) g.appendChild(el('polygon',{points:pts(s.calzada),fill:tone(COLS.calle,0.42),stroke:'none'})); });
+  result.streets.forEach(s=>g.appendChild(el('line',{x1:X(s.axis[0]),y1:Y(s.axis[0]),x2:X(s.axis[1]),y2:Y(s.axis[1]),stroke:'#fff','stroke-width':1,'stroke-dasharray':'8 6',opacity:.7,'pointer-events':'none'})));
+  result.blocks.forEach(b=>{ const p=el('polygon',{points:pts(b.poly),fill:useColor(b.use),stroke:tone(COLS.lotes,0.3),'stroke-width':1.2,'data-block':b.key,style:'cursor:pointer'}); p.appendChild(el('title',{},b.id+' · '+b.area+' m²')); g.appendChild(p);
+   if(b.use!=='lotes'){ const c=cen(b.poly); g.appendChild(el('text',{x:X(c),y:Y(c),'text-anchor':'middle','font-size':12,fill:'#1b2430','pointer-events':'none'},b.use==='verde'?'Espacio verde':'Equipamiento')); } });
+  if($('showLots').checked) result.lots.forEach(l=>{ const p=el('polygon',{points:pts(l.poly),fill:lotColor(l),stroke:l.id===selLot?'#2f6fed':tone(COLS.lotes,0.3),'stroke-width':l.id===selLot?2.5:.6,'data-lot':l.id,style:'cursor:pointer'}); p.appendChild(el('title',{},`${l.id} · ${l.type} · ${l.area} m² · frente ${l.frente} m`)); g.appendChild(p);
+   if(l.checks.length){ const c=cen(l.poly); g.appendChild(el('circle',{cx:X(c),cy:Y(c),r:3,fill:'#d63b3b','pointer-events':'none'})); } });
+  if($('showBld').checked) result.lots.forEach(l=>{ if(!l.building) return; g.appendChild(el('polygon',{points:pts(l.building.poly),fill:tone(COLS.lotes,0.45),'fill-opacity':.85,stroke:tone(COLS.lotes,0.25),'stroke-width':.6,'pointer-events':'none'}));
+   (l.building.medianeras||[]).forEach(m=>g.appendChild(el('line',{x1:X(m[0]),y1:Y(m[0]),x2:X(m[1]),y2:Y(m[1]),stroke:'#d63b3b','stroke-width':1.4,'pointer-events':'none'}))); });
+ }
+ const fr=frontage||predio.map((_,i)=>i);
+ predio.forEach((a,i)=>{ const b=predio[(i+1)%predio.length]; if(fr.includes(i)) g.appendChild(el('line',{x1:X(a),y1:Y(a),x2:X(b),y2:Y(b),stroke:'#2f6fed','stroke-width':3,'pointer-events':'none'})); });
+ if(tool==='front'&&hover!=null){ const a=predio[hover], b=predio[(hover+1)%predio.length]; g.appendChild(el('line',{x1:X(a),y1:Y(a),x2:X(b),y2:Y(b),stroke:'#2f6fed','stroke-width':8,opacity:.3})); }
+ if(cur.length){ const line=(a,b,d)=>g.appendChild(el('line',{x1:X(a),y1:Y(a),x2:X(b),y2:Y(b),stroke:tool==='predio'?'#1a9d5b':'#2f6fed','stroke-width':2,'stroke-dasharray':d||''}));
+  for(let i=0;i<cur.length-1;i++) line(cur[i],cur[i+1]); if(mouse) line(cur[cur.length-1],mouse,'4 3'); cur.forEach(p=>g.appendChild(el('circle',{cx:X(p),cy:Y(p),r:4,fill:'#2f6fed'}))); }
+}
+/* ---------- vista 3D ---------- */
+function drawAxo(){ const A=$('svg'); A.innerHTML=''; if(!result) return; const W=A.clientWidth||800,H=A.clientHeight||600;
+ const ca=Math.cos(az), sa=Math.sin(az), se=Math.sin(el3), ce=Math.cos(el3);
+ const P=(x,y,z)=>{ const xr=x*ca-y*sa, d=x*sa+y*ca; return [xr,-(d*se+z*ce)]; };
+ const hmax=Math.max(1,...result.lots.map(l=>l.building?l.building.altura:0));
+ let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9; predio.forEach(p=>[0,hmax].forEach(z=>{ const q=P(p[0],p[1],z); x0=Math.min(x0,q[0]);x1=Math.max(x1,q[0]);y0=Math.min(y0,q[1]);y1=Math.max(y1,q[1]); }));
+ const m=50, sc0=Math.min((W-2*m)/((x1-x0)||1),(H-2*m-40)/((y1-y0)||1)), ox0=m-x0*sc0+((W-2*m)-(x1-x0)*sc0)/2, oy0=m+40-y0*sc0+((H-2*m-40)-(y1-y0)*sc0)/2;
+ const sc=sc0*zoom, ox=W/2+(ox0-W/2)*zoom+pan[0], oy=H/2+(oy0-H/2)*zoom+pan[1];
+ const S=(x,y,z)=>{ const q=P(x,y,z); return (ox+q[0]*sc).toFixed(1)+','+(oy+q[1]*sc).toFixed(1); };
+ const poly=(pl,z)=>pl.map(p=>S(p[0],p[1],z)).join(' ');
+ A.appendChild(el('polygon',{points:poly(predio,0),fill:tone(COLS.calle,0.86),stroke:'#667085'}));
+ result.streets.forEach(s=>{ if(s.band.length) A.appendChild(el('polygon',{points:poly(s.band,0),fill:tone(COLS.calle,0.82)})); });
+ result.streets.forEach(s=>{ if(s.calzada.length) A.appendChild(el('polygon',{points:poly(s.calzada,0),fill:tone(COLS.calle,0.42)})); });
+ result.blocks.forEach(b=>A.appendChild(el('polygon',{points:poly(b.poly,0),fill:useColor(b.use),stroke:tone(COLS.lotes,0.3),'stroke-width':.8})));
+ if($('showLots').checked) result.lots.forEach(l=>A.appendChild(el('polygon',{points:poly(l.poly,0),fill:lotColor(l),stroke:tone(COLS.lotes,0.3),'stroke-width':.4})));
+ // árboles simples en espacios verdes
+ result.blocks.filter(b=>b.use==='verde').forEach(b=>{ const xs=b.poly.map(p=>p[0]), ys=b.poly.map(p=>p[1]); for(let x=Math.min(...xs)+6;x<Math.max(...xs)-4;x+=12) for(let y=Math.min(...ys)+6;y<Math.max(...ys)-4;y+=12){ const q=S(x,y,4).split(','); A.appendChild(el('circle',{cx:q[0],cy:q[1],r:Math.max(2,2.5*sc),fill:tone(COLS.verde,0.4),opacity:.85})); } });
+ if(!$('showBld').checked) return;
+ const items=[]; result.lots.forEach(l=>{ if(!l.building) return; const f=l.building.poly.slice(); let ar=0; f.forEach((p,i)=>{const q=f[(i+1)%f.length]; ar+=p[0]*q[1]-q[0]*p[1];}); if(ar<0) f.reverse(); const c=cen(f); items.push({l,f,depth:c[0]*sa+c[1]*ca}); });
+ items.sort((a,b)=>b.depth-a.depth);
+ const base=COLS.lotes;
+ items.forEach(({l,f})=>{ const h=l.building.altura; const g=el('g',{'data-lot':l.id,style:'cursor:pointer'});
+  const edges=f.map((a,i)=>{ const b=f[(i+1)%f.length]; let nx=b[1]-a[1], ny=-(b[0]-a[0]); const L=Math.hypot(nx,ny)||1; nx/=L; ny/=L; return {a,b,dot:-(nx*sa+ny*ca),depth:((a[0]+b[0])/2)*sa+((a[1]+b[1])/2)*ca,lit:0.5+0.5*(nx*0.6-ny*0.8)}; }).filter(e=>e.dot>1e-6).sort((p,q)=>q.depth-p.depth);
+  edges.forEach(e=>g.appendChild(el('polygon',{points:[S(e.a[0],e.a[1],0),S(e.b[0],e.b[1],0),S(e.b[0],e.b[1],h),S(e.a[0],e.a[1],h)].join(' '),fill:tone(base,0.42+0.18*e.lit),stroke:tone(base,0.25),'stroke-width':.4})));
+  g.appendChild(el('polygon',{points:poly(f,h),fill:l.id===selLot?'#8fb3ff':tone(base,0.7),stroke:tone(base,0.25),'stroke-width':.5}));
+  A.appendChild(g); });
+}
+function setView(m){ viewMode=m; $('vPlan').classList.toggle('on',m==='plan'); $('vAxo').classList.toggle('on',m==='axo'); zoom=1; pan=[0,0]; render(); }
+/* ---------- herramientas ---------- */
+function setTool(t){ if(viewMode!=='plan') setView('plan'); if(tool==='street') finish(); tool=(tool===t)?null:t; cur=[]; hover=null;
+ ['tPredio','tFront','tStreet'].forEach(id=>$(id).classList.remove('on')); if(tool) $({predio:'tPredio',front:'tFront',street:'tStreet'}[tool]).classList.add('on');
+ $('tag').textContent=tool==='predio'?'Clic en cada vértice del predio; Enter o doble clic para cerrar':tool==='street'?'Clic en cada punto del eje; Enter o doble clic para terminar':tool==='front'?'Clic sobre un borde del predio para marcar o quitar «calle existente»':'Listo'; draw(); }
+function finish(){ if(tool==='street'&&cur.length>=2){ streets.push({pts:cur.map(p=>[p[0],p[1]]),calzada:null,vereda:null}); renderStreets(); gen(); }
+ if(tool==='predio'&&cur.length>=3){ predio=cur.map(p=>[p[0],p[1]]); frontage=null; streets=[]; uses={}; renderStreets(); zoom=1; pan=[0,0]; gen(); }
+ cur=[]; const t=tool; tool=null; ['tPredio','tFront','tStreet'].forEach(id=>$(id).classList.remove('on')); $('tag').textContent='Listo'; if(t) draw(); }
+function toWorld(e){ const r=$('svg').getBoundingClientRect(); return [(e.clientX-r.left-view.ox)/view.s,(view.oy-(e.clientY-r.top))/view.s]; }
+function snap(p){ let best=null; predio.forEach(v=>{ const d=Math.hypot(v[0]-p[0],v[1]-p[1]); if(d*view.s<10&&(!best||d<best[0])) best=[d,v]; }); return best?[best[1][0],best[1][1]]:[Math.round(p[0]*2)/2,Math.round(p[1]*2)/2]; }
+function edgeAt(e){ const r=$('svg').getBoundingClientRect(); const mx=e.clientX-r.left, my=e.clientY-r.top; let best=null;
+ predio.forEach((a,i)=>{ const b=predio[(i+1)%predio.length]; const A=[X(a),Y(a)], B=[X(b),Y(b)]; const dx=B[0]-A[0], dy=B[1]-A[1], L2=dx*dx+dy*dy||1; const t=Math.max(0,Math.min(1,((mx-A[0])*dx+(my-A[1])*dy)/L2)); const d=Math.hypot(mx-(A[0]+t*dx),my-(A[1]+t*dy)); if(d<10&&(!best||d<best[0])) best=[d,i]; }); return best?best[1]:null; }
+const svg=$('svg'); let drag=null;
+svg.addEventListener('pointerdown',e=>{ drag={x:e.clientX,y:e.clientY,p:pan.slice(),az,el3,moved:false}; });
+window.addEventListener('pointermove',e=>{ if(drag){ const dx=e.clientX-drag.x, dy=e.clientY-drag.y; if(Math.abs(dx)+Math.abs(dy)>4) drag.moved=true;
+  if(drag.moved&&!tool){ if(viewMode==='axo'&&!e.shiftKey){ az=drag.az-dx*0.01; el3=Math.max(0.15,Math.min(1.35,drag.el3+dy*0.006)); } else pan=[drag.p[0]+dx,drag.p[1]+dy]; requestAnimationFrame(render); } }
+ if(viewMode==='plan'&&view&&e.target&&svg.contains(e.target)){ if(tool==='street'||tool==='predio'){ mouse=snap(toWorld(e)); draw(); } else if(tool==='front'){ const h=edgeAt(e); if(h!==hover){ hover=h; draw(); } } } });
+window.addEventListener('pointerup',e=>{ const d=drag; drag=null; if(!d||d.moved) return; if(!svg.contains(e.target)) return;
+ if(tool==='street'||tool==='predio'){ if(e.detail>1) return; cur.push(snap(toWorld(e))); draw(); return; }
+ if(tool==='front'){ const i=edgeAt(e); if(i==null) return; const fr=frontage?frontage.slice():predio.map((_,k)=>k); const k=fr.indexOf(i); if(k>=0) fr.splice(k,1); else fr.push(i); frontage=fr; gen(); return; }
+ const lt=e.target.closest&&e.target.closest('[data-lot]'); if(lt){ selLot=lt.getAttribute('data-lot'); render(); lotPanel(); return; }
+ const bk=e.target.closest&&e.target.closest('[data-block]'); if(bk){ const k=bk.getAttribute('data-block'); const order=['lotes','verde','equipamiento']; uses[k]=order[(order.indexOf(uses[k]||'lotes')+1)%3]; gen(); return; }
+ selLot=null; lotPanel(); render(); });
+svg.addEventListener('dblclick',()=>{ if(tool==='street'||tool==='predio') finish(); });
+window.addEventListener('keydown',e=>{ if(e.key==='Enter'&&(tool==='street'||tool==='predio')) finish(); if(e.key==='Escape'){ cur=[]; if(tool) setTool(tool); } });
+svg.addEventListener('wheel',e=>{ e.preventDefault(); const r=svg.getBoundingClientRect(); const mx=e.clientX-r.left, my=e.clientY-r.top; const f=e.deltaY<0?1.15:1/1.15; const nz=Math.max(0.4,Math.min(20,zoom*f)), k=nz/zoom, W=svg.clientWidth,H=svg.clientHeight;
+ pan=[(mx-W/2)*(1-k)+pan[0]*k,(my-H/2)*(1-k)+pan[1]*k]; zoom=nz; render(); },{passive:false});
+/* ---------- paneles ---------- */
+function panels(){ const m=result.metrics; const lotsA=m.lotes_area, A=m.predio;
+ const parts=[['Calles y veredas',m.calles,tone(COLS.calle,0.5)],['Lotes',lotsA,tone(COLS.lotes,0.62)],['Espacio verde',m.verde,tone(COLS.verde,0.55)],['Equipamiento',m.equipamiento,tone(COLS.equipamiento,0.62)],['Ochavas / otros',Math.max(0,A-m.calles-lotsA-m.verde-m.equipamiento),'#c9ced6']].filter(p=>p[1]>0.5);
+ let a0=-Math.PI/2; const R=56,r=36,cx=70,cy=70; let h='<svg width="140" height="140" viewBox="0 0 140 140" style="display:block;margin:0 auto">';
+ parts.forEach(([n,v,c])=>{ const a1=a0+2*Math.PI*v/A-1e-4, big=(a1-a0)>Math.PI?1:0, pt=(rr,a)=>(cx+rr*Math.cos(a)).toFixed(2)+' '+(cy+rr*Math.sin(a)).toFixed(2);
+  h+=`<path d="M ${pt(R,a0)} A ${R} ${R} 0 ${big} 1 ${pt(R,a1)} L ${pt(r,a1)} A ${r} ${r} 0 ${big} 0 ${pt(r,a0)} Z" fill="${c}"><title>${n}: ${Math.round(v)} m²</title></path>`; a0=a1+1e-4; });
+ h+=`<text x="70" y="66" text-anchor="middle" font-size="11" fill="currentColor">Predio</text><text x="70" y="82" text-anchor="middle" font-size="12" font-weight="600" fill="currentColor">${(A/10000).toFixed(2)} ha</text></svg>`;
+ $('donut').innerHTML=h; $('useList').innerHTML=parts.map(([n,v,c])=>`<div class="prow"><span class="sw" style="background:${c}"></span><span>${n}</span><b>${(100*v/A).toFixed(1)}%</b></div>`).join('');
+ const k=(a,b)=>`<div class="k"><span>${a}</span><b>${b}</b></div>`;
+ $('metrics').innerHTML=k('Predio',Math.round(A).toLocaleString('es')+' m²')+k('Calles (calzada + veredas)',m.calles_pct+'%')+k('Manzanas',m.manzanas)+k('Lotes',m.lotes)+k('Lote medio',m.lote_medio+' m²')+k('Lotes con observaciones',m.lotes_obs)+k('Reserva verde + equipamiento',`<span style="color:${m.reserva_pct+1e-6<m.reserva_min_pct?'var(--bad)':'var(--ok)'}">${m.reserva_pct}% (mín. ${m.reserva_min_pct}%)</span>`)+k('Cesiones (calles + verde + equip.)',m.cesiones_pct+'%')+k('Ocupación (huellas)',Math.round(m.ocupacion).toLocaleString('es')+' m²')+k('Área construible',Math.round(m.construible).toLocaleString('es')+' m²')+k('Viviendas estimadas',m.viviendas_est);
+ $('warns').innerHTML=(result.warnings||[]).map(w=>`<div class="w">⚠ ${w}</div>`).join('')||'<div class="hint">Sin avisos</div>';
+ $('lots').innerHTML='<table><tr><th>Lote</th><th>Tipo</th><th>m²</th><th>Frente</th></tr>'+result.lots.slice(0,300).map(l=>`<tr style="cursor:pointer" onclick="selLot='${l.id}';render();lotPanel()"><td>${l.id}${l.checks.length?' ⚠':''}</td><td>${l.type}</td><td>${l.area}</td><td>${l.frente}</td></tr>`).join('')+'</table>'; }
+function lotPanel(){ const c=$('ctx'); const l=result&&result.lots.find(x=>x.id===selLot); if(!l){ c.style.display='none'; return; }
+ const b=l.building; c.innerHTML=`<b>${l.id} · ${l.type}</b><div class="hint">Manzana ${l.block}${l.corner?' · lote de esquina':''}</div>
+ <div class="k"><span>Área</span><b>${l.area} m²</b></div><div class="k"><span>Frente × fondo</span><b>${l.frente} × ${l.fondo} m</b></div>
+ ${l.checks.map(x=>`<div class="w">⚠ ${x}</div>`).join('')||'<div class="hint">✓ Cumple área y frente mínimos</div>'}
+ ${b?`<h2 style="margin:10px 0 4px">Construcción</h2><div class="k"><span>Huella</span><b>${b.area} m² (FOS ${b.fos}%)</b></div><div class="k"><span>Pisos / altura</span><b>${b.pisos} / ${b.altura} m</b></div><div class="k"><span>Área construida</span><b>${Math.round(b.area*b.pisos)} m²</b></div>
+ <button onclick="openInBuilding('${l.id}')">Abrir en modo Edificio</button><div class="hint">Lleva la huella, la altura y las medianeras laterales al modo Edificio para estudiar la planta tipo.</div>`:'<div class="hint">Sin construcción (lote demasiado chico para los retiros).</div>'}
+ <button class="s" onclick="selLot=null;lotPanel();render()">Cerrar</button>`; c.style.display='block'; }
+async function openInBuilding(id){ const l=result.lots.find(x=>x.id===id); if(!l||!l.building) return; const b=l.building;
+ const body={source:'masterplan',name:l.id+' · '+l.type+' · '+l.area+' m²',footprint:b.poly,height:b.altura,medianeras:(b.medianeras||[]).map(m=>({a:m[0],b:m[1],retiro:0})),stories:Array.from({length:b.pisos},()=>({program:'Residential',height:+$('altura_piso').value}))};
+ await fetch('/api/mass',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); window.location='/?desde=masterplan'; }
+/* ---------- inicio ---------- */
+async function loadSample(k){ const s=samples[k]; if(!s) return; predio=s.predio; frontage=s.frontage||null; uses={}; zoom=1; pan=[0,0]; selLot=null;
+ if(s.masterplan&&s.masterplan.manzana){ $('mzW').value=s.masterplan.manzana[0]; $('mzL').value=s.masterplan.manzana[1]; }
+ if(s.damero){ const r=await fetch('/api/damero',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({predio,masterplan:settings()})}); streets=(await r.json()).streets; }
+ else streets=(s.streets||[]).map(x=>({pts:x.pts,calzada:x.calzada??null,vereda:x.vereda??null}));
+ renderStreets(); await gen0();
+ if(s.verde_centro&&result){ const c=cen(predio); let best=null; result.blocks.forEach(b=>{ const bc=cen(b.poly); const d=Math.hypot(bc[0]-c[0],bc[1]-c[1]); if(!best||d<best[0]) best=[d,b]; }); if(best){ uses[best[1].key]='verde'; } }
+ gen(); }
+async function gen0(){ const r=await fetch('/api/masterplan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({predio,streets,frontage,block_uses:uses,lot_mix:mix,params:{masterplan:settings()}})}); result=await r.json(); }
+(async()=>{ fetch('/api/version').then(r=>r.json()).then(j=>$('ver').textContent='v'+j.version); renderMix();
+ samples=await (await fetch('/api/mp_samples')).json(); const s=$('sample'); s.innerHTML=Object.entries(samples).map(([k,v])=>`<option value="${k}">${v.name}</option>`).join(''); s.onchange=()=>loadSample(s.value);
+ const first=Object.keys(samples).find(k=>k==='predio_rectangular')||Object.keys(samples)[0]; if(first){ s.value=first; await loadSample(first); } else gen();
+ window.addEventListener('resize',render); })();
+</script></body></html>

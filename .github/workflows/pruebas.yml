@@ -1,0 +1,56 @@
+# Pruebas automáticas (ROADMAP R0.2): corren en GitHub Actions en cada PR y en cada cambio de main.
+# No usan Claude, así que no consumen saldo. También se pueden lanzar a mano desde la pestaña Actions.
+name: Pruebas
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Si llega un commit nuevo al mismo PR, se cancela la ejecución anterior (ahorra minutos).
+concurrency:
+  group: pruebas-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pruebas:
+    name: Python ${{ matrix.python }} · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            python: "3.9"     # versión mínima de Trazo y la del Python 3 de Rhino 8
+          - os: ubuntu-latest
+            python: "3.x"     # la versión más reciente
+          - os: windows-latest
+            python: "3.x"
+    defaults:
+      run:
+        shell: bash
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Pruebas del motor
+        run: python tests/test_engine.py
+      - name: Script de Rhino (sintaxis y primera línea «#! python 3»)
+        run: |
+          python - <<'EOF'
+          import ast, sys
+          ruta = "rhino/trazo_rhino.py"
+          src = open(ruta, encoding="utf-8").read()
+          ast.parse(src, ruta)
+          if src.splitlines()[0].strip() != "#! python 3":
+              sys.exit("%s: la primera línea debe ser «#! python 3» (Rhino 8 la usa para ejecutar el script con Python 3)" % ruta)
+          print("%s: sintaxis correcta y primera línea «#! python 3»" % ruta)
+          EOF

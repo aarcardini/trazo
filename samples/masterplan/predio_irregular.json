@@ -1,0 +1,2 @@
+{"name": "Predio irregular con calle en T", "predio": [[0,0],[230,-25],[270,150],[25,195]],
+ "streets": [{"pts": [[-10,92],[290,92]]}, {"pts": [[130,92],[134,220]]}], "frontage": [0,1,2,3]}

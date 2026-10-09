@@ -1,0 +1,17 @@
+{
+ "ejemplo": "samples/masterplan/predio_rectangular.json",
+ "nombre": "Predio rectangular 260 × 180 (damero)",
+ "version_motor": "2.0",
+ "metricas": {
+  "manzanas": 4,
+  "lotes": 64,
+  "lotes_obs": 0,
+  "lote_medio": 617.8,
+  "calles_pct": 15.5,
+  "reserva_pct": 0.0,
+  "cesiones_pct": 15.5,
+  "ocupacion": 22996.1,
+  "construible": 68988.2,
+  "viviendas_est": 735
+ }
+}

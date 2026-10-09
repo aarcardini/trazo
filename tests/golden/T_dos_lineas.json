@@ -1,0 +1,26 @@
+{
+ "ejemplo": "samples/T_dos_lineas.json",
+ "nombre": "T con 2 polilíneas",
+ "version_motor": "2.0",
+ "metricas": {
+  "unidades": 15,
+  "unidades_totales": 75,
+  "por_tipo": {
+   "2 dorm": 8,
+   "3 dorm": 7
+  },
+  "nucleos": 4,
+  "ascensores": 2,
+  "tramos": 2,
+  "area_planta": 1723.5,
+  "eficiencia_planta": 69.9,
+  "eficiencia_total": 66.9,
+  "sin_usar": 43.1,
+  "circulacion": 27.6,
+  "match_score": 96.7,
+  "fit_m2": 11.2,
+  "calidad_planos": 15,
+  "evacuacion_max": 26.3,
+  "nsa_total": 6024.0
+ }
+}

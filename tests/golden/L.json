@@ -1,0 +1,26 @@
+{
+ "ejemplo": "samples/L.json",
+ "nombre": "Forma en L",
+ "version_motor": "2.0",
+ "metricas": {
+  "unidades": 10,
+  "unidades_totales": 50,
+  "por_tipo": {
+   "2 dorm": 5,
+   "3 dorm": 5
+  },
+  "nucleos": 3,
+  "ascensores": 1,
+  "tramos": 2,
+  "area_planta": 1053.5,
+  "eficiencia_planta": 71.8,
+  "eficiencia_total": 67.7,
+  "sin_usar": 1.1,
+  "circulacion": 28.1,
+  "match_score": 100.0,
+  "fit_m2": 9.4,
+  "calidad_planos": 88,
+  "evacuacion_max": 21.4,
+  "nsa_total": 3780.0
+ }
+}

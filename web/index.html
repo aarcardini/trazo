@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Trazo</title>
+<style>
+:root{--bg:#f6f7f9;--pan:#fff;--ink:#1b2430;--mut:#667085;--line:#d9dee6;--acc:#2f6fed;--ok:#1a9d5b;--mid:#9aa3b2;--bad:#d63b3b}
+@media (prefers-color-scheme:dark){:root{--bg:#12161c;--pan:#1a2029;--ink:#e6eaf0;--mut:#98a2b3;--line:#2c3542;--acc:#6b9bff}}
+*{box-sizing:border-box}body{margin:0;font:14px system-ui,sans-serif;background:var(--bg);color:var(--ink);display:grid;grid-template-columns:330px 1fr 280px;height:100vh}
+aside{background:var(--pan);overflow:auto;padding:14px;border-right:1px solid var(--line)}aside.r{border-right:0;border-left:1px solid var(--line)}
+h1{font-size:16px;margin:0 0 10px}h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin:16px 0 6px}
+label{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:4px 0}input,select,textarea{background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:4px 6px;font:inherit}
+input[type=number]{width:80px}button{background:var(--acc);color:#fff;border:0;border-radius:6px;padding:7px 10px;font:inherit;cursor:pointer;margin:2px 2px 2px 0}
+button.s{background:transparent;color:var(--ink);border:1px solid var(--line)}button.on{outline:2px solid var(--acc);background:var(--acc);color:#fff}
+main{position:relative;overflow:hidden}main>svg{width:100%;height:100%;display:block;touch-action:none;user-select:none}
+.tag{position:absolute;left:10px;bottom:10px;background:var(--pan);border:1px solid var(--line);border-radius:6px;padding:4px 8px;color:var(--mut);font-size:12px;max-width:70%}
+table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:3px 4px;border-bottom:1px solid var(--line);text-align:left}
+.w{color:var(--bad);font-size:12px;margin:3px 0}.k{display:flex;justify-content:space-between;margin:3px 0}.k b{font-variant-numeric:tabular-nums}
+.mixrow{display:grid;grid-template-columns:1fr 54px 54px 20px;gap:4px;margin:3px 0}.mixrow input{width:100%}
+.hint{color:var(--mut);font-size:12px;margin:4px 0}
+.viewbar{position:absolute;left:10px;right:10px;top:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;z-index:2}
+.viewbar button{margin:0}.viewbar .grp{display:inline-flex;gap:8px;align-items:center;background:var(--pan);border:1px solid var(--line);border-radius:6px;padding:3px 8px;font-size:12px;color:var(--mut)}
+.viewbar input[type=range]{width:90px}
+.ctx{position:absolute;right:10px;top:52px;background:var(--pan);border:1px solid var(--line);border-radius:8px;padding:10px;width:250px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:3;font-size:13px}
+.ctx label{margin:6px 0}.prow{display:grid;grid-template-columns:24px 1fr auto;gap:6px;align-items:center;padding:3px 4px;border-radius:5px;cursor:pointer;font-size:12px}
+.prow:hover{background:var(--bg)}.sw{width:12px;height:12px;border-radius:3px;display:inline-block}
+@media(max-width:900px){body{grid-template-columns:1fr;height:auto}main{height:60vh}}
+</style></head><body>
+<aside>
+ <h1>Trazo <small id="ver" style="color:var(--mut);font-weight:400"></small></h1>
+ <div style="font-size:12px;color:var(--mut);margin-bottom:4px">Modo Edificio · <a href="/masterplan" style="color:var(--acc)">→ Modo Masterplan</a></div>
+ <div id="rhinoBadge" class="w" style="color:var(--mut)">Esperando masa de Rhino… (o usa un ejemplo)</div>
+ <h2>0 · Medidas y normativa</h2>
+ <details id="stdBox"><summary style="cursor:pointer;font-size:13px">Ver y editar medidas (mínimos y típicos)</summary><div id="stdPanel"></div>
+  <button class="s" onclick="resetStd()">Restaurar valores</button><div class="hint">Mínimos: ordenanzas de higiene de la vivienda (Uruguay), Bomberos IT 19, IM ductos de ascensor, Dec. 406/988. Detalle y fuentes en STANDARDS.md.</div></details>
+ <h2>1 · Masa</h2>
+ <label>Ejemplo <select id="sample"></select></label>
+ <label>Altura total (m) <input type="number" id="height" value="15" step="0.5"></label>
+ <label>Altura de planta (m) <input type="number" id="floor_height" value="3" step="0.1"></label>
+ <label>Muro exterior (m) <input type="number" id="outer_wall" value="0.35" step="0.05"></label>
+ <details><summary>Programa por planta</summary><div id="storyTable"></div></details>
+ <button class="s" onclick="run('massing')">Calcular masa</button>
+ <h2 style="margin-top:12px">Medianeras y retiros</h2>
+ <div class="hint">Marca en la planta los bordes del predio contra linderos (líneas rojas). Sin retiro no admiten ventanas; con retiro ≥ <span id="rmin">3</span> m pasan a ser fachada.</div>
+ <button class="s" id="btnMed" onclick="setTool('medianera')">Marcar medianeras</button><button class="s" onclick="medianeras=[];renderMeds();draw();if(lastStage)run(lastStage,{keepView:true})">Quitar todas</button>
+ <div id="medList"></div>
+ <h2>2 · Pasillo y núcleos</h2>
+ <label>Tipo de pasillo (modo auto) <select id="loading"><option value="auto">auto</option><option value="double">central (doble crujía)</option><option value="single">de borde (simple)</option></select></label>
+ <label>Ancho pasillo <input type="number" id="corridor_width" value="2" step="0.1"></label>
+ <label>Núcleo automático (escalera + ascensores) <input type="checkbox" id="core_auto" checked onchange="$('core_width').disabled=$('core_depth').disabled=this.checked"></label>
+ <label>Núcleo: ancho <input type="number" id="core_width" value="5" step="0.5" disabled></label>
+ <label>Núcleo: fondo (incl. pasillo) <input type="number" id="core_depth" value="7" step="0.5" disabled></label>
+ <label>Nº mínimo de núcleos <input type="number" id="core_count" value="2" min="1" max="8"></label>
+ <label>Añadir núcleos si no cumple <input type="checkbox" id="auto_cores" checked></label>
+ <label>Lado de núcleos <select id="core_side"><option value="alternate">alternar</option><option value="left">izquierda</option><option value="right">derecha</option></select></label>
+ <label>Evacuación salida única <input type="number" id="egress_single" value="18"></label>
+ <label>Evacuación salidas múltiples <input type="number" id="egress_multi" value="30"></label>
+
+ <h2 style="margin-top:12px">Líneas centrales (polilíneas)</h2>
+ <div class="hint">Haz clic para cada vértice. Doble clic, Enter o «Terminar» cierran la línea. Arrastra los vértices para editarlos; clic derecho sobre un vértice lo borra. Sin líneas dibujadas, el pasillo es automático.</div>
+ <button class="s" id="btnDraw" onclick="setTool('line')">Dibujar polilínea</button>
+ <button class="s" onclick="finishLine()">Terminar</button>
+ <button class="s" onclick="undoLine()">Borrar última</button>
+ <button class="s" onclick="clearLines()">Auto</button>
+ <label>Ortogonal (90°) <input type="checkbox" id="orto" checked></label>
+ <div class="hint" id="lineInfo">Pasillo automático</div>
+
+ <h2 style="margin-top:12px">Núcleos de circulación</h2>
+ <label>Modo <select id="cores_mode" onchange="coresModeChanged()"><option value="auto">automático</option><option value="manual">manual</option></select></label>
+ <button class="s" id="btnAddCore" onclick="setTool('addcore')">+ Añadir núcleo</button>
+ <button class="s" id="btnDelCore" onclick="setTool('delcore')">Quitar núcleo</button>
+ <div class="hint" id="coreInfo">Al añadir o quitar un núcleo se pasa a modo manual. Se ajusta al pasillo más cercano y se coloca en el lado donde haces clic.</div>
+ <button onclick="run('corridor')">Generar pasillo y núcleos</button>
+
+ <h2>3 · Mix de unidades</h2>
+ <div id="mix"></div><button class="s" onclick="addMix()">+ tipo</button>
+ <label>Ancho mínimo unidad <input type="number" id="min_unit_width" value="5" step="0.5"></label>
+ <label>Muro medianero (m) <input type="number" id="party_wall" value="0.3" step="0.05"></label>
+ <label>Profundidad máx. unidad <input type="number" id="max_unit_depth" value="14"></label>
+ <button onclick="run('mix')">Generar mix</button>
+ <h2>4 · Planos de unidad</h2>
+ <button onclick="run('plans')">Generar planos</button>
+ <h2>Exportar</h2>
+ <button class="s" onclick="dl('json')">JSON</button><button class="s" onclick="dl('dxf')">DXF (Rhino)</button>
+</aside>
+<main>
+ <div class="viewbar">
+  <button class="s on" id="vPlan" onclick="setView('plan')">Planta 2D</button><button class="s" id="vAxo" onclick="setView('axo')">Axonometría 3D</button>
+  <span class="grp" id="lvlGrp">Nivel <select id="lvl" onchange="planStory=+this.value;draw()"></select>
+   <label style="margin:0;gap:4px"><input type="checkbox" id="showGraph" checked onchange="showGraph=this.checked;draw()">Conexiones</label>
+   <button class="s" style="padding:2px 7px" title="Encuadrar" onclick="zoom=1;pan=[0,0];draw()">⤢</button></span>
+  <span class="grp" id="axoCtl" style="display:none">
+   <button class="s" style="padding:2px 7px" title="Girar 45°" onclick="view3.az-=Math.PI/4;drawAxo()">⟲</button><button class="s" style="padding:2px 7px" title="Girar 45°" onclick="view3.az+=Math.PI/4;drawAxo()">⟳</button>
+   Explosión <input type="range" id="explode" min="0" max="8" step="0.5" value="0" oninput="view3.explode=+this.value;drawAxo()">
+   <label style="margin:0;gap:4px"><input type="checkbox" id="showPlans" checked onchange="view3.plans=this.checked;drawAxo()">Plantas</label>
+   <label style="margin:0;gap:4px"><input type="checkbox" id="isolate" onchange="view3.isolate=this.checked;drawAxo()">Aislar selección</label>
+   <label style="margin:0;gap:4px"><input type="checkbox" id="wire" onchange="view3.wire=this.checked;drawAxo()">Alambre</label>
+  </span>
+ </div>
+ <div class="ctx" id="ctx" style="display:none"></div>
+ <div class="tag" id="tag">Listo</div>
+ <svg id="svg"><defs><pattern id="hatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="8" height="8" fill="rgba(120,120,130,.12)"/><line x1="0" y1="0" x2="0" y2="8" stroke="#8a8f99" stroke-width="1.2"/></pattern></defs><g id="gb"></g><g id="go"></g></svg>
+ <svg id="axo" style="display:none"></svg>
+</main>
+<aside class="r">
+ <h2>Programas</h2><div id="donut"></div><div id="progList"></div>
+ <div class="hint">Clic en un programa: selecciona sus niveles (Shift suma). En 3D: clic = nivel, Shift = rango, Ctrl/Cmd = sueltos, doble clic = ver planta, arrastrar = girar.</div>
+ <h2>Métricas</h2><div id="metrics"></div>
+ <h2>Avisos</h2><div id="warns"></div>
+ <h2>Unidades</h2><div id="units"></div>
+ <h2>Leyenda</h2>
+ <div id="legendColors"></div>
+ <div class="k"><span>Salida única ≤ límite</span><b style="color:var(--ok)">●</b></div>
+ <div class="k"><span>Solo salidas múltiples</span><b style="color:var(--mid)">●</b></div>
+ <div class="k"><span>No cumple</span><b style="color:var(--bad)">●</b></div>
+ <div class="k"><span>Línea central</span><b style="color:var(--acc)">- - -</b></div>
+ <div class="k"><span>Medianera (sin ventanas)</span><b style="color:#d63b3b">━━</b></div>
+ <div class="k"><span>Conexión abierta</span><b style="color:#1a9d5b">——</b></div>
+ <div class="k"><span>Conexión con puerta</span><b style="color:#2f6fed">- - -</b></div>
+ <div class="k"><span>Conexión que no cumple</span><b style="color:#d63b3b">——</b></div>
+</aside>
+<script>
+const $=id=>document.getElementById(id), NS='http://www.w3.org/2000/svg';
+let footprint=[[0,0],[60,0],[60,16],[0,16]], centerlines=[], curLine=[], tool=null, mouse=null;
+let result=null, samples={}, massVer=0, view=null, lastStage=null, drag=null, coresManual=[];
+let mix=[{name:'2 dorm',area:75,percent:50,dorms:2},{name:'3 dorm',area:95,percent:50,dorms:3}];
+let stories=null;
+/* Colores: cada programa tiene un color base; sus áreas internas son tonos de ese color. */
+function hexToHsl(hex){ const n=parseInt(hex.slice(1),16); let r=(n>>16&255)/255,g=(n>>8&255)/255,b=(n&255)/255; const mx=Math.max(r,g,b),mn=Math.min(r,g,b); let h=0,s=0,l=(mx+mn)/2;
+ if(mx!==mn){ const d=mx-mn; s=l>0.5?d/(2-mx-mn):d/(mx+mn); h=mx===r?(g-b)/d+(g<b?6:0):mx===g?(b-r)/d+2:(r-g)/d+4; h/=6; } return [h,s,l]; }
+function hslToHex(h,s,l){ const f=n=>{ const k=(n+h*12)%12, a=s*Math.min(l,1-l); const c=l-a*Math.max(-1,Math.min(k-3,9-k,1)); return Math.round(c*255).toString(16).padStart(2,'0'); }; return '#'+f(0)+f(8)+f(4); }
+function tone(hex,L){ const [h,s]=hexToHsl(hex); return hslToHex(h,Math.min(1,s*(L>0.85?0.65:L>0.75?0.85:1)),L); }
+const ROOM_L={bedroom:0.46,study:0.52,kitchen:0.56,living:0.63,dining:0.70,bath:0.77,hall:0.81,laundry:0.85,hallway:0.89,storage:0.93};
+const KIND_ORDER=['living','dining','kitchen','hall','hallway','bedroom','study','bath','laundry','storage'];
+const UNIT_L=[0.58,0.72,0.46,0.82,0.38,0.88];
+const roomColor=(kind,prog)=>tone(progColor(prog||'Residential'),ROOM_L[kind]??0.7);
+const COL=new Proxy({},{get:(t,k)=>roomColor(k)});
+const KLABEL={bedroom:'Dormitorio',living:'Estar',dining:'Comedor',kitchen:'Cocina',bath:'Baño',hall:'Hall',hallway:'Pasillo',laundry:'Lavadero',storage:'Depósito',study:'Estudio'};
+let selUnit=null, showGraph=true;
+
+/* ---------- paneles de entrada ---------- */
+function renderMix(){ $('mix').innerHTML='<div class="mixrow" style="grid-template-columns:1fr 46px 46px 40px 20px;color:var(--mut);font-size:11px"><span>Tipo</span><span>m²</span><span>%</span><span>Dorm.</span><span></span></div>'+mix.map((m,i)=>`<div class="mixrow" style="grid-template-columns:1fr 46px 46px 40px 20px"><input value="${m.name}" onchange="mix[${i}].name=this.value"><input type="number" value="${m.area}" title="m²" onchange="mix[${i}].area=+this.value"><input type="number" value="${m.percent}" title="%" onchange="mix[${i}].percent=+this.value"><input type="number" min="0" max="5" value="${m.dorms??''}" placeholder="auto" title="Dormitorios (vacío = según m²)" onchange="mix[${i}].dorms=this.value===''?null:+this.value"><button class="s" style="padding:0" onclick="mix.splice(${i},1);renderMix()">×</button></div>`).join(''); }
+function addMix(){ mix.push({name:'Nuevo',area:60,percent:10}); renderMix(); legend(); }
+function renderStories(){ if(!stories){ $('storyTable').innerHTML='<div class="w" style="color:var(--mut)">Todas Residential. Calcula la masa para editar.</div>'; return;}
+ $('storyTable').innerHTML=stories.map((s,i)=>`<div class="mixrow" style="grid-template-columns:30px 1fr 60px"><span>${i}</span><select onchange="stories[${i}].program=this.value">${PROGS.map(p=>`<option value="${p.key}" ${p.key==s.program?'selected':''}>${p.label}</option>`).join('')}</select><input type="number" step="0.1" value="${s.height}" onchange="stories[${i}].height=+this.value"></div>`).join('');}
+let STD=null, STD_DEF=null, medianeras=[], medHover=null;
+function params(){ const g=id=>+$(id).value; const manual=$('cores_mode').value==='manual';
+ return {core_auto:$('core_auto').checked,standards:STD,medianeras:medianeras.length?medianeras:null,floor_height:g('floor_height'),outer_wall:g('outer_wall'),loading:$('loading').value,corridor_width:g('corridor_width'),core_width:g('core_width'),core_depth:g('core_depth'),core_count:g('core_count'),auto_cores:$('auto_cores').checked,core_side:$('core_side').value,egress_single:g('egress_single'),egress_multi:g('egress_multi'),min_unit_width:g('min_unit_width'),party_wall:g('party_wall'),max_unit_depth:g('max_unit_depth'),unit_mix:mix,centerlines:centerlines.length?centerlines:null,cores_mode:manual?'manual':'auto',cores:manual?coresManual:null,stories:stories}; }
+async function run(stage,opt){ opt=opt||{}; lastStage=stage; $('tag').textContent='Calculando…';
+ const r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({footprint,height:+$('height').value,stage,params:params()})});
+ const j=await r.json(); if(j.error){ $('tag').textContent='Error: '+j.error; return;} result=j;
+ if(!stories||stories.length!==j.stories.length){stories=j.stories.map(s=>({program:s.program,height:s.height}));renderStories();}
+ $('tag').textContent='Etapa: '+stage;
+ if(!opt.keepView){ if(stage==='massing'&&viewMode!=='axo') setView('axo',true); else if(stage!=='massing'&&viewMode==='axo'&&!opt.stayAxo) setView('plan',true);
+   if(stage!=='massing'){ const st=j.stories[planStory]; if(!st||st.program!=='Residential'){ const r=j.stories.find(x=>x.program==='Residential'); if(r) planStory=r.index; } } }
+ if(j.metrics&&j.metrics.core&&$('core_auto').checked){ $('core_width').value=j.metrics.core.width; $('core_depth').value=(j.metrics.core.depth+(+$('corridor_width').value)).toFixed(2); }
+ fillLevels(); render(); panels(); ctxPanel(); }
+function render(){ if(viewMode==='axo') drawAxo(); else draw(); }
+
+/* ---------- geometría de la vista ---------- */
+let zoom=1, pan=[0,0];
+function fit(){ const xs=footprint.map(p=>p[0]),ys=footprint.map(p=>p[1]); const x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys); const W=$('svg').clientWidth||800,H=$('svg').clientHeight||600,m=50; const s=Math.min((W-2*m)/(x1-x0||1),(H-2*m)/(y1-y0||1)); view={s,ox:m-x0*s+((W-2*m)-(x1-x0)*s)/2,oy:H-m+y0*s-((H-2*m)-(y1-y0)*s)/2};
+ const cxs=W/2, cys=H/2; view.s*=zoom; view.ox=cxs+(view.ox-cxs)*zoom+pan[0]; view.oy=cys+(view.oy-cys)*zoom+pan[1]; }
+const X=p=>view.ox+p[0]*view.s, Y=p=>view.oy-p[1]*view.s, pts=poly=>poly.map(p=>X(p)+','+Y(p)).join(' ');
+function el(t,a,txt){ const e=document.createElementNS(NS,t); for(const k in a)e.setAttribute(k,a[k]); if(txt)e.textContent=txt; return e;}
+function toWorld(e){ const r=$('svg').getBoundingClientRect(); return [(e.clientX-r.left-view.ox)/view.s,(view.oy-(e.clientY-r.top))/view.s]; }
+function snap(p,prev){ let q=[Math.round(p[0]*10)/10,Math.round(p[1]*10)/10];
+ let best=null; footprint.forEach(v=>{const d=Math.hypot(v[0]-p[0],v[1]-p[1]); if(d<1.0&&(!best||d<best[0]))best=[d,v];}); if(best) q=[best[1][0],best[1][1]];
+ if($('orto').checked&&prev&&!best){ const dx=Math.abs(q[0]-prev[0]),dy=Math.abs(q[1]-prev[1]); if(dx>=dy) q[1]=prev[1]; else q[0]=prev[0]; }
+ return q; }
+
+/* ---------- dibujo ---------- */
+function draw(){ const gb=$('gb'); gb.innerHTML=''; fit(); const sw=1.2;
+ gb.appendChild(el('polygon',{points:pts(footprint),fill:'none',stroke:'#667085','stroke-dasharray':'4 3'}));
+ if(result&&result.footprint&&medianeras.some(m=>(+m.retiro||0)>0)) gb.appendChild(el('polygon',{points:pts(result.footprint),fill:'none',stroke:'#667085','stroke-width':1.2}));
+ const stCur=result&&result.stories&&planStory!=null?result.stories[planStory]:null;
+ if(result&&stCur&&stCur.program!=='Residential'){ gb.appendChild(el('polygon',{points:pts(result.plate),fill:tone(progColor(stCur.program),0.88),stroke:tone(progColor(stCur.program),0.35)}));
+  const sh=progShapes(stCur.program); drawShapes2D(gb,sh); drawShapes2D(gb,coreShapes());
+  const c=centroidOf(result.plate); const L=(result.program_layouts||{})[stCur.program];
+  const info=!L?'sin distribución':L.kind==='parking'?L.count+' plazas':('planta libre '+L.free_area+' m² · '+L.workers+' personas · '+L.wc+' inodoros');
+  gb.appendChild(el('text',{x:X(c),y:Y(c)-6,'text-anchor':'middle','font-size':14,'font-weight':600,fill:'#1b2430','pointer-events':'none'},'Nivel '+planStory+' · '+progLabel(stCur.program)));
+  gb.appendChild(el('text',{x:X(c),y:Y(c)+12,'text-anchor':'middle','font-size':12,fill:'#1b2430','pointer-events':'none'},info));
+ } else if(result){ gb.appendChild(el('polygon',{points:pts(result.plate),fill:'rgba(120,130,150,.08)',stroke:'#667085'}));
+  (result.corridors||[]).forEach(c=>gb.appendChild(el('polygon',{points:pts(c),fill:circColor('corridor'),stroke:circStroke(),'stroke-width':.6})));
+  (result.dark_zones||[]).forEach(d=>{ gb.appendChild(el('polygon',{points:pts(d),fill:'url(#hatch)',stroke:'#8a8f99','stroke-dasharray':'4 3'})); const c=centroidOf(d);
+   gb.appendChild(el('text',{x:X(c),y:Y(c)-4,'text-anchor':'middle','font-size':12,fill:'#5b616b','pointer-events':'none'},'Sin luz natural'));
+   gb.appendChild(el('text',{x:X(c),y:Y(c)+12,'text-anchor':'middle','font-size':11,fill:'#5b616b','pointer-events':'none'},'requiere patio')); });
+  (result.units||[]).forEach(u=>{ if(u.rooms) u.rooms.forEach(r=>gb.appendChild(el('polygon',{points:pts(r.poly),fill:roomColor(r.kind),stroke:tone(progColor('Residential'),0.30),'stroke-width':.7})));
+   else gb.appendChild(el('polygon',{points:pts(u.poly),fill:unitColor(u)}));
+   gb.appendChild(el('polygon',{points:pts(u.poly),fill:'none',stroke:u.id===selUnit?'#2f6fed':'#1b2430','stroke-width':u.id===selUnit?3:sw}));
+   gb.appendChild(el('polygon',{points:pts(u.poly),fill:'transparent','data-unit':u.id,style:'cursor:pointer'}));
+   const gd=el('g',{'pointer-events':'none'}); drawDoors(gd,u); if(showGraph) drawGraph(gd,u); gb.appendChild(gd);
+   const cx=u.poly.reduce((a,p)=>a+p[0],0)/u.poly.length, cy=u.poly.reduce((a,p)=>a+p[1],0)/u.poly.length;
+   gb.appendChild(el('text',{x:X([cx,cy]),y:Y([cx,cy]),'text-anchor':'middle','font-size':11,fill:'#1b2430','pointer-events':'none'},u.id+' · '+u.area+' m²'));
+   gb.appendChild(el('circle',{cx:X(u.door),cy:Y(u.door),r:4,fill:u.egress_status=='ok'?'#1a9d5b':u.egress_status=='multi'?'#9aa3b2':'#d63b3b'})); });
+  drawShapes2D(gb,coreShapes());
+ }
+ drawOverlay(); }
+function drawOverlay(){ const go=$('go'); go.innerHTML=''; if(!view) return; drawMeds(go);
+ const line=(a,b,dash)=>go.appendChild(el('line',{x1:X(a),y1:Y(a),x2:X(b),y2:Y(b),stroke:'#2f6fed','stroke-width':2,'stroke-dasharray':dash||'6 3'}));
+ centerlines.forEach((pl,li)=>{ for(let i=0;i<pl.length-1;i++) line(pl[i],pl[i+1]);
+  pl.forEach((p,vi)=>{ const c=el('circle',{cx:X(p),cy:Y(p),r:6,fill:'#fff',stroke:'#2f6fed','stroke-width':2,style:'cursor:grab'});
+   c.addEventListener('pointerdown',e=>{ if(tool) return; e.stopPropagation(); drag={li,vi,moved:false}; $('svg').setPointerCapture(e.pointerId); });
+   c.addEventListener('contextmenu',e=>{ e.preventDefault(); if(pl.length>2) pl.splice(vi,1); else centerlines.splice(li,1); lineInfo(); drawOverlay(); if(lastStage) run(lastStage); });
+   go.appendChild(c); }); });
+ if(curLine.length){ for(let i=0;i<curLine.length-1;i++) line(curLine[i],curLine[i+1]);
+  if(mouse) line(curLine[curLine.length-1],mouse,'2 3'); curLine.forEach(p=>go.appendChild(el('circle',{cx:X(p),cy:Y(p),r:4,fill:'#2f6fed'}))); }
+ if(tool==='addcore'&&mouse){ go.appendChild(el('rect',{x:X(mouse)-8,y:Y(mouse)-8,width:16,height:16,fill:circColor('core'),'fill-opacity':.6,stroke:circStroke()})); } }
+
+/* ---------- medidas y normativa ---------- */
+const STD_LABELS={predio:'Predio',retiro_ventanas:'Retiro de medianera para ventanas (m)',vivienda:'Vivienda',nucleo:'Núcleo',oficinas:'Oficinas',comercial:'Comercial',estacionamiento:'Estacionamiento',
+ dorm_principal:'Dormitorio principal',dorm_secundario:'Dormitorio secundario',estar_comedor:'Estar-comedor',cocina:'Cocina',bano:'Baño',bano_aux:'Baño auxiliar',lavadero:'Lavadero',pasillo:'Pasillo interno',hall:'Hall de entrada',estudio:'Estudio',
+ min_area:'mín. m²',min_side:'lado mín.',typ_area:'típ. m²',typ:'típ. frente × fondo',typ_side:'típico',escalera_ancho:'Ancho de tramo (m)',contrahuella:'Contrahuella máx. (m)',huella:'Huella (m)',ojo:'Ojo (m)',muro:'Muro (m)',ascensor_ducto:'Ducto ascensor (m)',ascensor_cabina:'Cabina (m)',palier:'Palier (m)',ducto_instalaciones:'Ducto instalaciones (m)',unidades_por_ascensor:'Unidades por ascensor',altura_sin_ascensor:'Altura máx. sin ascensor (m)',pisos_dos_ascensores:'Niveles para 2 ascensores',
+ m2_por_persona:'m² por persona',trabajadores_por_inodoro:'Personas por inodoro',cubiculo:'Cubículo inodoro (m)',zona_lavabos:'Zona lavabos (m)',bano_accesible:'Baño accesible (m)',hall_extra:'Hall extra (m)',plaza:'Plaza (m)',calle:'Calle (m)'};
+async function loadStd(){ try{ STD_DEF=await (await fetch('/api/standards')).json(); }catch(e){ return; } let sv=null; try{ sv=JSON.parse((localStorage.getItem('trazo.std')||localStorage.getItem('finchlocal.std'))||'null'); }catch(e){}
+ STD=JSON.parse(JSON.stringify(STD_DEF)); if(sv) for(const g in sv) for(const k in sv[g]) if(STD[g]&&k in STD[g]) STD[g][k]=sv[g][k]; renderStd(); }
+function saveStd(){ try{ localStorage.setItem('trazo.std',JSON.stringify(STD)); }catch(e){} }
+function resetStd(){ STD=JSON.parse(JSON.stringify(STD_DEF)); saveStd(); renderStd(); if(lastStage) run(lastStage,{keepView:true}); }
+function setStd(path,val){ let o=STD; for(let i=0;i<path.length-1;i++) o=o[path[i]]; o[path[path.length-1]]=val; saveStd(); renderMeds(); if(lastStage) run(lastStage,{keepView:true}); }
+function numIn(path,v){ return `<input type="number" step="0.05" value="${v}" style="width:58px" onchange="setStd(${JSON.stringify(path).replace(/"/g,"'")},+this.value)">`; }
+function renderStd(){ if(!STD) return; let h='';
+ for(const g of ['vivienda','nucleo','oficinas','comercial','predio','estacionamiento']){ h+=`<div class="hint" style="font-weight:600;color:var(--ink);margin-top:8px">${STD_LABELS[g]}</div>`;
+  for(const [k,v] of Object.entries(STD[g])){
+   if(g==='vivienda'&&typeof v==='object'&&!Array.isArray(v)){ h+=`<div style="font-size:12px;margin:4px 0 2px">${STD_LABELS[k]||k}</div><div style="display:flex;gap:4px;flex-wrap:wrap;font-size:11px;color:var(--mut)">`+Object.entries(v).map(([kk,vv])=>Array.isArray(vv)?`${STD_LABELS[kk]} ${numIn([g,k,kk,0],vv[0])}×${numIn([g,k,kk,1],vv[1])}`:`${STD_LABELS[kk]} ${numIn([g,k,kk],vv)}`).join(' ')+`</div>`; }
+   else if(g==='vivienda') continue;
+   else if(Array.isArray(v)) h+=`<label style="font-size:12px">${STD_LABELS[k]||k} <span>${numIn([g,k,0],v[0])}×${numIn([g,k,1],v[1])}</span></label>`;
+   else h+=`<label style="font-size:12px">${STD_LABELS[k]||k} ${numIn([g,k],v)}</label>`; } }
+ $('stdPanel').innerHTML=h; }
+
+/* ---------- formas de núcleos y programas ---------- */
+const CORE_L={stair:0.62,elevator:0.40,landing:0.84,duct:0.52,service:0.74};
+function coreShapes(){ const out=[]; (result&&result.cores||[]).forEach(c=>{
+  if(c.parts&&c.parts.length) c.parts.forEach(p=>out.push({poly:p.poly,fill:tone(progColor('Circulation'),CORE_L[p.kind]??0.6),stroke:circStroke(),sw:.6,lines:p.lines,lc:p.kind==='elevator'?'#ffffff':circStroke(),title:p.name}));
+  else out.push({poly:c.poly,fill:circColor('core'),stroke:circStroke(),sw:1}); }); return out; }
+function progShapes(prog){ const L=result&&(result.program_layouts||{})[prog]; const out=[]; if(!L) return out; const col=progColor(prog);
+ if(L.kind==='free') L.shapes.forEach(sh=>out.push({poly:sh.poly,fill:sh.kind==='hall'?circColor('corridor'):tone(col,sh.kind==='wc_acc'?0.47:0.56),stroke:tone(col,0.3),sw:.7,title:sh.name,label:sh.kind==='hall'?'Hall de acceso':sh.kind==='wc_acc'?'Acc.':sh.name.startsWith('Baños mujeres')?'Mujeres':'Hombres'}));
+ else if(L.kind==='parking'){ L.aisles.forEach(a=>out.push({poly:a,fill:tone(col,0.76),stroke:'none',title:'Calle de circulación'})); L.stalls.forEach((st,i)=>out.push({poly:st,fill:tone(col,0.56),stroke:tone(col,0.3),sw:.6,num:i+1,title:'Plaza '+(i+1)})); }
+ return out; }
+function drawShapes2D(g,shapes){ shapes.forEach(sh=>{ const e=el('polygon',{points:pts(sh.poly),fill:sh.fill,stroke:sh.stroke||'none','stroke-width':sh.sw||0}); if(sh.title) e.appendChild(el('title',{},sh.title)); g.appendChild(e);
+  (sh.lines||[]).forEach(l=>g.appendChild(el('line',{x1:X(l[0]),y1:Y(l[0]),x2:X(l[1]),y2:Y(l[1]),stroke:sh.lc||'#333','stroke-width':.6,'pointer-events':'none'})));
+  const c=centroidOf(sh.poly);
+  if(sh.label){ const xs=sh.poly.map(p=>X(p)), wpx=Math.max(...xs)-Math.min(...xs); if(wpx>sh.label.length*5.6+4) g.appendChild(el('text',{x:X(c),y:Y(c)+3,'text-anchor':'middle','font-size':10,fill:'#1b2430','pointer-events':'none'},sh.label)); }
+  if(sh.num&&view.s>9) g.appendChild(el('text',{x:X(c),y:Y(c)+3,'text-anchor':'middle','font-size':9,fill:'#1b2430','pointer-events':'none'},sh.num)); }); }
+function drawShapesAxo(g,shapes,poly,S,z){ shapes.forEach(sh=>{ g.appendChild(el('polygon',{points:poly(sh.poly,z),fill:sh.fill,stroke:sh.stroke||'none','stroke-width':(sh.sw||0)*0.7}));
+  (sh.lines||[]).forEach(l=>{ const a=S(l[0][0],l[0][1],z).split(','), b=S(l[1][0],l[1][1],z).split(','); g.appendChild(el('line',{x1:a[0],y1:a[1],x2:b[0],y2:b[1],stroke:sh.lc||'#333','stroke-width':.4})); }); }); }
+
+/* ---------- puertas y grafo de conexiones ---------- */
+function drawDoors(g,u){ if(!u.doors) return; const sc=view.s;
+ u.doors.forEach(d=>{ const P=[X(d.p),Y(d.p)], Q=[X(d.q),Y(d.q)]; const L=Math.hypot(Q[0]-P[0],Q[1]-P[1]); if(L<2) return;
+  g.appendChild(el('line',{x1:P[0],y1:P[1],x2:Q[0],y2:Q[1],style:'stroke:var(--bg)','stroke-width':d.entry?4:3}));
+  const rb=(u.rooms||[]).find(r=>r.id===d.b); if(!rb) return; const c=centroidOf(rb.poly); const C=[X(c),Y(c)];
+  let nx=-(Q[1]-P[1])/L, ny=(Q[0]-P[0])/L; if((C[0]-P[0])*nx+(C[1]-P[1])*ny<0){nx=-nx;ny=-ny;}
+  const E=[P[0]+nx*L,P[1]+ny*L]; const cross=(Q[0]-P[0])*(E[1]-P[1])-(Q[1]-P[1])*(E[0]-P[0]);
+  g.appendChild(el('line',{x1:P[0],y1:P[1],x2:E[0],y2:E[1],stroke:d.entry?'#2f6fed':'#1b2430','stroke-width':d.entry?1.6:1}));
+  g.appendChild(el('path',{d:`M ${E[0]} ${E[1]} A ${L} ${L} 0 0 ${cross>0?0:1} ${Q[0]} ${Q[1]}`,fill:'none',stroke:d.entry?'#2f6fed':'#1b2430','stroke-width':.6,'stroke-dasharray':'2 2'})); }); }
+function drawGraph(g,u){ if(!u.graph) return; const pos={}; u.graph.nodes.forEach(n=>pos[n.id]=n.pos);
+ u.graph.edges.forEach(e=>{ const a=pos[e.a], b=pos[e.b]; if(!a||!b) return;
+  g.appendChild(el('line',{x1:X(a),y1:Y(a),x2:X(b),y2:Y(b),stroke:!e.ok?'#d63b3b':e.type==='abierto'?'#1a9d5b':'#2f6fed','stroke-width':1.6,'stroke-dasharray':e.type==='puerta'?'4 3':'',opacity:.9,'pointer-events':'none'})); });
+ u.graph.nodes.forEach(n=>{ g.appendChild(el('circle',{cx:X(n.pos),cy:Y(n.pos),r:3.5,fill:'#fff',stroke:'#1b2430','stroke-width':1,'pointer-events':'none'})); }); }
+function unitPanel(){ const c=$('ctx'); const u=result&&result.units?result.units.find(x=>x.id===selUnit):null; if(!u){ c.style.display='none'; return; }
+ const real=(u.checks||[]).filter(x=>!x.info), ok=real.filter(x=>x.ok).length, n=real.length;
+ c.innerHTML=`<b>${u.id} · ${u.type} · ${u.area} m²</b><div class="hint">Frente ${u.facade??'-'} m (mín. ${u.facade_min??'-'} m) · fondo ${u.depth} m · ${u.bedrooms??'-'} dorm.</div>
+  <table>${(u.rooms||[]).map(r=>`<tr><td><span class="sw" style="background:${roomColor(r.kind)}"></span> ${r.name}</td><td style="text-align:right">${r.area} m²</td></tr>`).join('')}</table>
+  <h2 style="margin:10px 0 4px">Conexiones</h2>
+  <div class="hint">${(u.graph?u.graph.edges:[]).map(e=>{const na=(u.rooms.find(r=>r.id===e.a)||{}).name||e.a, nb=(u.rooms.find(r=>r.id===e.b)||{}).name||e.b; return `${e.ok?'✓':'✗'} ${na} ${e.type==='abierto'?'↔':'⇢'} ${nb} <i>(${e.type})</i>`;}).join('<br>')}</div>
+  <h2 style="margin:10px 0 4px">Comprobaciones (${ok}/${n})</h2>
+  ${(u.checks||[]).map(x=>`<div class="${x.ok?'hint':'w'}">${x.info?'ℹ':x.ok?'✓':'⚠'} ${x.msg}</div>`).join('')}
+  <button class="s" onclick="selUnit=null;draw();unitPanel()">Cerrar</button>`;
+ c.style.display='block'; }
+
+/* ---------- medianeras ---------- */
+const MED='#d63b3b';
+const sameSeg=(m,a,b)=>{ const eq=(p,q)=>Math.hypot(p[0]-q[0],p[1]-q[1])<0.05; return (eq(m.a,a)&&eq(m.b,b))||(eq(m.a,b)&&eq(m.b,a)); };
+function edgeAt(e){ if(!view) return null; const r=$('svg').getBoundingClientRect(); const mx=e.clientX-r.left, my=e.clientY-r.top; let best=null;
+ footprint.forEach((a,i)=>{ const b=footprint[(i+1)%footprint.length]; const A=[X(a),Y(a)], B=[X(b),Y(b)]; const dx=B[0]-A[0], dy=B[1]-A[1], L2=dx*dx+dy*dy||1;
+  const t=Math.max(0,Math.min(1,((mx-A[0])*dx+(my-A[1])*dy)/L2)); const d=Math.hypot(mx-(A[0]+t*dx),my-(A[1]+t*dy)); if(d<10&&(!best||d<best[0])) best=[d,i]; });
+ return best?best[1]:null; }
+function renderMeds(){ const rmin=STD&&STD.predio?STD.predio.retiro_ventanas:3; $('rmin').textContent=rmin;
+ $('medList').innerHTML=medianeras.map((m,i)=>{ const L=Math.hypot(m.b[0]-m.a[0],m.b[1]-m.a[1]); const ok=(+m.retiro||0)>=rmin;
+  return `<div class="prow" style="grid-template-columns:12px 1fr auto;cursor:default"><span class="sw" style="background:${MED}"></span><span>Medianera ${i+1} · ${L.toFixed(1)} m · retiro <input type="number" min="0" step="0.5" value="${m.retiro||0}" style="width:52px" onchange="medianeras[${i}].retiro=+this.value;renderMeds();if(lastStage)run(lastStage,{keepView:true})"> m<br><span style="color:${ok?'var(--ok)':'var(--mut)'}">${ok?'con ventanas':(+m.retiro>0?'retiro insuficiente: sin ventanas':'adosado: sin ventanas')}</span></span><button class="s" style="padding:0 6px" onclick="medianeras.splice(${i},1);renderMeds();draw();if(lastStage)run(lastStage,{keepView:true})">×</button></div>`; }).join(''); }
+function drawMeds(g){ medianeras.forEach((m,i)=>{ g.appendChild(el('line',{x1:X(m.a),y1:Y(m.a),x2:X(m.b),y2:Y(m.b),stroke:MED,'stroke-width':4,'stroke-linecap':'round','pointer-events':'none'}));
+  const c=[(m.a[0]+m.b[0])/2,(m.a[1]+m.b[1])/2]; g.appendChild(el('text',{x:X(c)+6,y:Y(c)-6,'font-size':11,fill:MED,'pointer-events':'none'},'Medianera'+((+m.retiro||0)>0?' · retiro '+m.retiro+' m':''))); });
+ if(tool==='medianera'&&medHover!=null){ const a=footprint[medHover], b=footprint[(medHover+1)%footprint.length]; g.appendChild(el('line',{x1:X(a),y1:Y(a),x2:X(b),y2:Y(b),stroke:MED,'stroke-width':7,opacity:.35,'stroke-linecap':'round','pointer-events':'none'})); } }
+
+/* ---------- herramientas ---------- */
+function setTool(t){ if(viewMode!=='plan') setView('plan'); if(tool==='line'&&t!=='line') finishLine(); tool=(tool===t)?null:t;
+ $('btnDraw').classList.toggle('on',tool==='line'); $('btnAddCore').classList.toggle('on',tool==='addcore'); $('btnDelCore').classList.toggle('on',tool==='delcore'); $('btnMed').classList.toggle('on',tool==='medianera'); medHover=null;
+ $('svg').style.cursor=tool?'crosshair':'default';
+ $('tag').textContent=tool==='line'?'Polilínea: clic para cada vértice; doble clic o Enter para terminar':tool==='addcore'?'Haz clic cerca de un pasillo para añadir un núcleo':tool==='delcore'?'Haz clic sobre un núcleo para quitarlo':tool==='medianera'?'Haz clic sobre un borde de la planta para marcarlo o desmarcarlo como medianera':'Listo'; curLine=[]; drawOverlay(); }
+function finishLine(){ if(curLine.length>=2){ centerlines.push(curLine); } curLine=[]; if(tool==='line'){ tool=null; $('btnDraw').classList.remove('on'); $('svg').style.cursor='default'; $('tag').textContent='Línea creada'; } lineInfo(); drawOverlay(); if(centerlines.length&&lastStage) run(lastStage); }
+function undoLine(){ if(curLine.length){curLine.pop();} else centerlines.pop(); lineInfo(); drawOverlay(); if(lastStage) run(lastStage); }
+function clearLines(){ centerlines=[]; curLine=[]; lineInfo(); drawOverlay(); if(lastStage) run(lastStage); }
+function lineInfo(){ $('lineInfo').textContent=centerlines.length?centerlines.length+' polilínea(s), '+centerlines.reduce((a,p)=>a+p.length,0)+' vértices':'Pasillo automático'; }
+function coresModeChanged(){ if($('cores_mode').value==='manual'){ coresManual=(result&&result.cores?result.cores.map(c=>c.center):[]); } coreInfo(); if(lastStage) run(lastStage); }
+function coreInfo(){ $('coreInfo').textContent=$('cores_mode').value==='manual'?coresManual.length+' núcleo(s) manual(es)':'Al añadir o quitar un núcleo se pasa a modo manual. Se ajusta al pasillo más cercano y se coloca en el lado donde haces clic.'; }
+function ensureManual(){ if($('cores_mode').value!=='manual'){ $('cores_mode').value='manual'; coresManual=(result&&result.cores?result.cores.map(c=>c.center):[]); } }
+
+const svg=$('svg');
+svg.addEventListener('click',e=>{ if(!view||svg._skipClick) return;
+ if(!tool){ const t=e.target.closest&&e.target.closest('[data-unit]'); selUnit=t?t.getAttribute('data-unit'):null; draw(); unitPanel(); return; }
+ const w=toWorld(e);
+ if(tool==='line'){ if(e.detail>1) return; curLine.push(snap(w,curLine[curLine.length-1])); drawOverlay(); }
+ else if(tool==='addcore'){ ensureManual(); coresManual.push([Math.round(w[0]*10)/10,Math.round(w[1]*10)/10]); coreInfo(); run(lastStage&&lastStage!=='massing'?lastStage:'corridor'); }
+ else if(tool==='medianera'){ const i=edgeAt(e); if(i==null) return; const a=footprint[i], b=footprint[(i+1)%footprint.length];
+   const k=medianeras.findIndex(m=>sameSeg(m,a,b)); if(k>=0) medianeras.splice(k,1); else medianeras.push({a:[a[0],a[1]],b:[b[0],b[1]],retiro:0});
+   renderMeds(); draw(); if(lastStage) run(lastStage,{keepView:true}); }
+ else if(tool==='delcore'){ if(!result||!result.cores) return; ensureManual();
+   let best=null; result.cores.forEach(c=>{ const d=Math.hypot(c.center[0]-w[0],c.center[1]-w[1]); if(d<8&&(!best||d<best[0])) best=[d,c]; });
+   if(best&&best[1].spec!=null){ coresManual.splice(best[1].spec,1); coreInfo(); run(lastStage||'corridor'); } } });
+svg.addEventListener('dblclick',e=>{ if(tool==='line'){ finishLine(); } });
+svg.addEventListener('wheel',e=>{ e.preventDefault(); const r=svg.getBoundingClientRect(); const mx=e.clientX-r.left, my=e.clientY-r.top;
+ const f=e.deltaY<0?1.15:1/1.15; const nz=Math.max(0.5,Math.min(12,zoom*f)); const k=nz/zoom; const W=svg.clientWidth,H=svg.clientHeight;
+ pan=[(mx-W/2)*(1-k)+pan[0]*k,(my-H/2)*(1-k)+pan[1]*k]; zoom=nz; draw(); },{passive:false});
+let panDrag=null;
+svg.addEventListener('pointerdown',e=>{ if(tool||drag) return; if(e.target.closest&&e.target.closest('circle')) return; panDrag={x:e.clientX,y:e.clientY,p:pan.slice(),moved:false}; });
+window.addEventListener('pointermove',e=>{ if(!panDrag) return; const dx=e.clientX-panDrag.x, dy=e.clientY-panDrag.y; if(Math.abs(dx)+Math.abs(dy)>4) panDrag.moved=true; if(panDrag.moved){ pan=[panDrag.p[0]+dx,panDrag.p[1]+dy]; draw(); } });
+window.addEventListener('pointerup',e=>{ if(panDrag&&panDrag.moved){ svg._skipClick=true; setTimeout(()=>svg._skipClick=false,0); } panDrag=null; });
+svg.addEventListener('mousemove',e=>{ if(!view) return; const w=toWorld(e);
+ if(tool==='medianera'){ const h=edgeAt(e); if(h!==medHover){ medHover=h; drawOverlay(); } return; }
+ if(tool==='line'||tool==='addcore') { mouse=tool==='line'?snap(w,curLine[curLine.length-1]):w; drawOverlay(); } });
+svg.addEventListener('pointermove',e=>{ if(!drag||!view) return; const pl=centerlines[drag.li]; const prev=pl[drag.vi-1]||pl[drag.vi+1]; pl[drag.vi]=snap(toWorld(e),null); drag.moved=true; drawOverlay(); });
+svg.addEventListener('pointerup',e=>{ if(drag){ const d=drag; drag=null; if(d.moved&&lastStage) run(lastStage); } });
+window.addEventListener('keydown',e=>{ if(e.key==='Enter'&&tool==='line') finishLine(); if(e.key==='Escape'){ curLine=[]; if(tool) setTool(tool); drawOverlay(); } });
+
+/* ---------- programas ---------- */
+let PROGS=[{key:'Residential',label:'Residencial',color:'#f2a93b'},{key:'Retail',label:'Comercial',color:'#9b6bd6'},{key:'Office',label:'Oficinas',color:'#4f8fe6'},{key:'Circulation',label:'Circulación',color:'#8a94a6'},{key:'Parking',label:'Estacionamiento',color:'#5c6370'},{key:'Amenities',label:'Amenities',color:'#2bb38a'}];
+const progOf=k=>PROGS.find(p=>p.key===k)||{key:k,label:k,color:'#c0c4cc'};
+const progColor=k=>progOf(k).color, progLabel=k=>progOf(k).label;
+const unitColor=u=>{ const i=Math.max(0,mix.findIndex(m=>m.name===u.type)); return tone(progColor('Residential'),UNIT_L[i%UNIT_L.length]); };
+const circColor=part=>tone(progColor('Circulation'),part==='core'?0.42:0.80);
+const circStroke=()=>tone(progColor('Circulation'),0.30);
+function saveColors(){ try{ localStorage.setItem('trazo.progs',JSON.stringify(PROGS)); }catch(e){} }
+(function(){ try{ const sv=JSON.parse((localStorage.getItem('trazo.progs')||localStorage.getItem('finchlocal.progs'))||'null'); if(Array.isArray(sv)) sv.forEach(p=>{ const q=PROGS.find(x=>x.key===p.key); if(q) q.color=p.color; else if(p.key&&p.color) PROGS.push(p); }); }catch(e){} })();
+function setProgColor(k,v){ let q=PROGS.find(x=>x.key===k); if(!q){ q={key:k,label:k,color:v}; PROGS.push(q); } q.color=v; saveColors(); render(); if(result) panels(); legend(); }
+function resetColors(){ const def={Residential:'#f2a93b',Retail:'#9b6bd6',Office:'#4f8fe6',Circulation:'#8a94a6',Parking:'#5c6370',Amenities:'#2bb38a'}; PROGS.forEach(p=>{ if(def[p.key]) p.color=def[p.key]; }); saveColors(); render(); if(result) panels(); legend(); }
+function legend(){ const r=progColor('Residential');
+ $('legendColors').innerHTML=`<div class="hint" style="margin-top:0">Áreas de ${progLabel('Residential')} (tonos del color del programa)</div>
+ <div style="display:flex;flex-wrap:wrap;gap:4px 10px;font-size:12px;margin-bottom:6px">${KIND_ORDER.map(k=>`<span><span class="sw" style="background:${roomColor(k)}"></span> ${KLABEL[k]}</span>`).join('')}</div>
+ <div class="hint">Tipos de unidad</div><div style="display:flex;flex-wrap:wrap;gap:4px 10px;font-size:12px;margin-bottom:6px">${mix.map((m,i)=>`<span><span class="sw" style="background:${tone(r,UNIT_L[i%UNIT_L.length])}"></span> ${m.name}</span>`).join('')}</div>
+ <div class="hint">${progLabel('Circulation')}</div><div style="display:flex;gap:10px;font-size:12px;margin-bottom:6px"><span><span class="sw" style="background:${circColor('corridor')}"></span> Pasillo</span><span><span class="sw" style="background:${tone(progColor('Circulation'),CORE_L.stair)}"></span> Escalera</span><span><span class="sw" style="background:${tone(progColor('Circulation'),CORE_L.elevator)}"></span> Ascensor</span><span><span class="sw" style="background:${tone(progColor('Circulation'),CORE_L.landing)}"></span> Palier</span></div>
+ <details><summary style="font-size:12px;cursor:pointer">Colores de todos los programas</summary>${PROGS.map(p=>`<div class="prow" style="cursor:default"><input type="color" value="${p.color}" oninput="setProgColor('${p.key}',this.value)" style="width:22px;height:18px;padding:0;border:0;background:none;cursor:pointer"><span>${p.label}</span><span></span></div>`).join('')}<button class="s" onclick="resetColors()">Restaurar colores</button></details>`; }
+function centroidOf(poly){ let x=0,y=0; poly.forEach(p=>{x+=p[0];y+=p[1];}); return [x/poly.length,y/poly.length]; }
+function mixRed(rgb){ const m=rgb.match(/\d+/g).map(Number); return 'rgb('+[Math.round(m[0]*0.75+214*0.25),Math.round(m[1]*0.75+59*0.25),Math.round(m[2]*0.75+59*0.25)].join(',')+')'; }
+function shade(hex,f){ const n=parseInt(hex.slice(1),16); const c=[n>>16&255,n>>8&255,n&255].map(v=>Math.max(0,Math.min(255,Math.round(v*f)))); return 'rgb('+c.join(',')+')'; }
+function drawDonut(progs){ const ent=Object.entries(progs); const tot=ent.reduce((a,[k,v])=>a+v.gfa,0)||1; let a0=-Math.PI/2; const R=56,r=36,cx=70,cy=70;
+ let h='<svg width="140" height="140" viewBox="0 0 140 140" style="display:block;margin:0 auto">';
+ ent.forEach(([k,v])=>{ const a1=a0+2*Math.PI*v.gfa/tot-1e-4; const big=(a1-a0)>Math.PI?1:0;
+  const pt=(rr,a)=>(cx+rr*Math.cos(a)).toFixed(2)+' '+(cy+rr*Math.sin(a)).toFixed(2);
+  h+=`<path d="M ${pt(R,a0)} A ${R} ${R} 0 ${big} 1 ${pt(R,a1)} L ${pt(r,a1)} A ${r} ${r} 0 ${big} 0 ${pt(r,a0)} Z" fill="${progColor(k)}" style="cursor:pointer" onclick="selectProgram('${k}',event)"><title>${progLabel(k)}: ${v.gfa} m² GFA (${(v.gfa/tot*100).toFixed(0)}%)</title></path>`; a0=a1+1e-4; });
+ h+=`<text x="70" y="66" text-anchor="middle" font-size="11" fill="currentColor">GFA</text><text x="70" y="82" text-anchor="middle" font-size="12" font-weight="600" fill="currentColor">${Math.round(tot).toLocaleString('es')} m²</text></svg>`;
+ $('donut').innerHTML=h;
+ $('progList').innerHTML=ent.map(([k,v])=>`<div class="prow" onclick="selectProgram('${k}',event)"><input type="color" title="Cambiar color" value="${progColor(k)}" onclick="event.stopPropagation()" oninput="setProgColor('${k}',this.value)" style="width:22px;height:18px;padding:0;border:0;background:none;cursor:pointer"><span>${progLabel(k)} · ${v.stories} nivel(es)</span><b>${(v.gfa/tot*100).toFixed(0)}%</b></div>`).join(''); }
+function selectProgram(k,e){ if(!result) return; if(!(e&&e.shiftKey)) sel.clear(); result.stories.forEach(s=>{ if(s.program===k) sel.add(s.index); }); if(viewMode!=='axo') setView('axo'); else { drawAxo(); ctxPanel(); } }
+
+/* ---------- vistas ---------- */
+let viewMode='plan', planStory=null, sel=new Set(), anchor=null;
+let view3={az:-0.65, el:0.62, explode:0, plans:true, isolate:false, wire:false};
+function setView(m,silent){ viewMode=m; $('svg').style.display=m==='plan'?'block':'none'; $('axo').style.display=m==='axo'?'block':'none';
+ $('vPlan').classList.toggle('on',m==='plan'); $('vAxo').classList.toggle('on',m==='axo'); $('axoCtl').style.display=m==='axo'?'inline-flex':'none'; $('lvlGrp').style.display=m==='plan'?'inline-flex':'none';
+ if(m==='plan'&&tool==null) $('svg').style.cursor='default'; if(!silent){ render(); ctxPanel(); } }
+function fillLevels(){ if(!result||!result.stories) return; const s=$('lvl'); if(planStory==null||planStory>=result.stories.length){ const r=result.stories.find(x=>x.program==='Residential'); planStory=r?r.index:0; }
+ s.innerHTML=result.stories.map(st=>`<option value="${st.index}" ${st.index===planStory?'selected':''}>${st.index} · ${progLabel(st.program)}</option>`).join(''); }
+
+/* ---------- axonometría ---------- */
+function drawAxo(){ const A=$('axo'); A.innerHTML=''; if(!result||!result.stories) return;
+ const st=result.stories, W=A.clientWidth||800, H=A.clientHeight||600;
+ const ca=Math.cos(view3.az), sa=Math.sin(view3.az), se=Math.sin(view3.el), ce=Math.cos(view3.el);
+ const P=(x,y,z)=>{ const xr=x*ca-y*sa, d=x*sa+y*ca; return [xr,-(d*se+z*ce)]; };
+ const zb=i=>st[i].z+i*view3.explode, zt=i=>zb(i)+st[i].height;
+ let f=result.footprint.map(p=>[p[0],p[1]]); let ar=0; f.forEach((p,i)=>{const q=f[(i+1)%f.length]; ar+=p[0]*q[1]-q[0]*p[1];}); if(ar<0) f.reverse();
+ const top=zt(st.length-1); let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;
+ f.forEach(p=>[0,top].forEach(z=>{ const q=P(p[0],p[1],z); x0=Math.min(x0,q[0]);x1=Math.max(x1,q[0]);y0=Math.min(y0,q[1]);y1=Math.max(y1,q[1]); }));
+ const m=50, mr=170, sc=Math.min((W-m-mr)/((x1-x0)||1),(H-2*m-40)/((y1-y0)||1)), ox=m-x0*sc+((W-m-mr)-(x1-x0)*sc)/2, oy=m+40-y0*sc+((H-2*m-40)-(y1-y0)*sc)/2;
+ const S=(x,y,z)=>{ const q=P(x,y,z); return (ox+q[0]*sc).toFixed(1)+','+(oy+q[1]*sc).toFixed(1); };
+ const poly=(pts,z)=>pts.map(p=>S(p[0],p[1],z)).join(' ');
+ const edges=f.map((a,i)=>{ const b=f[(i+1)%f.length]; let nx=b[1]-a[1], ny=-(b[0]-a[0]); const L=Math.hypot(nx,ny)||1; nx/=L; ny/=L;
+   return {a,b,dot:-(nx*sa+ny*ca),depth:((a[0]+b[0])/2)*sa+((a[1]+b[1])/2)*ca,lit:0.5+0.5*(nx*0.6-ny*0.8),med:medianeras.some(m=>(+m.retiro||0)<(STD&&STD.predio?STD.predio.retiro_ventanas:3)&&sameSeg(m,a,b))}; }).filter(e=>e.dot>1e-6).sort((p,q)=>q.depth-p.depth);
+ const anySel=sel.size>0, dark=matchMedia('(prefers-color-scheme: dark)').matches, ln=dark?'rgba(255,255,255,.35)':'rgba(0,0,0,.35)';
+ medianeras.forEach(m=>A.appendChild(el('line',{x1:S(m.a[0],m.a[1],0).split(',')[0],y1:S(m.a[0],m.a[1],0).split(',')[1],x2:S(m.b[0],m.b[1],0).split(',')[0],y2:S(m.b[0],m.b[1],0).split(',')[1],stroke:MED,'stroke-width':3,'stroke-linecap':'round'})));
+ // sombra en el suelo
+ A.appendChild(el('polygon',{points:poly(f.map(p=>[p[0]+0.0,p[1]]),0),fill:dark?'rgba(0,0,0,.35)':'rgba(0,0,0,.06)'}));
+ st.forEach((story,i)=>{ const g=el('g',{'data-story':i,style:'cursor:pointer'}); const ghost=view3.isolate&&anySel&&!sel.has(i), isSel=sel.has(i);
+  g.setAttribute('opacity',ghost?0.12:1); const col=progColor(story.program), z0=zb(i), z1=zt(i);
+  edges.forEach(e=>{ g.appendChild(el('polygon',{points:[S(e.a[0],e.a[1],z0),S(e.b[0],e.b[1],z0),S(e.b[0],e.b[1],z1),S(e.a[0],e.a[1],z1)].join(' '),
+     fill:view3.wire?'none':(e.med?mixRed(shade(col,0.7+0.25*e.lit)):shade(col,0.7+0.25*e.lit)),stroke:isSel?'#2f6fed':e.med?MED:ln,'stroke-width':isSel?1.8:e.med?1:0.6})); });
+  g.appendChild(el('polygon',{points:poly(f,z1),fill:view3.wire?'none':shade(col,1.06),stroke:isSel?'#2f6fed':ln,'stroke-width':isSel?2.2:0.8}));
+  const showPlan=view3.plans&&!ghost&&(view3.explode>0||i===st.length-1||(view3.isolate&&isSel));
+  if(showPlan&&story.program==='Residential'&&result.units){
+   (result.corridors||[]).forEach(c=>g.appendChild(el('polygon',{points:poly(c,z1),fill:circColor('corridor')})));
+   result.units.forEach(u=>g.appendChild(el('polygon',{points:poly(u.poly,z1),fill:unitColor(u),stroke:tone(progColor('Residential'),0.30),'stroke-width':.5})));
+  }
+  if(showPlan&&story.program!=='Residential') drawShapesAxo(g,progShapes(story.program),poly,S,z1);
+  if(showPlan&&result.cores) drawShapesAxo(g,coreShapes(),poly,S,z1);
+  if(false) result.cores.forEach(c=>g.appendChild(el('polygon',{points:poly(c.poly,z1),fill:circColor('core'),stroke:circStroke(),'stroke-width':.6})));
+  // etiqueta del nivel
+  let best=null; f.forEach(p=>{ const q=P(p[0],p[1],(z0+z1)/2); if(!best||q[0]>best[0]) best=q; });
+  if(sc*story.height>9||isSel) g.appendChild(el('text',{x:ox+best[0]*sc+10,y:oy+best[1]*sc+4,'font-size':11,fill:isSel?'#2f6fed':(dark?'#c9d1dc':'#475467')},`${i} · ${progLabel(story.program)} · ${story.height} m`));
+  A.appendChild(g); });
+}
+function ctxPanel(){ const c=$('ctx'); if(viewMode==='plan'){ unitPanel(); return; } if(viewMode!=='axo'||!sel.size||!result){ c.style.display='none'; return; }
+ const idx=[...sel].sort((a,b)=>a-b), sts=idx.map(i=>result.stories[i]); const p0=sts[0].program, same=sts.every(s=>s.program===p0), h0=sts[0].height, sameH=sts.every(s=>s.height===h0);
+ const gfa=(result.metrics.plate_area||0);
+ c.innerHTML=`<b>${idx.length} nivel(es) seleccionado(s)</b><div class="hint">Niveles: ${idx.join(', ')}</div>
+  <label>Programa <select id="cxProg">${same?'':'<option value="">— varios —</option>'}${PROGS.map(p=>`<option value="${p.key}" ${same&&p.key===p0?'selected':''}>${p.label}</option>`).join('')}<option value="__new">+ Nuevo programa…</option></select></label>
+  <label>Altura (m) <input type="number" id="cxH" step="0.1" value="${sameH?h0:''}" placeholder="varias"></label>
+  <button onclick="applyCtx()">Aplicar</button><button class="s" onclick="planStory=${idx[0]};setView('plan')">Ver planta</button><button class="s" onclick="sel.clear();drawAxo();ctxPanel()">Limpiar</button>`;
+ c.style.display='block'; }
+function applyCtx(){ if(!stories) return; let pv=$('cxProg').value; const hv=$('cxH').value;
+ if(pv==='__new'){ const name=prompt('Nombre del programa nuevo'); if(!name) return; const used=PROGS.map(p=>hexToHsl(p.color)[0]); let h=0; for(let t=0;t<36;t++){ const c=t/36; if(used.every(u=>Math.min(Math.abs(u-c),1-Math.abs(u-c))>0.06)){ h=c; break; } } PROGS.push({key:name,label:name,color:hslToHex(h,0.6,0.55)}); saveColors(); pv=name; }
+ sel.forEach(i=>{ if(pv) stories[i].program=pv; if(hv!=='') stories[i].height=+hv; }); renderStories(); run(lastStage||'massing',{keepView:true}); }
+(function(){ const A=$('axo'); let dr=null;
+ A.addEventListener('pointerdown',e=>{ dr={x:e.clientX,y:e.clientY,az:view3.az,el:view3.el,moved:false}; A.setPointerCapture(e.pointerId); });
+ A.addEventListener('pointermove',e=>{ if(!dr) return; const dx=e.clientX-dr.x, dy=e.clientY-dr.y; if(Math.abs(dx)+Math.abs(dy)>4) dr.moved=true;
+  if(dr.moved){ view3.az=dr.az-dx*0.01; view3.el=Math.max(0.12,Math.min(1.35,dr.el+dy*0.006)); requestAnimationFrame(drawAxo); } });
+ A.addEventListener('pointerup',e=>{ const d=dr; dr=null; if(!d||d.moved) return;
+  const t=document.elementFromPoint(e.clientX,e.clientY), g=t&&t.closest?t.closest('[data-story]'):null;
+  if(!g){ sel.clear(); drawAxo(); ctxPanel(); return; } const i=+g.getAttribute('data-story');
+  if(e.shiftKey&&anchor!=null){ const [a,b]=[Math.min(anchor,i),Math.max(anchor,i)]; for(let k=a;k<=b;k++) sel.add(k); }
+  else if(e.ctrlKey||e.metaKey){ sel.has(i)?sel.delete(i):sel.add(i); anchor=i; }
+  else { sel.clear(); sel.add(i); anchor=i; }
+  drawAxo(); ctxPanel(); });
+ A.addEventListener('dblclick',e=>{ const g=e.target.closest&&e.target.closest('[data-story]'); if(!g) return; planStory=+g.getAttribute('data-story'); fillLevels(); setView('plan'); });
+})();
+
+/* ---------- paneles de resultados ---------- */
+function panels(){ const m=result.metrics||{}, mx=m.mix; drawDonut(m.programs||{});
+ $('progList').innerHTML+=Object.entries(m.programs||{}).map(([k,v])=>v.stalls!=null?`<div class="hint">${progLabel(k)}: ${v.stalls} plazas en total</div>`:v.workers!=null?`<div class="hint">${progLabel(k)}: ${v.free_area} m² de planta libre, ${v.workers} personas</div>`:'').join(''); let h=`<div class="k"><span>Área por planta</span><b>${m.plate_area} m²</b></div><div class="k"><span>Plantas</span><b>${m.stories}</b></div><div class="k"><span>GFA</span><b>${m.gfa} m²</b></div>`;
+ if(m.core_count!=null) h+=`<div class="k"><span>Núcleos</span><b>${m.core_count}</b></div><div class="k"><span>Circulación</span><b>${m.circulation_pct??'-'}%</b></div>${m.core?`<div class="k"><span>Núcleo (frente × fondo)</span><b>${m.core.width} × ${m.core.depth} m</b></div><div class="k"><span>Ascensores</span><b>${m.core.elevators}</b></div><div class="k"><span>Escalera</span><b>${m.core.stair_type}</b></div><div class="k"><span>Contrahuellas por piso</span><b>${m.core.risers} × ${(m.core.riser_h*100).toFixed(1)} cm</b></div>`:''}<div class="k"><span>Tramos de pasillo</span><b>${m.wings}</b></div><div class="k"><span>Máx. distancia a núcleo</span><b>${m.egress_max} m</b></div>`;
+ if(mx) h+=`<div class="k"><span>Sin usar</span><b>${m.unused_area??'-'} m²</b></div>${m.dark_area?`<div class="k"><span>Sin luz (requiere patio)</span><b>${m.dark_area} m²</b></div>`:''}<div class="k"><span>Unidades/planta</span><b>${mx.count}</b></div><div class="k"><span>Unidades totales</span><b>${m.units_total}</b></div><div class="k"><span>Match score</span><b>${mx.match_score}%</b></div><div class="k"><span>Fit medio</span><b>±${mx.fit_m2} m²</b></div><div class="k"><span>Unidades únicas</span><b>${mx.unique_units}</b></div><div class="k"><span>NSA total</span><b>${m.nsa_total} m²</b></div><div class="k"><span>Eficiencia</span><b>${m.efficiency_total}%</b></div>`+(m.plan_score!=null?`<div class="k"><span>Calidad de planos</span><b>${m.plan_score}%</b></div>`:'')+Object.entries(mx.by_type).map(([k,v])=>`<div class="k"><span>${k}</span><b>${v.count} × ${v.avg_area} m²</b></div>`).join('');
+ $('metrics').innerHTML=h; $('warns').innerHTML=(result.warnings||[]).slice(0,12).map(w=>`<div class="w">⚠ ${w}</div>`).join('')||'<div style="color:var(--mut)">Sin avisos</div>';
+ $('units').innerHTML=(result.units?'<table><tr><th>ID</th><th>Tipo</th><th>m²</th><th>Dorm</th><th>Evac.</th><th>Plano</th></tr>'+result.units.map(u=>`<tr style="cursor:pointer" onclick="selUnit='${u.id}';if(viewMode!=='plan')setView('plan');else{draw();unitPanel();}"><td>${u.id}</td><td>${u.type}</td><td>${u.area}</td><td>${u.bedrooms??'-'}</td><td>${u.egress} m</td><td>${u.plan_score!=null?u.plan_score+'%':'-'}</td></tr>`).join('')+'</table>':''); }
+function panels2(){ $('donut').innerHTML='';$('progList').innerHTML=''; $('metrics').innerHTML='';$('warns').innerHTML='';$('units').innerHTML=''; }
+function setMass(m,fromRhino){ footprint=m.footprint; if(m.height) $('height').value=m.height; centerlines=(m.centerlines||(m.centerline?[m.centerline]:[])).map(pl=>pl.map(p=>[p[0],p[1]])); curLine=[]; lineInfo();
+ if(m.cores&&m.cores.length){ $('cores_mode').value='manual'; coresManual=m.cores.map(p=>[p[0],p[1]]); } else { $('cores_mode').value='auto'; coresManual=[]; } coreInfo();
+ stories=m.stories?m.stories.map(x=>({program:x.program,height:x.height})):null; medianeras=(m.medianeras||[]).map(x=>({a:x.a,b:x.b,retiro:x.retiro||0})); renderMeds(); renderStories(); result=null; lastStage=null; sel.clear(); planStory=null; zoom=1; pan=[0,0]; draw(); panels2(); if(fromRhino) $('rhinoBadge').textContent=(m.source==='masterplan'?'Lote recibido del Masterplan: ':'Masa recibida de Rhino: ')+(m.name||'sin nombre'); run('massing'); }
+async function dl(kind){ if(!result){alert('Genera primero un resultado');return;} let blob,name; if(kind=='json'){blob=new Blob([JSON.stringify(result,null,1)],{type:'application/json'});name='trazo.json';} else {const t=await (await fetch('/api/dxf')).text(); blob=new Blob([t],{type:'text/plain'});name='trazo.dxf';} const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); }
+async function poll(){ try{ const j=await (await fetch('/api/mass')).json(); if(j.version!==massVer&&j.mass){ massVer=j.version; setMass(j.mass,true); } }catch(e){} setTimeout(poll,1500); }
+(async()=>{ fetch('/api/version').then(r=>r.json()).then(j=>$('ver').textContent='v'+j.version); renderMix(); legend(); await loadStd(); renderStories(); samples=await (await fetch('/api/samples')).json(); const s=$('sample'); s.innerHTML=Object.entries(samples).map(([k,v])=>`<option value="${k}">${v.name}</option>`).join(''); s.onchange=()=>{ if(samples[s.value]) setMass(samples[s.value]); }; let fromMp=null; if(new URLSearchParams(location.search).has('desde')){ try{ const j=await (await fetch('/api/mass')).json(); if(j.mass){ massVer=j.version; fromMp=j.mass; } }catch(e){} } if(fromMp){ s.insertAdjacentHTML('afterbegin','<option value="__mp">Lote del Masterplan</option>'); s.value='__mp'; setMass(fromMp,true); } else setMass(samples[s.value]||{footprint}); window.addEventListener('resize',render); poll(); })();
+</script></body></html>

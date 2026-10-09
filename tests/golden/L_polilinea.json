@@ -1,0 +1,26 @@
+{
+ "ejemplo": "samples/L_polilinea.json",
+ "nombre": "L con polilínea",
+ "version_motor": "2.0",
+ "metricas": {
+  "unidades": 9,
+  "unidades_totales": 45,
+  "por_tipo": {
+   "2 dorm": 5,
+   "3 dorm": 4
+  },
+  "nucleos": 3,
+  "ascensores": 1,
+  "tramos": 2,
+  "area_planta": 1053.5,
+  "eficiencia_planta": 69.8,
+  "eficiencia_total": 65.8,
+  "sin_usar": 49.6,
+  "circulacion": 25.5,
+  "match_score": 94.4,
+  "fit_m2": 7.2,
+  "calidad_planos": 86,
+  "evacuacion_max": 16.0,
+  "nsa_total": 3674.0
+ }
+}
