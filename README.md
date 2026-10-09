@@ -175,3 +175,5 @@ Si algo falla, copia el mensaje completo de la terminal o de la línea de comand
 
 ## Pruebas
 `python tests/test_engine.py` (en Windows `py tests/test_engine.py`; en Mac `python3 tests/test_engine.py`).
+
+En GitHub las pruebas corren solas en cada PR (GitHub Actions, sin usar Claude): el PR muestra el check **Pruebas** en verde (todo bien) o en rojo (algo se rompió; el detalle está en «Details»).

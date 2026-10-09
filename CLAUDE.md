@@ -82,6 +82,7 @@ python tests/test_engine.py        # pruebas
 python server.py                   # http://127.0.0.1:8765
 python -c "import ast;ast.parse(open('rhino/trazo_rhino.py').read())"   # sintaxis del script de Rhino
 ```
+En GitHub, `.github/workflows/pruebas.yml` ejecuta las pruebas y valida el script de Rhino (sintaxis y primera línea `#! python 3`) en cada PR, con Python 3.9 y el más reciente, en Linux y Windows. El check «Pruebas» debe quedar verde antes de pedir que se acepte el PR.
 
 ## Problemas conocidos (contexto, no tareas)
 - `clip_halfplane`/`clip_rect` son Sutherland-Hodgman: en polígonos cóncavos pueden dejar puentes de ancho cero si el corte separa la figura en dos partes.
