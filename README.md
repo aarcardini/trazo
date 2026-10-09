@@ -3,13 +3,76 @@
 **Trazo** (antes «Finch Local») es una herramienta local de estudio de planta tipo, inspirada en el flujo público de herramientas como Finch3D (masa → planta → pasillo y núcleos → mix de unidades → planos de unidad). Es una implementación propia: no contiene código, datos ni marcas de terceros.
 
 ## Requisitos
-- Python 3.9 o superior (sin librerías externas).
+- Python 3.9 o superior (sin librerías externas). Se instala una sola vez: ver «Instalación».
 - Rhino 8 en Mac o Windows (para el puente). La web funciona sola, sin Rhino, con los ejemplos.
 - Para desarrollar con Claude Code: ver `CLAUDE.md` y `ROADMAP.md`.
 
+## Instalación
+
+### 1. Instalar Python (una sola vez)
+
+**Windows**
+1. Entra en https://www.python.org/downloads/ y descarga Python para Windows (botón amarillo «Download Python…»).
+2. Abre el archivo descargado:
+   - Si es el instalador clásico (`python-3.x.x-amd64.exe`): en la primera pantalla marca **«Add python.exe to PATH»** y pulsa **Install Now**.
+   - Si es el **Python install manager**: instálalo; la primera vez que escribas `py` puede preguntarte si quieres instalar Python: responde que sí (`Y`).
+3. Comprueba la instalación: abre el menú Inicio, escribe `cmd` y abre **Símbolo del sistema**. Escribe `py --version` y pulsa Enter. Debe responder `Python 3.` y la versión (3.9 o más).
+   - Si `py` no funciona pero `python --version` sí, usa `python` donde esta guía dice `py`.
+
+**Mac**
+1. Entra en https://www.python.org/downloads/ y descarga Python para macOS (botón amarillo «Download Python…»).
+2. Abre el archivo `.pkg` y sigue los pasos (Continuar → Aceptar → Instalar).
+3. Comprueba la instalación: abre **Terminal** (Cmd+Espacio, escribe «Terminal» y pulsa Enter), escribe `python3 --version` y pulsa Enter. Debe responder `Python 3.` y la versión.
+   - En Mac el comando es `python3` (no `python`).
+
+### 2. Descargar Trazo
+El código está en GitHub: https://github.com/aarcardini/trazo (repositorio privado: entra con tu cuenta).
+
+**Opción A — GitHub Desktop (recomendada: actualizar es un clic).** Igual en Mac y Windows.
+1. Descarga GitHub Desktop de https://desktop.github.com, instálalo y entra con tu cuenta de GitHub.
+2. Menú **File → Clone repository…**, pestaña **GitHub.com**, elige `aarcardini/trazo` y pulsa **Clone**. Por defecto queda en `Documentos/GitHub/trazo`.
+3. Para abrir la carpeta: **Repository → Show in Explorer** (Windows) o **Repository → Show in Finder** (Mac).
+
+**Opción B — ZIP.** En la página del repositorio: botón verde **Code → Download ZIP** y descomprímelo donde quieras (la carpeta se llama `trazo-main`).
+
+### 3. Arrancar Trazo
+Trazo es un pequeño servidor que corre en tu computadora; se usa desde el navegador.
+
+**Windows**
+1. Abre la carpeta de Trazo en el Explorador de archivos (la que contiene `server.py`).
+2. Haz clic en la barra de dirección (arriba), escribe `cmd` y pulsa Enter: se abre una ventana negra ya situada en esa carpeta.
+3. Escribe `py server.py` y pulsa Enter. Debe aparecer un mensaje como `Trazo v2.0 en http://127.0.0.1:8765  (Ctrl+C para salir)`.
+4. Abre http://127.0.0.1:8765 en el navegador (Chrome, Edge o Firefox).
+
+**Mac**
+1. Abre **Terminal**.
+2. Escribe `cd ` (con un espacio al final), arrastra la carpeta de Trazo desde el Finder a la ventana de Terminal y pulsa Enter.
+3. Escribe `python3 server.py` y pulsa Enter. Debe aparecer un mensaje como `Trazo v2.0 en http://127.0.0.1:8765  (Ctrl+C para salir)`.
+4. Abre http://127.0.0.1:8765 en el navegador (Safari, Chrome o Firefox).
+
+Deja esa ventana abierta mientras trabajas: si la cierras, Trazo se detiene. Para salir, pulsa **Ctrl+C** en esa ventana (también en Mac).
+El modo Masterplan está en http://127.0.0.1:8765/masterplan.
+
+### 4. Conectar con Rhino 8 (Mac y Windows)
+El puente es el archivo `rhino/trazo_rhino.py`. Funciona con **Rhino 8** (usa Python 3; no funciona en Rhino 7).
+1. Arranca Trazo (paso 3) **antes** de usar el puente.
+2. En Rhino 8 escribe el comando `_RunPythonScript` y elige el archivo `rhino/trazo_rhino.py` dentro de la carpeta de Trazo. Con el guion bajo delante, el comando funciona aunque Rhino esté en español.
+   - La primera vez, Rhino prepara Python 3 y puede tardar un poco.
+   - En Mac, si el sistema pregunta si Rhino puede acceder a la carpeta Documentos, elige **Permitir**.
+   - Alternativa: comando `_ScriptEditor`, abre el archivo y pulsa ▶ (Run).
+3. En la línea de comandos elige **Enviar** (manda la masa seleccionada a la web) o **Recibir** (dibuja en Rhino lo generado en la web).
+
+Las unidades del archivo de Rhino (mm, cm o m) se convierten solas: Trazo trabaja en metros.
+
+**Atajo (opcional):** crea un alias para no buscar el archivo cada vez. En Windows: **Herramientas → Opciones → Alias** (Tools → Options → Aliases); en Mac: **Rhino 8 → Ajustes → Aliases** (Settings). Añade el alias `trazo` con esta macro, cambiando la ruta por la de tu carpeta:
+- Windows: `_-RunPythonScript "C:\Users\TU_USUARIO\Documents\GitHub\trazo\rhino\trazo_rhino.py"`
+- Mac: `_-RunPythonScript "/Users/TU_USUARIO/Documents/GitHub/trazo/rhino/trazo_rhino.py"`
+
+Desde entonces basta con escribir `trazo` en Rhino.
+
 ## Uso
-1. En una terminal: `python server.py` y abre http://127.0.0.1:8765
-2. En Rhino 8: comando `RunPythonScript` y elige `rhino/trazo_rhino.py`.
+1. Arranca Trazo (ver «Instalación», paso 3) y abre http://127.0.0.1:8765
+2. En Rhino 8: comando `_RunPythonScript` y elige `rhino/trazo_rhino.py` (o el alias `trazo`).
    - **Enviar**: selecciona tu masa (sólido cerrado). Aparece sola en la web.
    - Para controlar el pasillo, dibuja polilíneas en la capa `Trazo::Centerline` antes de enviar (cada vértice es un giro del pasillo).
    - Para fijar los núcleos, coloca puntos en la capa `Trazo::Cores`; se usan en modo manual.
@@ -17,6 +80,37 @@
 3. En la web: Calcular masa → Generar pasillo y núcleos → Generar mix → Generar planos.
 4. En Rhino: ejecuta de nuevo el script y elige **Recibir** (capas `Trazo::L00::Units`, `Rooms`, etc.).
    Alternativa sin script: botón **DXF (Rhino)** y luego `Import`.
+
+## Actualizar Trazo
+Cuando haya cambios nuevos en GitHub (por ejemplo, después de aceptar un PR):
+- **GitHub Desktop:** pulsa **Fetch origin** y luego **Pull origin**.
+- **ZIP:** descarga de nuevo el ZIP y reemplaza la carpeta.
+
+Después cierra Trazo (Ctrl+C), vuelve a arrancarlo y recarga la página en el navegador. Los colores y las medidas que guardaste en la web se conservan: están guardados en el navegador.
+
+## Problemas frecuentes
+| Mensaje o síntoma | Qué hacer |
+|---|---|
+| Windows: `"py" no se reconoce como un comando interno o externo` | Prueba `python --version`. Si tampoco funciona, Python no está instalado o no está en el PATH: reinstálalo marcando «Add python.exe to PATH». |
+| Windows: al escribir `python` se abre la Microsoft Store | Python no está instalado: instálalo desde python.org (paso 1). |
+| Mac: `command not found: python` | En Mac el comando es `python3`. |
+| Mac: aparece una ventana para instalar las «herramientas de línea de comandos para desarrolladores» | Python no está instalado: cancela e instálalo desde python.org (paso 1). |
+| `can't open file ... server.py` | La terminal no está en la carpeta de Trazo. Repite el paso 3 desde la carpeta que contiene `server.py`. |
+| `Solo se permite un uso de cada dirección de socket` (Windows) o `Address already in use` (Mac) | Trazo ya está abierto en otra ventana: usa esa o ciérrala antes de arrancarlo de nuevo. |
+| El navegador no abre la página («No se puede acceder a este sitio», «rechazó la conexión») | Trazo no está corriendo: arráncalo (paso 3) y recarga la página. |
+| Rhino: `No puedo conectar con http://127.0.0.1:8765` | Arranca Trazo antes de ejecutar el script. |
+| Rhino: `No encontré una cara inferior horizontal` | La masa necesita una base plana y horizontal (por ejemplo, una extrusión cerrada). |
+| Rhino: `Todavía no hay un resultado` | Genera primero en la web y después elige **Recibir**. |
+| Rhino: `No module named request` o errores de sintaxis | El script se ejecutó con el Python 2 de Rhino 7. Usa Rhino 8: la primera línea del archivo (`#! python 3`) le indica que use Python 3. |
+
+Si algo falla, copia el mensaje completo de la terminal o de la línea de comandos de Rhino y pégalo en la sesión de Claude Code.
+
+## Desarrollo con Claude Code (en la nube)
+1. Entra en https://claude.ai/code y elige el repositorio `aarcardini/trazo`.
+2. Pide una tarea del `ROADMAP.md`, por ejemplo: «implementa R1.1 del ROADMAP». Una tarea por sesión.
+3. Claude trabaja en una rama nueva, ejecuta las pruebas y abre un **pull request** (PR) explicando qué cambia y cómo probarlo.
+4. Revisa el PR en GitHub y prueba los cambios (en Rhino si hace falta). Si está bien, pulsa **Merge pull request** → **Confirm merge**.
+5. Actualiza tu copia local (ver «Actualizar Trazo»). Cada PR marca su tarea con `[x]` en el `ROADMAP.md`, así que queda marcada al aceptarlo.
 
 ## Qué hace cada etapa
 - **Masa**: huella, altura, nº de plantas, programa y altura por planta, espesor de muro exterior, GFA.
@@ -80,4 +174,4 @@
 - El script de Rhino no se pudo probar en un Rhino real durante el desarrollo; si falla algo, copia el mensaje de la consola de Rhino.
 
 ## Pruebas
-`python tests/test_engine.py`
+`python tests/test_engine.py` (en Windows `py tests/test_engine.py`; en Mac `python3 tests/test_engine.py`).

@@ -3,14 +3,14 @@
 Estado de partida: **v1.8** (medianeras y retiros) · **v1.7** (medidas reales y normativa, núcleo con escalera y ascensores, oficinas, comercio y estacionamiento) — antes **v1.5** (masa, alas automáticas, polilíneas, núcleos manuales, mix, axonometría 3D con selección de niveles por programa, planos día/noche con grafo de conexiones y comprobaciones; puente Rhino sin probar en Rhino real).
 
 Cómo usar este archivo: cada ítem es una tarea para **una sesión de Claude Code y un PR**. Pide "implementa R1.2 del ROADMAP".
-Marca `[x]` cuando el PR esté aceptado. El orden importa: no saltes de fase sin acuerdo.
+Cada PR marca su tarea con `[x]`: queda marcada cuando el PR se acepta. El orden importa: no saltes de fase sin acuerdo.
 
 Leyenda de esfuerzo: S = pequeño, M = mediano, L = grande (dividir antes de empezar).
 
 ---
 
 ## Fase 0 — Base del repositorio
-- [ ] **R0.1 (S) README para Mac y Windows.** Instalación paso a paso en ambos sistemas (el `.gitignore` ya está incluido).
+- [x] **R0.1 (S) README para Mac y Windows.** Instalación paso a paso en ambos sistemas (el `.gitignore` ya está incluido).
   *Hecho cuando:* el README explica cómo instalar, arrancar y usar el puente con Rhino en Mac y en Windows.
 - [ ] **R0.2 (S) Pruebas en GitHub Actions.** Workflow que ejecuta `python tests/test_engine.py` y valida la sintaxis del script de Rhino en cada PR (sin usar Claude, no consume saldo).
   *Hecho cuando:* un PR muestra el check verde o rojo.
