@@ -1,4 +1,5 @@
 import sys, os, json
+sys.dont_write_bytecode = True   # sin __pycache__: tras revertir un cambio, nunca se prueba bytecode viejo
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from engine.layout import generate
 
@@ -167,3 +168,13 @@ def test_masterplan():
 
 if __name__ == "__main__":
     test_masterplan(); print("OK7")
+
+
+def test_regresion():
+    """Las métricas de los ejemplos de samples/ siguen dentro del margen de sus referencias en tests/golden/ (R0.3)."""
+    import regresion
+    difs = regresion.comparar()
+    assert not difs, regresion.mensaje(difs)
+
+if __name__ == "__main__":
+    test_regresion(); print("OK8")

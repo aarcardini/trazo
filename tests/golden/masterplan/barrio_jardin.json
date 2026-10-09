@@ -1,0 +1,17 @@
+{
+ "ejemplo": "samples/masterplan/barrio_jardin.json",
+ "nombre": "Barrio con plaza central (manzana verde)",
+ "version_motor": "2.0",
+ "metricas": {
+  "manzanas": 9,
+  "lotes": 73,
+  "lotes_obs": 0,
+  "lote_medio": 578.2,
+  "calles_pct": 25.3,
+  "reserva_pct": 10.8,
+  "cesiones_pct": 36.0,
+  "ocupacion": 24149.6,
+  "construible": 72448.9,
+  "viviendas_est": 772
+ }
+}

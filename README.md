@@ -176,4 +176,6 @@ Si algo falla, copia el mensaje completo de la terminal o de la línea de comand
 ## Pruebas
 `python tests/test_engine.py` (en Windows `py tests/test_engine.py`; en Mac `python3 tests/test_engine.py`).
 
+Incluye **pruebas de regresión**: para cada ejemplo de `samples/` hay métricas de referencia en `tests/golden/` (unidades, eficiencia, sin usar, núcleos, lotes…). Si un cambio del motor las mueve más que el margen, la prueba falla y dice qué cambió. `python tests/regresion.py` muestra la tabla completa (referencia y valor actual).
+
 En GitHub las pruebas corren solas en cada PR (GitHub Actions, sin usar Claude): el PR muestra el check **Pruebas** en verde (todo bien) o en rojo (algo se rompió; el detalle está en «Details»).

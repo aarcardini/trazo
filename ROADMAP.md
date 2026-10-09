@@ -14,7 +14,7 @@ Leyenda de esfuerzo: S = pequeño, M = mediano, L = grande (dividir antes de emp
   *Hecho cuando:* el README explica cómo instalar, arrancar y usar el puente con Rhino en Mac y en Windows.
 - [x] **R0.2 (S) Pruebas en GitHub Actions.** Workflow que ejecuta `python tests/test_engine.py` y valida la sintaxis del script de Rhino en cada PR (sin usar Claude, no consume saldo).
   *Hecho cuando:* un PR muestra el check verde o rojo.
-- [ ] **R0.3 (M) Pruebas de regresión.** Guardar en `tests/golden/` las métricas de cada ejemplo de `samples/` (unidades, eficiencia, sin usar, núcleos) y una prueba que avise si cambian más de un margen.
+- [x] **R0.3 (M) Pruebas de regresión.** Guardar en `tests/golden/` las métricas de cada ejemplo de `samples/` (unidades, eficiencia, sin usar, núcleos) y una prueba que avise si cambian más de un margen.
   *Hecho cuando:* cambiar el motor sin querer rompe una prueba con un mensaje claro. **Requisito de R2.1.**
 
 ## Fase 1 — Puente con Rhino fiable (requiere pruebas del usuario)
