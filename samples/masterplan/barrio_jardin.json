@@ -1,0 +1,2 @@
+{"name": "Barrio con plaza central (manzana verde)", "predio": [[0,0],[300,0],[300,220],[0,220]], "damero": true,
+ "masterplan": {"manzana": [75, 95]}, "verde_centro": true}

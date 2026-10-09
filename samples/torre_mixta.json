@@ -1,0 +1,4 @@
+{"name": "Barra mixta (estac. + comercio + oficinas + vivienda)", "height": 28.8,
+ "footprint": [[0,0],[72,0],[72,17],[0,17]],
+ "stories": [{"program":"Parking","height":3.0},{"program":"Retail","height":4.5},{"program":"Office","height":3.3},{"program":"Office","height":3.3},
+             {"program":"Residential","height":3.0},{"program":"Residential","height":3.0},{"program":"Residential","height":3.0},{"program":"Residential","height":3.0},{"program":"Residential","height":3.0}]}
