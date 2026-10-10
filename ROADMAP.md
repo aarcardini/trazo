@@ -54,7 +54,7 @@ Hecho en v1.5: zonas día/noche, pasillo interno, puertas, grafo de conexiones (
 - [ ] **R5.3 (M) Segunda fachada:** unidades de esquina o extremo usan la fachada lateral (dormitorios o estar ahí) y se reconoce en la comprobación de luz.
 - [ ] **R5.4 (M) Biblioteca de plantas tipo** en JSON (estancias en proporciones relativas) con estiramiento al tamaño de la unidad y muros bloqueados, como la "adaptive plan library" de Finch.
 - [ ] **R5.5 (S) Ventanas** en fachada por estancia habitable, exportables a Rhino.
-- [ ] **R5.6 (L) Mobiliario básico** por estancia (bloques 2D) y comprobación de que cabe (círculo de giro, paso libre).
+- [~] **R5.6 (L) Mobiliario básico** (v2.21: baños, cocina y lavadero con sus artefactos, paso libre y puertas de 0,70; también en Rhino y DXF; falta: dormitorios, comedor y estar) por estancia (bloques 2D) y comprobación de que cabe (círculo de giro, paso libre).
 - [ ] **R5.7 (M) Editar la unidad a mano:** mover tabiques y puertas en la ficha de la unidad; las comprobaciones se recalculan.
 
 ## Fase 6 — Varias plantas

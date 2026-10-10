@@ -9,6 +9,8 @@ Fuentes principales (ver STANDARDS.md):
 - Intendencia de Montevideo: ductos y cabinas de ascensor (accesible: ducto 1,75 x 1,95; cabina 1,10 x 1,40).
 - Decreto 406/988 art. 78: inodoros por trabajadores (1 cada 15 hasta 100).
 - Estacionamiento: plaza 2,50 x 5,00 y calle de 6,00 (práctica habitual en Uruguay, indicado por el usuario).
+- Equipamiento de baños, cocina y lavadero: módulos habituales (E. Neufert, Arte de proyectar en arquitectura); puertas
+  interiores de 0,70 y mesada de 0,60 de fondo (criterio del usuario).
 Las medidas "típicas" son criterios de proyecto (no normativos) y pueden ajustarse.
 """
 import copy
@@ -87,6 +89,25 @@ DEFAULTS = {
     "estacionamiento": {
         "plaza": [2.50, 5.00],           # ancho x largo
         "calle": 6.00,                   # calle de circulación
+    },
+    "equipamiento": {                    # F5: artefactos dentro de las estancias (engine/equipamiento.py)
+        "puerta_interior": 0.70,         # ancho de hoja: dormitorios, baños, lavadero (criterio del usuario)
+        "puerta_entrada": 0.90,          # puerta de la vivienda desde el pasillo común
+        # módulo que ocupa contra la pared: [largo a lo largo de la pared, fondo]
+        "inodoro": [0.75, 0.70],
+        "bide": [0.70, 0.60],
+        "lavatorio": [0.70, 0.50],
+        "ducha": [0.85, 0.85],
+        "paso_bano": 0.60,               # espacio libre delante de cada artefacto
+        "mesada_fondo": 0.60,            # criterio del usuario
+        "heladera": [0.70, 0.70],
+        "bacha_cocina": 0.80,            # largo del módulo de la bacha en la mesada
+        "cocina_horno": 0.60,            # largo del módulo de cocina con horno
+        "mesada_trabajo": 0.60,          # mesada libre entre la bacha y la cocina
+        "paso_cocina": 0.90,             # espacio libre delante de la mesada
+        "lavarropas": [0.60, 0.60],
+        "pileta_lavar": [0.55, 0.45],
+        "paso_lavadero": 0.60,
     },
 }
 

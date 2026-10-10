@@ -24,6 +24,28 @@ Ley 13.728, art. 18: mínimo 25 m²; 35 m² para 1 dormitorio y +15 m² por dorm
 
 Reglas de distribución que aplica el motor: dormitorios y estar con fachada; dormitorios y baños accesibles desde el pasillo interno; cocina, comedor y estar integrados (conexión abierta); frente mínimo de la unidad = estar + dormitorios (para que todos tengan ventana).
 
+## Equipamiento de baños, cocina y lavadero (F5)
+
+Cada artefacto ocupa un módulo contra una pared maciza (largo a lo largo de la pared × fondo) y deja libre su paso delante; no se apoya en un borde abierto a otra estancia ni pisa el barrido de las puertas. Editables en la web («Medidas y normativa → Equipamiento»).
+
+| Elemento | Valor por defecto | Referencia |
+|---|---|---|
+| Puerta interior (dormitorios, baños, lavadero) | 0,70 m | Criterio indicado por el usuario |
+| Puerta de entrada a la vivienda | 0,90 m | Criterio de proyecto |
+| Inodoro (con mochila) | módulo 0,75 × 0,70 m | E. Neufert, *Arte de proyectar en arquitectura* (medidas habituales) |
+| Bidé | módulo 0,70 × 0,60 m | Ídem |
+| Lavatorio | módulo 0,70 × 0,50 m | Ídem |
+| Ducha | 0,85 × 0,85 m (en un baño angosto, de pared a pared en la pared del fondo) | Ídem (0,80 × 0,80 mínimo habitual) |
+| Paso libre delante de los artefactos del baño | 0,60 m | Ídem |
+| Fondo de mesada | 0,60 m | Criterio indicado por el usuario |
+| Heladera | 0,70 × 0,70 m | Medida habitual de heladera con freezer |
+| Bacha de cocina / cocina con horno | 0,80 m / 0,60 m de largo en la mesada | Medidas habituales |
+| Mesada libre entre bacha y cocina | 0,60 m | Criterio de proyecto (zona de trabajo) |
+| Paso libre delante de la mesada | 0,90 m | Neufert (0,90–1,20 m) |
+| Lavarropas / pileta de lavar | 0,60 × 0,60 m / 0,55 × 0,45 m, con 0,60 m de paso | Medidas habituales |
+
+Reglas del motor: el baño principal lleva ducha, inodoro y lavatorio (y bidé si entra); un segundo baño donde no entra la ducha queda como toilette (inodoro y lavatorio, con aviso). La puerta de un baño o lavadero va al centro del borde o junto a una esquina, donde mejor entran los artefactos. El ancho mínimo de un baño sale del inodoro con su paso (0,70 + 0,60 = 1,30 m) y el del lavadero, del lavarropas con su paso (1,20 m). La cocina lleva una mesada corrida con heladera, bacha, mesada de trabajo y cocina; si no entra en línea, la heladera va en otra pared (en L). Lo que no entra se avisa en la ficha de la vivienda.
+
 ## Núcleo de circulación vertical
 
 | Elemento | Valor | Referencia |
