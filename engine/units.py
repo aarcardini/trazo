@@ -384,6 +384,24 @@ def unit_rooms(u, params, pc=None, plate=None, ediciones=None):
                 if min(_dist_to_boundary(w, b) for b in bordes) > 0.4 or (bl and bl(w)) or (pd and pd(w)):
                     return False
             return True
+        muro = params["outer_wall"]
+
+        def ventana(p, q):
+            """R5.5: p-q (con la estancia a la izquierda) está sobre la fachada y del otro lado del muro hay aire: ni
+            planta ni otra ala a menos del espesor del muro (junto a una esquina entrante, el muro sigue hacia la otra)."""
+            L = ((q[0] - p[0]) ** 2 + (q[1] - p[1]) ** 2) ** 0.5
+            n = ((q[1] - p[1]) / L, -(q[0] - p[0]) / L)
+            for t_ in (0.25, 0.5, 0.75):
+                m = (p[0] + (q[0] - p[0]) * t_, p[1] + (q[1] - p[1]) * t_)
+                w = G.to_world([back(m)], pc["origin"], pc["angle"])[0]
+                a = G.to_world([back((m[0] + n[0] * (muro + 0.05), m[1] + n[1] * (muro + 0.05)))], pc["origin"],
+                               pc["angle"])[0]
+                if min(_dist_to_boundary(w, b) for b in bordes) > 0.05 or (bl and bl(w)) or (pd and pd(w)) or \
+                        min(_dist_to_boundary(a, b) for b in bordes) < muro + 0.04 or \
+                        (G.point_in_poly(a, plate) and not any(G.point_in_poly(a, h) for h in bordes[1:])):
+                    return False
+            return True
+        is_fac.ventana = ventana
     mias = []
     if ediciones and pc is not None:                # R5.7: los cambios cuyo punto cae en esta vivienda, en su marco
         def marco(w):
@@ -394,7 +412,8 @@ def unit_rooms(u, params, pc=None, plate=None, ediciones=None):
             if G.point_in_poly(q, poly) or _dist_to_boundary(q, poly) < 0.05:
                 mias.append((k, dict(e, p=q, a=marco(e["a"]) if e.get("a") else None)))
     S = ST.merged(params.get("standards"))
-    res = P.layout_unit(poly, nb, is_fac, S["vivienda"], S["equipamiento"], bool(spec.get("accesible")), mias)
+    res = P.layout_unit(poly, nb, is_fac, S["vivienda"], S["equipamiento"], bool(spec.get("accesible")), mias,
+                        S["ventanas"])
 
     def back_poly(pl):
         out = [back(p) for p in pl]
@@ -405,6 +424,13 @@ def unit_rooms(u, params, pc=None, plate=None, ediciones=None):
         q["poly"] = back_poly(q["poly"])
         q["lines"] = [[back(p) for p in ln] for ln in q["lines"]]
     res["paredes"] = [(back(a), back(b)) for a, b in res["paredes"]]
+    t = params["outer_wall"]                        # R5.5: la ventana, en el espesor del muro exterior
+    for w in res["ventanas"]:
+        p, q, n = w.pop("p"), w.pop("q"), w.pop("n")
+        afuera = lambda pt, f: (pt[0] + n[0] * t * f, pt[1] + n[1] * t * f)
+        w["poly"] = back_poly([p, q, afuera(q, 1), afuera(p, 1)])
+        w["lines"] = [[back(afuera(p, f)), back(afuera(q, f))] for f in (1 / 3.0, 2 / 3.0)]     # el vidrio
+        w["seg"] = [back(p), back(q)]
     for d in res["doors"]:
         d["p"], d["q"] = back(d["p"]), back(d["q"])
         d["into"] = d["into"] * (side if not d["vertical"] else 1)
