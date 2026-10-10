@@ -16,10 +16,10 @@ from .circulation import (pick_frame, core_positions, side_for, _frame_for_poly,
                           _add_core, _propagate_core_blocks, generate_circulation, is_between, _between_depth,
                           _generate_circulation, nucleo_punto, medidas_nucleo)  # noqa: F401
 from .units import (_bisect_x, _chain_union, _is_rect, _segments, generate_unit_mix, metrics_mix, bedrooms_for,
-                    unit_rooms, sin_solapes)  # noqa: F401
+                    unit_rooms, sin_solapes, editar_unidades, vecinas)  # noqa: F401
 from .patios import (auto_patios, _anillo, split_blocks, make_patio_dark, _block_of, _block_of_line)  # noqa: F401
 
-VERSION = "2.15"
+VERSION = "2.20"
 
 DEFAULT_PARAMS = {
     # Masa
@@ -52,6 +52,7 @@ DEFAULT_PARAMS = {
     "medianeras": None,         # [{"a":[x,y],"b":[x,y],"retiro":m}] bordes del predio contra linderos
     "patios_mode": "auto",      # auto (patios en predios entre medianeras demasiado profundos) | manual
     "patios": None,             # patios manuales: [[[x,y],...],...] en coordenadas de mundo
+    "unit_edits": None,         # R4.4: [{"op": "tabique"|"fusionar"|"dividir", "p": [x,y], "a": [x,y]}] en orden (units.editar_unidades)
 }
 
 
@@ -271,7 +272,7 @@ def generate(data):
     if stage == "corridor":
         return res
     state = {}
-    units = []
+    units, hechos = [], set()
     for pieces, pb, pl_b, cpolys in bloques_pc:
         del_bloque = []
         for i, pc in enumerate(pieces):
@@ -280,6 +281,7 @@ def generate(data):
             for u in us:
                 u["_pc"], u["_pb"], u["_plate"], u["_i"] = pc, pb, pl_b, i
             del_bloque += us
+        editar_unidades(del_bloque, params.get("unit_edits"), pb, hechos)   # R4.4: tabiques movidos, viviendas unidas o divididas
         del_bloque, warns = sin_solapes(del_bloque, pieces, cpolys, pb)
         res["warnings"] += warns
         for u in del_bloque:                               # desde la puerta: hasta el núcleo y hasta tener dos salidas
@@ -288,9 +290,13 @@ def generate(data):
             u["egress"] = min(1e9, EV.recorrido(pb["_evac"], u["_i"], xd) + extra)
             u["saco"] = min(1e9, EV.saco(pb["_evac"], u["_i"], xd) + extra)
         units += del_bloque
+    faltan = len(params.get("unit_edits") or []) - len(hechos)
+    if faltan > 0:
+        res["warnings"].append("%d cambio(s) de viviendas no se pudieron aplicar: la planta cambió desde que los hiciste. "
+                               "Descártalos («Descartar cambios», en el mix) o deshazlos (Ctrl+Z)" % faltan)
     for i, u in enumerate(units):
         u["id"] = "U%02d" % (i + 1)
-        if u["target"] and abs(u["area"] - u["target"]) > 0.35 * u["target"]:
+        if u["target"] and not u.get("editada") and abs(u["area"] - u["target"]) > 0.35 * u["target"]:
             res["warnings"].append("%s mide %.0f m² y el objetivo de «%s» es %.0f m²: la geometría no permite ajustarlo" %
                                    (u["id"], u["area"], u["type"], u["target"]))
     lejos = ["%s (%.0f m)" % (u["id"], u["egress"]) for u in units if u["egress"] > params["egress_multi"]]
@@ -315,6 +321,8 @@ def generate(data):
                 "width": round(u["width"], 2), "depth": round(u["depth"], 2), "egress": round(eg, 1),
                 "saco": round(sc, 1), "egress_status": status, "poly": W(pc, u["poly_local"]),
                 "door": [round(v, 3) for v in G.to_world([u["door_local"]], pc["origin"], pc["angle"])[0]]}
+        if u.get("editada"):
+            item["editada"] = True
         if stage == "plans":
             pl = unit_rooms(u, u["_pb"], pc, u["_plate"])
             Wp = lambda pt, pc=pc: [round(v, 3) for v in G.to_world([pt], pc["origin"], pc["angle"])[0]]
@@ -329,6 +337,15 @@ def generate(data):
             item["plan_score"] = pl["score"]
             item["facade"], item["facade_min"] = pl["facade"], pl["facade_min"]
         res["units"].append(item)
+    res["tabiques"] = []                                    # tabiques entre vecinas de una franja: se arrastran en la web (R4.4)
+    for a, b in vecinas(units, params):
+        pc, x = a["_pc"], a["x1"] + params["party_wall"] / 2
+        ya, yb = [q[1] for q in a["poly_local"]], [q[1] for q in b["poly_local"]]
+        lo, hi = max(min(ya), min(yb)), min(max(ya), max(yb))
+        if hi - lo > 0.5:
+            o, e = G.to_world([(0.0, 0.0), (1.0, 0.0)], pc["origin"], pc["angle"])
+            res["tabiques"].append({"a": a["id"], "b": b["id"], "seg": W(pc, [(x, lo), (x, hi)]),
+                                    "dir": [round(e[0] - o[0], 6), round(e[1] - o[1], 6)]})
     if stage == "plans" and res["units"]:
         res["metrics"]["plan_score"] = round(sum(u["plan_score"] for u in res["units"]) / len(res["units"]))
         bad = [u["id"] for u in res["units"] if u["plan_score"] < 100]

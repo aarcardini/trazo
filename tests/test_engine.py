@@ -653,7 +653,7 @@ def test_nucleos_editables():
     # web: clic en un núcleo abre su ficha; la masa recibida conserva los núcleos con medidas propias
     html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
     for s in ("'data-core'", "function corePanel", "function aplicarNucleo", 'id="nGiro"', "closest('[data-core]')",
-              "coresManual=m.cores.map(p=>Array.isArray(p)?[p[0],p[1]]:"):
+              "coresManual=(m.cores||[]).map(p=>Array.isArray(p)?[p[0],p[1]]:"):
         assert s in html, s
 
 if __name__ == "__main__":
@@ -728,3 +728,212 @@ def test_nucleos_sin_pisarse():
 
 if __name__ == "__main__":
     test_nucleos_sin_pisarse(); print("OK25")
+
+
+def test_proyectos():
+    """R4.1: «Guardar proyecto» guarda el pedido que la web le hace al motor (/api/generate) más nombre, versión y
+    fecha, con solo las medidas cambiadas: el motor lo lee tal cual y da la misma planta. «Abrir proyecto» devuelve cada
+    parámetro simple a su control (mismo id) y los demás (líneas, núcleos, mix, medidas…) uno por uno."""
+    import copy, re
+    from engine import layout as LY, standards as ST
+    s = json.load(open(os.path.join(os.path.dirname(__file__), "..", "samples", "L_polilinea.json"), encoding="utf-8"))
+    std = copy.deepcopy(ST.DEFAULTS)            # la web manda todas las medidas: las de /api/standards con las cambiadas
+    std["nucleo"]["escalera_ancho"] = 1.4       # una medida cambiada: escalera más ancha
+    params = {"corridor_width": 1.8, "core_count": 2, "centerlines": s["centerlines"], "cores_mode": "manual",
+              "cores": [{"p": [8, 25], "giro": 90}, [40, 7]], "standards": std,
+              "unit_mix": [{"name": "1 dorm", "area": 50, "percent": 40, "dorms": 1}, {"name": "2 dorm", "area": 75, "percent": 60, "dorms": 2}]}
+    web = {"footprint": s["footprint"], "height": s["height"], "stage": "plans", "params": params}
+    proyecto = dict(copy.deepcopy(web), trazo="proyecto", formato=1, version_motor=LY.VERSION,
+                    guardado="2026-10-10T12:00:00.000Z", name="Prueba")
+    proyecto["params"]["standards"] = {"nucleo": {"escalera_ancho": 1.4}}     # el archivo guarda solo lo cambiado
+    a = generate(copy.deepcopy(web))
+    b = generate(json.loads(json.dumps(proyecto)))
+    assert a["units"] and json.dumps(a, sort_keys=True) == json.dumps(b, sort_keys=True)
+    c = generate(dict(copy.deepcopy(web), params=dict(params, standards=None)))
+    assert json.dumps(a["cores"], sort_keys=True) != json.dumps(c["cores"], sort_keys=True)   # la medida cambiada cuenta
+    # web: botones, archivo y que cada parámetro que se guarda se pueda restaurar
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    for t in ('id="archivoProyecto"', "function guardarProyecto", "function abrirProyecto", "trazo:'proyecto'", "showSaveFilePicker"):
+        assert t in html, t
+    cuerpo = lambda f: html.split(f, 1)[1].split("\nfunction ", 1)[0].split("\nasync function ", 1)[0]
+    assert "params()" in cuerpo("function proyecto(){") and "medidasCambiadas()" in cuerpo("function proyecto(){")
+    abrir = cuerpo("function abrirProyecto(")
+    obj = cuerpo("function params(){").split("return ", 1)[1]
+    claves = re.findall(r"[{,](\w+):", obj)
+    assert len(claves) > 20 and "core_auto" in claves, claves
+    for k in claves:      # un parámetro nuevo se lee de un control con su mismo id o tiene su línea en abrirProyecto
+        if re.search(r"[{,]%s:(g\('%s'\)|\$\('%s'\))" % (k, k, k), obj):
+            assert re.search(r'<(input|select)[^>]*\bid="%s"' % k, html), k
+        else:
+            assert re.search(r"\bP\.%s\b" % k, abrir), k
+
+if __name__ == "__main__":
+    test_proyectos(); print("OK26")
+
+
+def test_deshacer():
+    """R4.2: deshacer y rehacer (↶ ↷, Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z y Ctrl+Y) para polilíneas, núcleos, medianeras y
+    patios: cada lugar que los cambia guarda antes el estado; otra masa, un proyecto o «Nuevo» empiezan sin historia.
+    Corrección: «Quitar núcleo» en modo automático quita el núcleo tocado (antes pasaba a manual y no lo quitaba).
+    (El comportamiento se comprobó en navegador; esta prueba evita que un cambio nuevo quede sin deshacer.)"""
+    import re
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    for t in ('id="btnUndo"', 'id="btnRedo"', "function deshacer", "function rehacer", "function recordar", "function olvidarHistoria"):
+        assert t in html, t
+    js = html.split("<script>", 1)[1].split("</script>", 1)[0]
+    exentas = ("function volverA", "function setMass", "async function nuevo", "function ensureManual", "function ensurePatiosManual")
+    bloques = re.compile(r"\nfunction |\nasync function |addEventListener\(|onclick=\"|onchange=\"")
+    cambio = re.compile(r"\b(centerlines|coresManual|medianeras|patios|ediciones)(\[[^\]]*\])*(\.retiro)?(=(?![=>])|\.(push|pop|splice)\()|\bpl\.splice\(|\bpl\[drag\.vi\]=")
+    sin, n = [], 0
+    for m in cambio.finditer(js):
+        linea = js[js.rfind("\n", 0, m.start()) + 1:m.start()]
+        if linea.startswith("let "):
+            continue                                                  # declaración inicial
+        ini = max([0] + [b.start() for b in bloques.finditer(js, 0, m.start())])
+        bloque = js[ini:m.start()].lstrip("\n")
+        n += 1
+        if not bloque.startswith(exentas) and "recordar(" not in bloque:
+            sin.append(js[m.start() - 60:m.end() + 20])
+    assert n >= 15 and not sin, (n, sin)
+    for f in ("function setMass(", "async function nuevo("):              # otra masa: la historia se olvida
+        assert "olvidarHistoria()" in js.split(f, 1)[1].split("\nfunction ", 1)[0].split("\nasync function ", 1)[0], f
+    teclas = js.split("window.addEventListener('keydown'", 1)[1].split("\n/*", 1)[0]
+    assert "e.ctrlKey||e.metaKey" in teclas and "deshacer()" in teclas and "rehacer()" in teclas and "k==='y'" in teclas
+    assert "best[1].spec!=null?best[1].spec:result.cores.indexOf(best[1])" in js     # corrección de «Quitar núcleo»
+
+if __name__ == "__main__":
+    test_deshacer(); print("OK27")
+
+
+def test_arrastrar_nucleos():
+    """R4.3: un núcleo se arrastra en la planta. Al soltarlo, la web pasa a modo manual con el centro del núcleo corrido
+    lo que se arrastró; el motor lo ajusta al pasillo más cercano, del lado donde quedó (si cruza el pasillo, cambia de
+    lado). Los demás núcleos no se mueven, y arrastrar se puede deshacer."""
+    barra = [[0, 0], [60, 0], [60, 16], [0, 16]]
+    orden = lambda r: sorted(r["cores"], key=lambda c: c["spec"])
+    c0 = orden(run(barra, cores_mode="manual", cores=[[15, 9], [45, 9]]))
+    (x, y), otro = c0[0]["center"], c0[1]["center"]
+    c1 = orden(run(barra, cores_mode="manual", cores=[[x + 6, y + 0.4], otro]))       # arrastrado 6 m a lo largo
+    assert abs(c1[0]["center"][0] - (x + 6)) < 0.6 and c1[0]["side"] == c0[0]["side"], (c0[0], c1[0])
+    assert abs(c1[0]["center"][1] - y) < 0.05, "se ajusta al pasillo: no se corre de costado"
+    assert c1[1]["center"] == otro and c1[1]["side"] == c0[1]["side"]                  # el otro, igual
+    c2 = orden(run(barra, cores_mode="manual", cores=[[x, 16 - y], otro]))            # arrastrado al otro lado del pasillo
+    assert c2[0]["side"] == -c0[0]["side"], (c0[0]["side"], c2[0]["side"])
+    # web: se toma del núcleo, se ve dónde queda y al soltar se registra para deshacer, pasa a manual y recalcula
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    js = html.split("<script>", 1)[1]
+    assert "dragCore={i:+tc.getAttribute('data-core')" in js
+    assert "dragCore&&dragCore.moved" in js.split("function drawOverlay(){", 1)[1].split("\nfunction ", 1)[0]
+    suelta = js.split("svg.addEventListener('pointerup',e=>{ if(!dragCore) return;", 1)[1].split("\nsvg.addEventListener(", 1)[0].split("\nwindow.", 1)[0]
+    for t in ("if(!g.moved) return", "svg._skipClick=true", "recordar('mover núcleo')", "ensureManual()", "k.center[0]+g.d[0]", "runCirc()"):
+        assert t in suelta, t
+
+if __name__ == "__main__":
+    test_arrastrar_nucleos(); print("OK28")
+
+
+def test_variantes():
+    """R4.5: «Guardar como variante» guarda la solución actual (como un proyecto) con sus métricas, y la tabla las
+    compara (unidades, NSA, eficiencia, match, circulación, sin usar, núcleos, evacuación, planos). Las métricas que lee
+    la web existen en el resultado del motor; las variantes van en el archivo del proyecto y «Nuevo» las borra."""
+    import re
+    s = json.load(open(os.path.join(os.path.dirname(__file__), "..", "samples", "L.json"), encoding="utf-8"))
+    r = run(s["footprint"], s["height"])
+    m = r["metrics"]
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    js = html.split("<script>", 1)[1]
+    cuerpo = lambda f: js.split(f, 1)[1].split("\nfunction ", 1)[0].split("\nasync function ", 1)[0].split("\nconst ", 1)[0]
+    res = cuerpo("function resumen(")
+    claves, de_mix = set(re.findall(r"\bm\.(\w+)", res)) - {"mix"}, set(re.findall(r"\bmx\.(\w+)", res))
+    assert len(claves) >= 6 and len(de_mix) >= 2, (claves, de_mix)
+    for k in claves:
+        assert m.get(k) is not None, k                  # la tabla no queda con «–» por una métrica que no existe
+    for k in de_mix:
+        assert m["mix"].get(k) is not None, k
+    assert r["units"] and all("egress_status" in u for u in r["units"]) and "egress_status" in res
+    assert "p.variantes=variantes" in cuerpo("function archivoProyecto(")       # se guardan con el proyecto
+    assert "variantes=Array.isArray(p.variantes)" in cuerpo("function abrirProyecto(")
+    assert "variantes=[]" in cuerpo("async function nuevo(")
+    assert "{variante:true}" in cuerpo("function abrirVariante(")             # abrir una variante no cambia la lista
+
+if __name__ == "__main__":
+    test_variantes(); print("OK29")
+
+
+def test_aviso_ancho():
+    """Corrección (v2.19.1): el aviso de ancho mínimo muestra dos decimales. Con uno, una vivienda de 4,98 m avisaba
+    «Unidad con ancho 5.0 m < mínimo 5.0 m», que parecía un error; ahora dice «4.98 m < mínimo 5.00 m»."""
+    import re
+    s = json.load(open(os.path.join(os.path.dirname(__file__), "..", "samples", "L.json"), encoding="utf-8"))
+    r = run(s["footprint"], s["height"], loading="single")
+    avisos = [re.search(r"Unidad con ancho (\d+\.\d\d) m < mínimo (\d+\.\d\d) m", w) for w in r["warnings"] if "Unidad con ancho" in w]
+    assert avisos and all(a and float(a.group(1)) < float(a.group(2)) for a in avisos), r["warnings"]
+    angostas = [u for u in r["units"] if u["width"] < 5.0]
+    assert angostas and "%.2f" % min(u["width"] for u in angostas) in " ".join(r["warnings"])
+
+if __name__ == "__main__":
+    test_aviso_ancho(); print("OK30")
+
+
+def test_editar_viviendas():
+    """R4.4: el usuario edita las viviendas con cambios en orden (puntos de mundo, en params.unit_edits): mueve el
+    tabique entre dos vecinas, las une o divide una en dos. Las demás no cambian, los planos, la evacuación y las
+    métricas se recalculan, y un cambio que ya no entra (la planta cambió) se avisa. La web arrastra los tabiques."""
+    import math
+    barra = [[0, 0], [60, 0], [60, 16], [0, 16]]
+    base = run(barra)
+    U = {u["id"]: u for u in base["units"]}
+    t = base["tabiques"][0]
+    a, b = U[t["a"]], U[t["b"]]
+    largo = math.hypot(t["seg"][1][0] - t["seg"][0][0], t["seg"][1][1] - t["seg"][0][1])
+    assert t["a"] != t["b"] and abs(math.hypot(*t["dir"]) - 1) < 1e-6 and largo > 3, t
+    mid = [(t["seg"][0][0] + t["seg"][1][0]) / 2, (t["seg"][0][1] + t["seg"][1][1]) / 2]
+    hacia = lambda d: [mid[0] + d * t["dir"][0], mid[1] + d * t["dir"][1]]
+    # mover el tabique 2 m: una crece, la otra achica, las demás igual; conservan el tipo y se rehacen los planos
+    r = run(barra, unit_edits=[{"op": "tabique", "p": mid, "a": hacia(2)}])
+    R = {u["id"]: u for u in r["units"]}
+    assert abs(R[t["a"]]["width"] - (a["width"] + 2)) < 0.02 and abs(R[t["b"]]["width"] - (b["width"] - 2)) < 0.02
+    assert R[t["a"]].get("editada") and abs(R[t["a"]]["area"] + R[t["b"]]["area"] - a["area"] - b["area"]) < 0.1
+    assert all(R[k]["poly"] == U[k]["poly"] for k in U if k not in (t["a"], t["b"]))
+    assert R[t["a"]]["type"] == a["type"] and R[t["a"]]["rooms"] and not any("no se pudieron" in w for w in r["warnings"])
+    r = run(barra, unit_edits=[{"op": "tabique", "p": mid, "a": hacia(100)}])          # no deja una vivienda sin ancho
+    assert min(u["width"] for u in r["units"]) >= 0.5 * 5.0 - 0.01
+    # unir: una sola vivienda con el ancho de las dos y el tabique
+    r = run(barra, unit_edits=[{"op": "fusionar", "p": mid}])
+    m = next(u for u in r["units"] if u["id"] == t["a"])
+    assert len(r["units"]) == len(base["units"]) - 1 and abs(m["width"] - (a["width"] + 0.3 + b["width"])) < 0.02
+    # dividir: dos partes; la primera conserva el número; un tipo del mix solo si la superficie se le parece
+    c = [sum(p[0] for p in a["poly"]) / len(a["poly"]), sum(p[1] for p in a["poly"]) / len(a["poly"])]
+    r = run(barra, unit_edits=[{"op": "dividir", "p": c}])
+    p1, p2 = [u for u in r["units"] if u.get("editada")]
+    assert len(r["units"]) == len(base["units"]) + 1 and p1["id"] == t["a"] and abs(p1["width"] + 0.3 + p2["width"] - a["width"]) < 0.02
+    assert p1["area"] < 0.65 * 75 and p1["type"] == ("%d dorm" % p1["bedrooms"] if p1["bedrooms"] else "Monoambiente"), p1["type"]
+    assert r["metrics"]["mix"]["match_score"] < base["metrics"]["mix"]["match_score"]   # el mix se aleja del objetivo
+    # en orden: dividir y después mover el tabique nuevo
+    tn = next(x for x in r["tabiques"] if (x["a"], x["b"]) == (p1["id"], p2["id"]))
+    mn = [(tn["seg"][0][0] + tn["seg"][1][0]) / 2, (tn["seg"][0][1] + tn["seg"][1][1]) / 2]
+    r2 = run(barra, unit_edits=[{"op": "dividir", "p": c}, {"op": "tabique", "p": mn, "a": [mn[0] + tn["dir"][0], mn[1] + tn["dir"][1]]}])
+    q1 = next(u for u in r2["units"] if u["id"] == p1["id"])
+    assert abs(q1["width"] - (p1["width"] + 1)) < 0.02 and not any("no se pudieron" in w for w in r2["warnings"])
+    # un cambio que ya no entra se avisa y no cambia nada
+    r = run(barra, unit_edits=[{"op": "dividir", "p": [500, 500]}])
+    assert any("1 cambio(s) de viviendas no se pudieron aplicar" in w for w in r["warnings"]) and len(r["units"]) == len(base["units"])
+    # edificio con patio (dos bloques): el cambio en el segundo bloque también se aplica
+    larga = [[0, 0], [90, 0], [90, 16], [0, 16]]
+    pat = dict(patios_mode="manual", patios=[[[40, 0], [48, 0], [48, 16], [40, 16]]])
+    rb = run(larga, **pat)
+    t2 = max(rb["tabiques"], key=lambda x: x["seg"][0][0])                            # el tabique más a la derecha
+    m2 = [(t2["seg"][0][0] + t2["seg"][1][0]) / 2, (t2["seg"][0][1] + t2["seg"][1][1]) / 2]
+    assert m2[0] > 48
+    r = run(larga, unit_edits=[{"op": "fusionar", "p": m2}], **pat)
+    assert len(r["units"]) == len(rb["units"]) - 1 and not any("no se pudieron" in w for w in r["warnings"])
+    # web: tabiques que se arrastran, dividir y unir en la ficha, descartar, y todo se puede deshacer
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    js = html.split("<script>", 1)[1]
+    for s_ in ("unit_edits:ediciones.length?ediciones:null", "function dividirVivienda", "function unirViviendas",
+               "function descartarEdiciones", "'data-tab':k", "op:'tabique'", "op:'fusionar'", "op:'dividir'", "dragTab={k:"):
+        assert s_ in js, s_
+    assert "ediciones" in js.split("function foto(){", 1)[1].split("\n", 1)[0]
+
+if __name__ == "__main__":
+    test_editar_viviendas(); print("OK31")
