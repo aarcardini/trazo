@@ -29,7 +29,7 @@ Tiene dos modos en el mismo repositorio: **Edificio** (`/`, planta tipo) y **Mas
 | `tests/test_rhino.py` | Pruebas del script de Rhino sin Rhino: lo carga con Rhino simulado (`unittest.mock`) y habla con `server.py` real. Mensajes, diagnóstico y menú; la geometría solo se prueba en Rhino. |
 | `tests/regresion.py`, `tests/golden/` | Pruebas de regresión: métricas de referencia de cada ejemplo de `samples/` (unidades, eficiencia, sin usar, núcleos, lotes…) con un margen por métrica. Corren dentro de `test_engine.py`. |
 
-API: `GET /api/version`, `GET|POST /api/mass` (Rhino→web y Masterplan→Edificio), `POST /api/generate` (web→motor), `GET /api/result` (→Rhino), `GET /api/dxf`, `GET /api/samples`.
+API: `GET /api/version`, `GET|POST /api/mass` (Rhino→web y Masterplan→Edificio), `POST /api/generate` (web→motor), `GET /api/result` (→Rhino), `GET /api/dxf`, `GET /api/samples`, `POST /api/reset` (botón «Nuevo»: el servidor olvida la masa y el resultado).
 Masterplan: `GET /masterplan`, `GET /api/mp_samples`, `POST /api/masterplan` (→ `masterplan.generate`), `POST /api/damero` ({predio, masterplan} → {streets}).
 
 ### Modelo del motor (layout.py)

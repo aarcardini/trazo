@@ -201,3 +201,38 @@ def test_puente_rhino():
 
 if __name__ == "__main__":
     test_puente_rhino(); print("OK10")
+
+
+def test_nuevo_en_blanco():
+    """«Nuevo» en la web: /api/reset olvida la masa y el resultado del servidor (Rhino ya no recibe uno viejo)."""
+    import threading, urllib.request, urllib.error
+    import server
+    srv = server.ThreadingHTTPServer(("127.0.0.1", 0), server.H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    url = "http://127.0.0.1:%d" % srv.server_address[1]
+
+    def api(path, body=None):
+        req = urllib.request.Request(url + path, data=None if body is None else json.dumps(body).encode(),
+                                     method="GET" if body is None else "POST", headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return json.loads(r.read().decode())
+    try:
+        api("/api/mass", {"name": "Masa vieja", "footprint": [[0, 0], [60, 0], [60, 16], [0, 16]], "height": 15})
+        api("/api/generate", {"footprint": [[0, 0], [60, 0], [60, 16], [0, 16]], "height": 15, "stage": "massing"})
+        antes = api("/api/mass")["version"]
+        assert api("/api/result")["result"]
+        assert api("/api/reset", {})["ok"]
+        m = api("/api/mass")
+        assert m["mass"] is None and m["version"] > antes, m       # la web no vuelve a cargar la masa vieja
+        assert api("/api/result")["result"] is None
+        try:
+            api("/api/dxf")
+            raise AssertionError("sin resultado, el DXF debía dar 404")
+        except urllib.error.HTTPError as e:
+            assert e.code == 404
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+if __name__ == "__main__":
+    test_nuevo_en_blanco(); print("OK11")

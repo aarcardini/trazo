@@ -137,6 +137,12 @@ class H(BaseHTTPRequestHandler):
             body = self._body()
         except Exception as e:
             return self._send(400, {"error": str(e)})
+        if p == "/api/reset":     # web «Nuevo»: olvida la masa y el resultado (al recargar no vuelven; Rhino no recibe uno viejo)
+            with LOCK:
+                STATE["mass"], STATE["result"] = None, None
+                STATE["mass_version"] += 1
+                STATE["result_version"] += 1
+            return self._send(200, {"ok": True})
         if p == "/api/mass":      # Rhino -> servidor
             with LOCK:
                 STATE["mass"] = body

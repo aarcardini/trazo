@@ -80,6 +80,8 @@ Desde entonces basta con escribir `trazo` en Rhino.
    - Para fijar los núcleos, coloca puntos en la capa `Trazo::Cores`; se usan en modo manual.
    - Para marcar medianeras, dibuja líneas en la capa `Trazo::Medianeras` (nombre `retiro=3` si el edificio se retira).
 3. En la web: Calcular masa → Generar pasillo y núcleos → Generar mix → Generar planos.
+   - Para empezar de cero: botón **Nuevo (en blanco)**, junto a «Ejemplo». Borra la masa, las polilíneas, los núcleos, las medianeras y el resultado, también los guardados en el servidor; conserva las medidas, el mix y los colores. Después envía una masa desde Rhino o elige un ejemplo.
+   - El selector «Ejemplo» muestra siempre qué está cargado: un ejemplo, «Masa de Rhino: …» o «— En blanco —». Si miras un ejemplo, puedes volver a tu masa de Rhino eligiéndola en el selector.
 4. En Rhino: ejecuta de nuevo el script y elige **Recibir** (capas `Trazo::L00::Units`, `Rooms`, etc.).
    Alternativa sin script: botón **DXF (Rhino)** y luego `Import`.
 
@@ -123,6 +125,10 @@ Si algo falla en Rhino, ejecuta el script y elige **Diagnostico**. Si no se resu
 - **Pasillo y núcleos**: eje (automático o dibujado), ancho de pasillo, núcleos (ancho, fondo incluyendo pasillo, cantidad), distancias de evacuación (salida única / múltiple) y núcleos extra automáticos.
 - **Mix**: tipos con m² objetivo y %, ancho mínimo, muro medianero; métricas Match Score, Fit y Unidades únicas.
 - **Planos**: distribución día/noche con pasillo interno, puertas y grafo de conexiones verificado.
+
+## Novedades v2.2
+- **Nuevo (en blanco):** botón en el modo Edificio para empezar un proyecto de cero. Deja la planta vacía con el aviso «Envía una masa desde Rhino o elige un ejemplo» y borra también la masa y el resultado guardados en el servidor: al recargar la página no vuelve la masa vieja y «Recibir» en Rhino no trae un resultado anterior.
+- El selector «Ejemplo» muestra qué está cargado: al llegar una masa de Rhino dice «Masa de Rhino: nombre» (antes seguía mostrando el ejemplo anterior) y se puede volver a ella después de mirar un ejemplo.
 
 ## Novedades v2.1
 - **Diagnóstico en Rhino:** el script tiene una tercera opción, **Diagnostico**, que muestra la versión de Rhino y de Python, las unidades del archivo, las capas de Trazo, si el servidor responde y qué masa y resultado tiene.

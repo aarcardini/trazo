@@ -33,6 +33,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:3px 4px;b
   <button class="s" onclick="resetStd()">Restaurar valores</button><div class="hint">Mínimos: ordenanzas de higiene de la vivienda (Uruguay), Bomberos IT 19, IM ductos de ascensor, Dec. 406/988. Detalle y fuentes en STANDARDS.md.</div></details>
  <h2>1 · Masa</h2>
  <label>Ejemplo <select id="sample"></select></label>
+ <button class="s" onclick="nuevo()" title="Borra la masa, las polilíneas, los núcleos, las medianeras y el resultado; conserva medidas, mix y colores">Nuevo (en blanco)</button>
  <label>Altura total (m) <input type="number" id="height" value="15" step="0.5"></label>
  <label>Altura de planta (m) <input type="number" id="floor_height" value="3" step="0.1"></label>
  <label>Muro exterior (m) <input type="number" id="outer_wall" value="0.35" step="0.05"></label>
@@ -120,7 +121,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:3px 4px;b
 <script>
 const $=id=>document.getElementById(id), NS='http://www.w3.org/2000/svg';
 let footprint=[[0,0],[60,0],[60,16],[0,16]], centerlines=[], curLine=[], tool=null, mouse=null;
-let result=null, samples={}, massVer=0, view=null, lastStage=null, drag=null, coresManual=[];
+let result=null, samples={}, massVer=0, view=null, lastStage=null, drag=null, coresManual=[], externa=null;
 let mix=[{name:'2 dorm',area:75,percent:50,dorms:2},{name:'3 dorm',area:95,percent:50,dorms:3}];
 let stories=null;
 /* Colores: cada programa tiene un color base; sus áreas internas son tonos de ese color. */
@@ -144,7 +145,7 @@ function renderStories(){ if(!stories){ $('storyTable').innerHTML='<div class="w
 let STD=null, STD_DEF=null, medianeras=[], medHover=null;
 function params(){ const g=id=>+$(id).value; const manual=$('cores_mode').value==='manual';
  return {core_auto:$('core_auto').checked,standards:STD,medianeras:medianeras.length?medianeras:null,floor_height:g('floor_height'),outer_wall:g('outer_wall'),loading:$('loading').value,corridor_width:g('corridor_width'),core_width:g('core_width'),core_depth:g('core_depth'),core_count:g('core_count'),auto_cores:$('auto_cores').checked,core_side:$('core_side').value,egress_single:g('egress_single'),egress_multi:g('egress_multi'),min_unit_width:g('min_unit_width'),party_wall:g('party_wall'),max_unit_depth:g('max_unit_depth'),unit_mix:mix,centerlines:centerlines.length?centerlines:null,cores_mode:manual?'manual':'auto',cores:manual?coresManual:null,stories:stories}; }
-async function run(stage,opt){ opt=opt||{}; lastStage=stage; $('tag').textContent='Calculando…';
+async function run(stage,opt){ opt=opt||{}; if(!footprint.length){ $('tag').textContent='Trazo está en blanco: envía una masa desde Rhino o elige un ejemplo'; return; } lastStage=stage; $('tag').textContent='Calculando…';
  const r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({footprint,height:+$('height').value,stage,params:params()})});
  const j=await r.json(); if(j.error){ $('tag').textContent='Error: '+j.error; return;} result=j;
  if(!stories||stories.length!==j.stories.length){stories=j.stories.map(s=>({program:s.program,height:s.height}));renderStories();}
@@ -168,7 +169,11 @@ function snap(p,prev){ let q=[Math.round(p[0]*10)/10,Math.round(p[1]*10)/10];
  return q; }
 
 /* ---------- dibujo ---------- */
-function draw(){ const gb=$('gb'); gb.innerHTML=''; fit(); const sw=1.2;
+function draw(){ const gb=$('gb'); gb.innerHTML='';
+ if(!footprint.length){ view=null; const W=$('svg').clientWidth||800, H=$('svg').clientHeight||600;
+  gb.appendChild(el('text',{x:W/2,y:H/2-10,'text-anchor':'middle','font-size':16,'font-weight':600,fill:'#667085'},'Trazo en blanco'));
+  gb.appendChild(el('text',{x:W/2,y:H/2+14,'text-anchor':'middle','font-size':13,fill:'#667085'},'Envía una masa desde Rhino (script → Enviar) o elige un ejemplo.')); drawOverlay(); return; }
+ fit(); const sw=1.2;
  gb.appendChild(el('polygon',{points:pts(footprint),fill:'none',stroke:'#667085','stroke-dasharray':'4 3'}));
  if(result&&result.footprint&&medianeras.some(m=>(+m.retiro||0)>0)) gb.appendChild(el('polygon',{points:pts(result.footprint),fill:'none',stroke:'#667085','stroke-width':1.2}));
  const stCur=result&&result.stories&&planStory!=null?result.stories[planStory]:null;
@@ -428,10 +433,19 @@ function panels(){ const m=result.metrics||{}, mx=m.mix; drawDonut(m.programs||{
  $('metrics').innerHTML=h; $('warns').innerHTML=(result.warnings||[]).slice(0,12).map(w=>`<div class="w">⚠ ${w}</div>`).join('')||'<div style="color:var(--mut)">Sin avisos</div>';
  $('units').innerHTML=(result.units?'<table><tr><th>ID</th><th>Tipo</th><th>m²</th><th>Dorm</th><th>Evac.</th><th>Plano</th></tr>'+result.units.map(u=>`<tr style="cursor:pointer" onclick="selUnit='${u.id}';if(viewMode!=='plan')setView('plan');else{draw();unitPanel();}"><td>${u.id}</td><td>${u.type}</td><td>${u.area}</td><td>${u.bedrooms??'-'}</td><td>${u.egress} m</td><td>${u.plan_score!=null?u.plan_score+'%':'-'}</td></tr>`).join('')+'</table>':''); }
 function panels2(){ $('donut').innerHTML='';$('progList').innerHTML=''; $('metrics').innerHTML='';$('warns').innerHTML='';$('units').innerHTML=''; }
-function setMass(m,fromRhino){ footprint=m.footprint; if(m.height) $('height').value=m.height; centerlines=(m.centerlines||(m.centerline?[m.centerline]:[])).map(pl=>pl.map(p=>[p[0],p[1]])); curLine=[]; lineInfo();
+function selLabel(v,txt,off){ const s=$('sample'); let o=s.querySelector('option[value="'+v+'"]'); if(!o){ o=document.createElement('option'); o.value=v; s.prepend(o); } o.textContent=txt; o.disabled=!!off; s.value=v; }
+function setMass(m,fromRhino){ const o=$('sample').querySelector('option[value="__nuevo"]'); if(o) o.remove();
+ if(fromRhino){ externa=m; selLabel(m.source==='masterplan'?'__mp':'__rhino',(m.source==='masterplan'?'Lote del Masterplan: ':'Masa de Rhino: ')+(m.name||'sin nombre')); }
+ footprint=m.footprint; if(m.height) $('height').value=m.height; centerlines=(m.centerlines||(m.centerline?[m.centerline]:[])).map(pl=>pl.map(p=>[p[0],p[1]])); curLine=[]; lineInfo();
  if(m.cores&&m.cores.length){ $('cores_mode').value='manual'; coresManual=m.cores.map(p=>[p[0],p[1]]); } else { $('cores_mode').value='auto'; coresManual=[]; } coreInfo();
  stories=m.stories?m.stories.map(x=>({program:x.program,height:x.height})):null; medianeras=(m.medianeras||[]).map(x=>({a:x.a,b:x.b,retiro:x.retiro||0})); renderMeds(); renderStories(); result=null; lastStage=null; sel.clear(); planStory=null; zoom=1; pan=[0,0]; draw(); panels2(); if(fromRhino) $('rhinoBadge').textContent=(m.source==='masterplan'?'Lote recibido del Masterplan: ':'Masa recibida de Rhino: ')+(m.name||'sin nombre'); run('massing'); }
+async function nuevo(){ if((footprint.length||result)&&!confirm('¿Empezar en blanco? Se borran la masa, las polilíneas, los núcleos, las medianeras y el resultado, también los guardados en el servidor. Las medidas, el mix y los colores se conservan.')) return;
+ try{ await fetch('/api/reset',{method:'POST'}); }catch(e){}
+ if(tool) setTool(tool); footprint=[]; centerlines=[]; curLine=[]; coresManual=[]; $('cores_mode').value='auto'; stories=null; medianeras=[]; result=null; lastStage=null; selUnit=null; sel.clear(); planStory=null; zoom=1; pan=[0,0];
+ externa=null; ['__rhino','__mp'].forEach(v=>{ const o=$('sample').querySelector('option[value="'+v+'"]'); if(o) o.remove(); }); selLabel('__nuevo','— En blanco —',true);
+ $('height').value=$('height').defaultValue; $('lvl').innerHTML=''; lineInfo(); coreInfo(); renderMeds(); renderStories(); panels2(); unitPanel();
+ $('rhinoBadge').textContent='Esperando masa de Rhino… (o usa un ejemplo)'; setView('plan'); $('tag').textContent='En blanco'; }
 async function dl(kind){ if(!result){alert('Genera primero un resultado');return;} let blob,name; if(kind=='json'){blob=new Blob([JSON.stringify(result,null,1)],{type:'application/json'});name='trazo.json';} else {const t=await (await fetch('/api/dxf')).text(); blob=new Blob([t],{type:'text/plain'});name='trazo.dxf';} const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); }
 async function poll(){ try{ const j=await (await fetch('/api/mass')).json(); if(j.version!==massVer&&j.mass){ massVer=j.version; setMass(j.mass,true); } }catch(e){} setTimeout(poll,1500); }
-(async()=>{ fetch('/api/version').then(r=>r.json()).then(j=>$('ver').textContent='v'+j.version); renderMix(); legend(); await loadStd(); renderStories(); samples=await (await fetch('/api/samples')).json(); const s=$('sample'); s.innerHTML=Object.entries(samples).map(([k,v])=>`<option value="${k}">${v.name}</option>`).join(''); s.onchange=()=>{ if(samples[s.value]) setMass(samples[s.value]); }; let fromMp=null; if(new URLSearchParams(location.search).has('desde')){ try{ const j=await (await fetch('/api/mass')).json(); if(j.mass){ massVer=j.version; fromMp=j.mass; } }catch(e){} } if(fromMp){ s.insertAdjacentHTML('afterbegin','<option value="__mp">Lote del Masterplan</option>'); s.value='__mp'; setMass(fromMp,true); } else setMass(samples[s.value]||{footprint}); window.addEventListener('resize',render); poll(); })();
+(async()=>{ fetch('/api/version').then(r=>r.json()).then(j=>$('ver').textContent='v'+j.version); renderMix(); legend(); await loadStd(); renderStories(); samples=await (await fetch('/api/samples')).json(); const s=$('sample'); s.innerHTML=Object.entries(samples).map(([k,v])=>`<option value="${k}">${v.name}</option>`).join(''); s.onchange=()=>{ if(samples[s.value]) setMass(samples[s.value]); else if(externa&&(s.value==='__rhino'||s.value==='__mp')) setMass(externa,true); }; let fromMp=null; if(new URLSearchParams(location.search).has('desde')){ try{ const j=await (await fetch('/api/mass')).json(); if(j.mass){ massVer=j.version; fromMp=j.mass; } }catch(e){} } if(fromMp){ s.insertAdjacentHTML('afterbegin','<option value="__mp">Lote del Masterplan</option>'); s.value='__mp'; setMass(fromMp,true); } else setMass(samples[s.value]||{footprint}); window.addEventListener('resize',render); poll(); })();
 </script></body></html>
