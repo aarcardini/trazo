@@ -716,13 +716,36 @@ def _punta(pc, e, x, side, params):
     return x
 
 
-def _add_core(pc, x, side, params):
+def nucleo_punto(spec):
+    """Posición de un núcleo manual: [x, y] o {"p": [x, y], "frente": .., "fondo": .., "giro": 0 | 90} (R3.5)."""
+    p = spec.get("p") if isinstance(spec, dict) else spec
+    return float(p[0]), float(p[1])
+
+
+def medidas_nucleo(spec, params):
+    """(giro, frente, fondo con el pasillo) de un núcleo manual: sus medidas propias o las de todos los núcleos
+    (con giro 90, las del núcleo con la escalera a lo largo del pasillo: params["_core_90"])."""
+    op = spec if isinstance(spec, dict) else {}
+    giro = 90 if str(op.get("giro", 0)) == "90" else 0
+    w, d = (params.get("_core_90") or (params["core_depth"] - params["corridor_width"],
+                                       params["core_width"] + params["corridor_width"])) if giro == 90 else \
+        (params["core_width"], params["core_depth"])
+    if op.get("frente"):
+        w = max(1.0, float(op["frente"]))
+    if op.get("fondo"):
+        d = max(1.0, float(op["fondo"])) + params["corridor_width"]
+    return giro, w, d
+
+
+def _add_core(pc, x, side, params, bolsillo=True):
+    """Núcleo en x, del lado side. Si detrás queda una franja más chica que BOLSILLO, el núcleo llega hasta la fachada
+    (salvo bolsillo=False: un fondo elegido para ese núcleo se respeta y la franja queda para la vivienda vecina)."""
     cw, w, d = params["corridor_width"], params["core_width"], params["core_depth"]
     if side > 0:
         box = (x - w / 2, -cw / 2, x + w / 2, -cw / 2 + d)
     else:
         box = (x - w / 2, cw / 2 - d, x + w / 2, cw / 2)
-    strip = G.clip_rect(pc["loc_plate"], box[0], box[2])
+    strip = G.clip_rect(pc["loc_plate"], box[0], box[2]) if bolsillo else None
     if strip:
         ys = [p[1] for p in strip]
         pocket = BOLSILLO
@@ -882,7 +905,9 @@ def _generate_circulation(plate, params):
     half = params["core_width"] / 2.0
     if params.get("cores_mode") == "manual":
         for idx, spec in enumerate(params.get("cores") or []):
-            wx, wy = float(spec[0]), float(spec[1])
+            wx, wy = nucleo_punto(spec)
+            giro, w, d = medidas_nucleo(spec, params)
+            half = w / 2.0
             best = None
             for i, pc in enumerate(pieces):
                 lx, ly = G.to_local([(wx, wy)], pc["origin"], pc["angle"])[0]
@@ -899,8 +924,8 @@ def _generate_circulation(plate, params):
             else:
                 lx = (pc["xa"] + pc["xb"]) / 2.0
             side = 1 if pc.get("single") else (1 if ly >= 0 else -1) if abs(ly) > 0.3 else next_side()
-            _add_core(pc, lx, side, params)
-            pc["cores"][-1]["spec"] = idx
+            _add_core(pc, lx, side, dict(params, core_width=w, core_depth=d), bolsillo=not (isinstance(spec, dict) and spec.get("fondo")))
+            pc["cores"][-1].update({"spec": idx, "giro": giro})
         return pieces
     ring = bool(params.get("_huecos"))
     for pc in pieces:               # un núcleo en cada extremo libre

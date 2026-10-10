@@ -125,12 +125,18 @@ def elevators_needed(S, n_levels, top_access_h, units_served):
     return n
 
 
-def core_size(S, floor_h, n_elev, corridor_w):
-    """Frente y fondo del núcleo (fondo incluye el pasillo) a partir de escalera y ascensores."""
+def core_size(S, floor_h, n_elev, corridor_w, giro=0):
+    """Frente y fondo del núcleo (fondo incluye el pasillo) a partir de escalera y ascensores.
+    giro 0: la escalera sube perpendicular al pasillo; giro 90: a lo largo del pasillo (núcleo más ancho y menos
+    profundo, para alas de poco fondo)."""
     sw, sl, _ = stair_box(S, floor_h)
     ew, ed = S["ascensor_ducto"]
-    width = sw + n_elev * (ew + S["muro"]) + (S["ducto_instalaciones"] + S["muro"] if n_elev else 0)
-    depth = max(sl, (S["palier"] + ed + S["muro"]) if n_elev else 0)
+    asc = n_elev * (ew + S["muro"]) + (S["ducto_instalaciones"] + S["muro"] if n_elev else 0)
+    fondo_asc = (S["palier"] + ed + S["muro"]) if n_elev else 0
+    if giro == 90:
+        width, depth = sl + asc, max(sw, fondo_asc)
+    else:
+        width, depth = sw + asc, max(sl, fondo_asc)
     return round(width, 2), round(depth + corridor_w, 2)
 
 

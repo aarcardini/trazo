@@ -622,3 +622,39 @@ def test_no_ortogonales():
 
 if __name__ == "__main__":
     test_no_ortogonales(); print("OK22")
+
+
+def test_nucleos_editables():
+    """R3.5: un núcleo manual puede tener medidas propias y girar 90° (la escalera sube a lo largo del pasillo: núcleo
+    más ancho y menos profundo). Los núcleos dados como punto siguen igual. La web los edita con un clic."""
+    from engine import geometry as G, standards as ST, layout as LY
+    S = ST.merged(None)["nucleo"]
+    sw, sl, _ = ST.stair_box(S, 3.0)
+    w90, d90 = ST.core_size(S, 3.0, 1, 2.0, giro=90)
+    w0, d0 = ST.core_size(S, 3.0, 1, 2.0)
+    assert w90 > w0 and d90 < d0 and abs(w90 - (sl + S["ascensor_ducto"][0] + S["muro"] + S["ducto_instalaciones"] + S["muro"])) < 0.01
+    barra = [[0, 0], [60, 0], [60, 16], [0, 16]]
+    puntos = run(barra, cores_mode="manual", cores=[[10, 8], [50, 8]])
+    mixtos = run(barra, cores_mode="manual", cores=[[10, 8], {"p": [50, 8]}])
+    assert [c["poly"] for c in puntos["cores"]] == [c["poly"] for c in mixtos["cores"]]      # {"p": ...} = punto
+    r = run(barra, cores_mode="manual", cores=[{"p": [10, 9], "frente": 4, "fondo": 6}, {"p": [50, 7], "giro": 90}])
+    c0, c1 = sorted(r["cores"], key=lambda c: c["spec"])
+    assert (c0["giro"], c0["frente"], c0["fondo"]) == (0, 4.0, 6.0), c0           # el fondo elegido se respeta
+    assert c1["giro"] == 90 and abs(c1["frente"] - w90) < 0.01, c1
+    st = next(p for p in c1["parts"] if p["kind"] == "stair")
+    x0, y0, x1, y1 = G.bbox([tuple(p) for p in st["poly"]])
+    assert x1 - x0 > y1 - y0 and abs((x1 - x0) - sl) < 0.05, (x1 - x0, y1 - y0)   # la escalera, a lo largo del pasillo
+    assert not [u for u in r["units"] for c in r["cores"]
+                if sum(abs(G.area(o)) for o in G.subtract(u["poly"], [c["poly"]])[1][0]) > 0.05]
+    # en un edificio con dos bloques (patio), cada núcleo con medidas propias va a su bloque
+    r = run([[0, 0], [70, 0], [70, 16], [0, 16]], patios_mode="manual", patios=[[[30, 0], [40, 0], [40, 16], [30, 16]]],
+            cores_mode="manual", cores=[{"p": [10, 8], "giro": 90}, [60, 8]])
+    assert len(r["cores"]) == 2 and sorted(c["giro"] for c in r["cores"]) == [0, 90], r["cores"]
+    # web: clic en un núcleo abre su ficha; la masa recibida conserva los núcleos con medidas propias
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    for s in ("'data-core'", "function corePanel", "function aplicarNucleo", 'id="nGiro"', "closest('[data-core]')",
+              "coresManual=m.cores.map(p=>Array.isArray(p)?[p[0],p[1]]:"):
+        assert s in html, s
+
+if __name__ == "__main__":
+    test_nucleos_editables(); print("OK23")

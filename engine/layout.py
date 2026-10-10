@@ -13,12 +13,12 @@ from .circulation import (pick_frame, core_positions, side_for, _frame_for_poly,
                           _choose_single, _ring_single, _single_frame, _bridge_axis, build_pieces, _link, _connect,
                           _franjas_sin_luz, _clip_sr, build_user_pieces, _stem_vs_trunk, _split_parallel, egress_at,
                           _add_core, _propagate_core_blocks, generate_circulation, is_between, _between_depth,
-                          _generate_circulation)  # noqa: F401
+                          _generate_circulation, nucleo_punto, medidas_nucleo)  # noqa: F401
 from .units import (_bisect_x, _chain_union, _is_rect, _segments, generate_unit_mix, metrics_mix, bedrooms_for,
                     unit_rooms, sin_solapes)  # noqa: F401
 from .patios import (auto_patios, _anillo, split_blocks, make_patio_dark, _block_of, _block_of_line)  # noqa: F401
 
-VERSION = "2.12"
+VERSION = "2.13"
 
 DEFAULT_PARAMS = {
     # Masa
@@ -29,7 +29,7 @@ DEFAULT_PARAMS = {
     "centerline": None,         # (compatibilidad) [[x,y],[x,y]]
     "centerlines": None,        # lista de polilíneas [[[x,y],...],...] en coordenadas de mundo; None = automático
     "cores_mode": "auto",       # auto | manual
-    "cores": None,              # núcleos manuales: [[x,y],...] (posición en mundo, el motor los ajusta al pasillo)
+    "cores": None,              # núcleos manuales: [x, y] o {"p": [x, y], "frente", "fondo", "giro": 0|90} (mundo; se ajustan al pasillo)
     "corridor_width": 2.0,
     "core_width": 5.0,
     "core_depth": 7.0,          # incluye el pasillo (como en Finch)
@@ -92,6 +92,7 @@ def generate(data):
     n_elev = ST.elevators_needed(S["nucleo"], len(stories), top_h, units_est)
     if params.get("core_auto", True):
         params["core_width"], params["core_depth"] = ST.core_size(S["nucleo"], floor_h, n_elev, cw)
+    params["_core_90"] = ST.core_size(S["nucleo"], floor_h, n_elev, cw, giro=90)   # núcleo girado (R3.5)
     sw_, sl_, risers_ = ST.stair_box(S["nucleo"], floor_h)
     stype = ("común" if top_h <= 12 else "protegida (EP)" if top_h <= 30 else "presurizada (PFP)")
     core_m = {"elevators": n_elev, "width": params["core_width"],
@@ -148,7 +149,7 @@ def generate(data):
         if len(plantas) > 1:
             pb["core_count"] = 1                             # cada bloque, al menos un núcleo propio
             if manual:
-                mapa = [k for k, c in enumerate(params.get("cores") or []) if _block_of(c, huellas) == bi]
+                mapa = [k for k, c in enumerate(params.get("cores") or []) if _block_of(nucleo_punto(c), huellas) == bi]
                 pb["cores"] = [params["cores"][k] for k in mapa]
             if params.get("centerlines"):
                 pb["centerlines"] = [l for l in params["centerlines"] if _block_of_line(l, huellas) == bi] or None
@@ -180,12 +181,15 @@ def generate(data):
                     if c.get("between"):
                         parts = PR.core_parts(c["box"], 1, -(c["box"][3] - c["box"][1]), S["nucleo"], floor_h, n_elev)
                     else:
-                        parts = PR.core_parts(c["box"], c["side"], cw_b, S["nucleo"], floor_h, n_elev)
+                        parts = PR.core_parts(c["box"], c["side"], cw_b, S["nucleo"], floor_h, n_elev, c.get("giro", 0))
                     spec = c.get("spec")
                     if mapa is not None and spec is not None:
                         spec = mapa[spec]
+                    b_ = c["box"]
                     res["cores"].append({"poly": W(pc, G.largest_part(c["poly_local"])), "x": round(c["x"], 3), "side": c["side"],
                                          "center": [round(cen[0], 3), round(cen[1], 3)], "spec": spec,
+                                         "giro": c.get("giro", 0), "frente": round(b_[2] - b_[0], 2),
+                                         "fondo": round(b_[3] - b_[1] - cw_b, 2),
                                          "parts": [{"kind": p_["kind"], "name": p_["name"], "poly": W(pc, p_["poly"]),
                                                     "lines": [W(pc, ln) for ln in p_["lines"]]} for p_ in parts]})
                     cpolys.append(res["cores"][-1]["poly"])

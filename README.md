@@ -133,6 +133,15 @@ Si algo falla en Rhino, ejecuta el script y elige **Diagnostico**. Si no se resu
 - **Mix**: tipos con m² objetivo y %, ancho mínimo, muro medianero; métricas Match Score, Fit y Unidades únicas.
 - **Planos**: distribución día/noche con pasillo interno, puertas y grafo de conexiones verificado.
 
+## Novedades v2.13
+- **Núcleos con medidas propias y giro (R3.5):** un clic sobre un núcleo en la planta abre su ficha. Ahí cambias su **frente** (a lo largo del pasillo), su **fondo** (desde el pasillo) y su **giro**:
+  - **0°:** como siempre, la escalera sube perpendicular al pasillo.
+  - **90°:** la escalera sube a lo largo del pasillo. El núcleo queda más ancho y menos profundo (por ejemplo 7,7 × 3,6 m en lugar de 5,5 × 5,0 m), útil en alas de poco fondo.
+  - **Medidas por defecto** vuelve a las de la normativa para ese giro; **Quitar** saca el núcleo.
+  - Si eliges un fondo propio, el núcleo no se estira hasta la fachada: lo que queda detrás se suma a la vivienda vecina.
+  - Al editar un núcleo automático, los núcleos pasan a modo manual, como al añadir o quitar uno.
+- Rhino sigue mandando los núcleos como puntos (con las medidas por defecto) y dibuja al recibir los núcleos con su forma y su giro.
+
 ## Novedades v2.12
 - **Plantas no ortogonales (R3.4):** una masa que no es ortogonal (una barra con un quiebre, un ala girada, el tallo oblicuo de una T, o una L, T o U con ochavas) ya no recibe un solo pasillo recto para toda la planta. Se divide en alas y cada ala tiene su propio pasillo a lo largo, que se encuentra con el de la otra en el quiebre (a inglete) o llega a él como una T. Las ochavas y los lados inclinados cortos solo recortan el ala.
   - En «Barra con quiebre a 45°»: antes 4 viviendas, todas a oscuras, con 18 % de eficiencia («Solo el 18 % de la planta está servido»); ahora 10 viviendas con plano completo y 74,6 %.

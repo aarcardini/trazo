@@ -141,7 +141,7 @@ const UNIT_L=[0.58,0.72,0.46,0.82,0.38,0.88];
 const roomColor=(kind,prog)=>tone(progColor(prog||'Residential'),ROOM_L[kind]??0.7);
 const COL=new Proxy({},{get:(t,k)=>roomColor(k)});
 const KLABEL={bedroom:'Dormitorio',living:'Estar',dining:'Comedor',kitchen:'Cocina',bath:'Baño',hall:'Hall',hallway:'Pasillo',laundry:'Lavadero',storage:'Depósito',study:'Estudio'};
-let selUnit=null, showGraph=true, showDims=true;
+let selUnit=null, selCore=null, selSpec=null, showGraph=true, showDims=true;
 
 /* ---------- paneles de entrada ---------- */
 function renderMix(){ $('mix').innerHTML='<div class="mixrow" style="grid-template-columns:1fr 46px 46px 40px 20px;color:var(--mut);font-size:11px"><span>Tipo</span><span>m²</span><span>%</span><span>Dorm.</span><span></span></div>'+mix.map((m,i)=>`<div class="mixrow" style="grid-template-columns:1fr 46px 46px 40px 20px"><input value="${m.name}" onchange="mix[${i}].name=this.value"><input type="number" value="${m.area}" title="m²" onchange="mix[${i}].area=+this.value"><input type="number" value="${m.percent}" title="%" onchange="mix[${i}].percent=+this.value"><input type="number" min="0" max="5" value="${m.dorms??''}" placeholder="auto" title="Dormitorios (vacío = según m²)" onchange="mix[${i}].dorms=this.value===''?null:+this.value"><button class="s" style="padding:0" onclick="mix.splice(${i},1);renderMix()">×</button></div>`).join(''); }
@@ -155,6 +155,7 @@ async function run(stage,opt){ opt=opt||{}; if(!footprint.length){ $('tag').text
  let j; try{ const r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({footprint,height:+$('height').value,stage,params:params()})}); j=await r.json(); }
  catch(e){ j={error:'no hay conexión con el servidor de Trazo: arráncalo (py server.py en Windows, python3 server.py en Mac) y recarga la página'}; }
  if(j.error){ $('tag').textContent='Error: '+j.error; $('warns').innerHTML='<div class="w">⚠ Error: '+j.error+'. Si se repite, copia este mensaje y pégalo en la sesión de Claude Code.</div>'; return;} result=j;
+ if(selSpec!=null){ const k=(j.cores||[]).findIndex(c=>c.spec===selSpec); selCore=k>=0?k:null; selSpec=null; } else if(selCore!=null&&!(j.cores||[])[selCore]) selCore=null;
  if(!stories||stories.length!==j.stories.length){stories=j.stories.map(s=>({program:s.program,height:s.height}));renderStories();}
  $('tag').textContent='Etapa: '+stage;
  if(!opt.keepView){ if(stage==='massing'&&viewMode!=='axo') setView('axo',true); else if(stage!=='massing'&&viewMode==='axo'&&!opt.stayAxo) setView('plan',true);
@@ -210,6 +211,8 @@ function draw(){ const gb=$('gb'); gb.innerHTML='';
    gb.appendChild(el('text',{x:X([cx,cy]),y:Y([cx,cy]),'text-anchor':'middle','font-size':11,fill:'#1b2430','pointer-events':'none'},u.id+' · '+u.area+' m²'));
    gb.appendChild(el('circle',{cx:X(u.door),cy:Y(u.door),r:4,fill:u.egress_status=='ok'?'#1a9d5b':u.egress_status=='multi'?'#9aa3b2':'#d63b3b'})); });
   drawShapes2D(gb,coreShapes());
+  (result.cores||[]).forEach((c,i)=>{ if(i===selCore) gb.appendChild(el('polygon',{points:pts(c.poly),fill:'none',stroke:'#2f6fed','stroke-width':3,'pointer-events':'none'}));
+   const t=el('polygon',{points:pts(c.poly),fill:'transparent','data-core':i,style:'cursor:pointer'}); t.appendChild(el('title',{},'Núcleo '+(i+1)+': clic para cambiar sus medidas o girarlo')); gb.appendChild(t); });
  }
  drawDims(gb); drawOverlay(); }
 /* ---------- cotas y escala gráfica ---------- */
@@ -304,7 +307,8 @@ function drawGraph(g,u){ if(!u.graph) return; const pos={}; u.graph.nodes.forEac
  u.graph.edges.forEach(e=>{ const a=pos[e.a], b=pos[e.b]; if(!a||!b) return;
   g.appendChild(el('line',{x1:X(a),y1:Y(a),x2:X(b),y2:Y(b),stroke:!e.ok?'#d63b3b':e.type==='abierto'?'#1a9d5b':'#2f6fed','stroke-width':1.6,'stroke-dasharray':e.type==='puerta'?'4 3':'',opacity:.9,'pointer-events':'none'})); });
  u.graph.nodes.forEach(n=>{ g.appendChild(el('circle',{cx:X(n.pos),cy:Y(n.pos),r:3.5,fill:'#fff',stroke:'#1b2430','stroke-width':1,'pointer-events':'none'})); }); }
-function unitPanel(){ const c=$('ctx'); const u=result&&result.units?result.units.find(x=>x.id===selUnit):null; if(!u){ c.style.display='none'; return; }
+function unitPanel(){ const c=$('ctx'); if(selCore!=null&&result&&result.cores&&result.cores[selCore]){ corePanel(); return; }
+ const u=result&&result.units?result.units.find(x=>x.id===selUnit):null; if(!u){ c.style.display='none'; return; }
  const real=(u.checks||[]).filter(x=>!x.info), ok=real.filter(x=>x.ok).length, n=real.length;
  c.innerHTML=`<b>${u.id} · ${u.type} · ${u.area} m²</b><div class="hint">Frente ${u.facade??'-'} m (mín. ${u.facade_min??'-'} m) · fondo ${u.depth} m · ${u.bedrooms??'-'} dorm.</div>
   <table>${(u.rooms||[]).map(r=>`<tr><td><span class="sw" style="background:${roomColor(r.kind)}"></span> ${r.name}</td><td style="text-align:right">${r.area} m²</td></tr>`).join('')}</table>
@@ -314,6 +318,27 @@ function unitPanel(){ const c=$('ctx'); const u=result&&result.units?result.unit
   ${(u.checks||[]).map(x=>`<div class="${x.ok?'hint':'w'}">${x.info?'ℹ':x.ok?'✓':'⚠'} ${x.msg}</div>`).join('')}
   <button class="s" onclick="selUnit=null;draw();unitPanel()">Cerrar</button>`;
  c.style.display='block'; }
+
+/* ---------- núcleo elegido: medidas propias y giro (R3.5) ---------- */
+function corePanel(){ const c=$('ctx'), k=result.cores[selCore];
+ c.innerHTML=`<b>Núcleo ${selCore+1}</b>${k.spec==null?' <span class="hint">(automático: al cambiarlo, los núcleos pasan a modo manual)</span>':''}
+  <label>Frente (a lo largo del pasillo) <input type="number" id="nFrente" step="0.05" min="1" value="${k.frente}"></label>
+  <label>Fondo (desde el pasillo) <input type="number" id="nFondo" step="0.05" min="1" value="${k.fondo}"></label>
+  <label>Giro <select id="nGiro"><option value="0"${k.giro==90?'':' selected'}>0°</option><option value="90"${k.giro==90?' selected':''}>90°</option></select></label>
+  <div class="hint">0°: la escalera sube perpendicular al pasillo. 90°: a lo largo del pasillo; el núcleo es más ancho y menos profundo y sirve en alas de poco fondo. Si dejas frente y fondo como están, se usan las medidas de la normativa para ese giro (y el núcleo llega a la fachada si detrás no entra una vivienda).</div>
+  <button class="s" onclick="aplicarNucleo()">Aplicar</button> <button class="s" onclick="aplicarNucleo(true)">Medidas por defecto</button>
+  <button class="s" onclick="quitarNucleo()">Quitar</button> <button class="s" onclick="selCore=null;draw();unitPanel()">Cerrar</button>`;
+ c.style.display='block'; }
+function specNucleo(){ const k=result.cores[selCore]; ensureManual(); return k.spec!=null?k.spec:selCore; }   // número del núcleo en coresManual
+function aplicarNucleo(defecto){ const k=result.cores[selCore], i=specNucleo(), o=coresManual[i]; if(o==null) return;
+ const p=Array.isArray(o)?[o[0],o[1]]:[o.p[0],o.p[1]], giro=+$('nGiro').value, f=+$('nFrente').value, d=+$('nFondo').value, nuevo={p};
+ if(giro===90) nuevo.giro=90;
+ if(!defecto&&!Array.isArray(o)&&o.frente&&Math.abs(f-k.frente)<0.01) nuevo.frente=o.frente;     // lo que ya tenía propio se conserva
+ if(!defecto&&!Array.isArray(o)&&o.fondo&&Math.abs(d-k.fondo)<0.01) nuevo.fondo=o.fondo;
+ if(!defecto&&f>0&&Math.abs(f-k.frente)>=0.01) nuevo.frente=Math.round(f*100)/100;
+ if(!defecto&&d>0&&Math.abs(d-k.fondo)>=0.01) nuevo.fondo=Math.round(d*100)/100;
+ coresManual[i]=(nuevo.giro||nuevo.frente||nuevo.fondo)?nuevo:p; selSpec=i; coreInfo(); runCirc(); }
+function quitarNucleo(){ const i=specNucleo(); coresManual.splice(i,1); selCore=null; coreInfo(); runCirc(); }
 
 /* ---------- patios ---------- */
 function rectAlign(p0,p1){ const th=domAngle(footprint.length?footprint:[p0,p1]), c=Math.cos(th), s=Math.sin(th), L=q=>[q[0]*c+q[1]*s,-q[0]*s+q[1]*c], W=q=>[q[0]*c-q[1]*s,q[0]*s+q[1]*c], a=L(p0), b=L(p1);
@@ -362,7 +387,8 @@ function ensureManual(){ if($('cores_mode').value!=='manual'){ $('cores_mode').v
 
 const svg=$('svg');
 svg.addEventListener('click',e=>{ if(!view||svg._skipClick) return;
- if(!tool){ const t=e.target.closest&&e.target.closest('[data-unit]'); selUnit=t?t.getAttribute('data-unit'):null; draw(); unitPanel(); return; }
+ if(!tool){ const tc=e.target.closest&&e.target.closest('[data-core]'); if(tc){ selCore=+tc.getAttribute('data-core'); selUnit=null; draw(); unitPanel(); return; }
+  const t=e.target.closest&&e.target.closest('[data-unit]'); selUnit=t?t.getAttribute('data-unit'):null; selCore=null; draw(); unitPanel(); return; }
  const w=toWorld(e);
  if(tool==='line'){ if(e.detail>1) return; curLine.push(snap(w,curLine[curLine.length-1])); drawOverlay(); }
  else if(tool==='patio'){ curPatio.push(snap(w,null)); if(curPatio.length===2) finishPatio(); else drawOverlay(); }
@@ -372,7 +398,7 @@ svg.addEventListener('click',e=>{ if(!view||svg._skipClick) return;
    renderMeds(); draw(); if(lastStage) run(lastStage,{keepView:true}); }
  else if(tool==='delcore'){ if(!result||!result.cores) return; ensureManual();
    let best=null; result.cores.forEach(c=>{ const d=Math.hypot(c.center[0]-w[0],c.center[1]-w[1]); if(d<8&&(!best||d<best[0])) best=[d,c]; });
-   if(best&&best[1].spec!=null){ coresManual.splice(best[1].spec,1); coreInfo(); runCirc(); } } });
+   if(best&&best[1].spec!=null){ coresManual.splice(best[1].spec,1); selCore=null; coreInfo(); runCirc(); } } });
 svg.addEventListener('dblclick',e=>{ if(tool==='line'){ finishLine(); } });
 svg.addEventListener('wheel',e=>{ e.preventDefault(); const r=svg.getBoundingClientRect(); const mx=e.clientX-r.left, my=e.clientY-r.top;
  const f=e.deltaY<0?1.15:1/1.15; const nz=Math.max(0.5,Math.min(12,zoom*f)); const k=nz/zoom; const W=svg.clientWidth,H=svg.clientHeight;
@@ -504,13 +530,13 @@ function panels2(){ $('donut').innerHTML='';$('progList').innerHTML=''; $('metri
 function selLabel(v,txt,off){ const s=$('sample'); let o=s.querySelector('option[value="'+v+'"]'); if(!o){ o=document.createElement('option'); o.value=v; s.prepend(o); } o.textContent=txt; o.disabled=!!off; s.value=v; }
 function setMass(m,fromRhino){ const o=$('sample').querySelector('option[value="__nuevo"]'); if(o) o.remove();
  if(fromRhino){ externa=m; selLabel(m.source==='masterplan'?'__mp':'__rhino',(m.source==='masterplan'?'Lote del Masterplan: ':'Masa de Rhino: ')+(m.name||'sin nombre')); }
- footprint=m.footprint; if(m.height) $('height').value=m.height; centerlines=(m.centerlines||(m.centerline?[m.centerline]:[])).map(pl=>pl.map(p=>[p[0],p[1]])); curLine=[]; lineInfo();
- if(m.cores&&m.cores.length){ $('cores_mode').value='manual'; coresManual=m.cores.map(p=>[p[0],p[1]]); } else { $('cores_mode').value='auto'; coresManual=[]; } coreInfo();
+ footprint=m.footprint; selCore=null; if(m.height) $('height').value=m.height; centerlines=(m.centerlines||(m.centerline?[m.centerline]:[])).map(pl=>pl.map(p=>[p[0],p[1]])); curLine=[]; lineInfo();
+ if(m.cores&&m.cores.length){ $('cores_mode').value='manual'; coresManual=m.cores.map(p=>Array.isArray(p)?[p[0],p[1]]:Object.assign({},p,{p:[p.p[0],p.p[1]]})); } else { $('cores_mode').value='auto'; coresManual=[]; } coreInfo();
  stories=m.stories?m.stories.map(x=>({program:x.program,height:x.height})):null; medianeras=(m.medianeras||[]).map(x=>({a:x.a,b:x.b,retiro:x.retiro||0})); renderMeds();
  patios=(m.patios||[]).map(p=>p.map(q=>[q[0],q[1]])); curPatio=[]; $('patios_mode').value=patios.length?'manual':'auto'; renderStories(); result=null; lastStage=null; sel.clear(); planStory=null; zoom=1; pan=[0,0]; draw(); panels2(); if(fromRhino) $('rhinoBadge').textContent=(m.source==='masterplan'?'Lote recibido del Masterplan: ':'Masa recibida de Rhino: ')+(m.name||'sin nombre'); run('massing'); }
 async function nuevo(){ if((footprint.length||result)&&!confirm('¿Empezar en blanco? Se borran la masa, las polilíneas, los núcleos, las medianeras y el resultado, también los guardados en el servidor. Las medidas, el mix y los colores se conservan.')) return;
  try{ await fetch('/api/reset',{method:'POST'}); }catch(e){}
- if(tool) setTool(tool); footprint=[]; centerlines=[]; curLine=[]; coresManual=[]; $('cores_mode').value='auto'; stories=null; medianeras=[]; result=null; lastStage=null; selUnit=null; sel.clear(); planStory=null; zoom=1; pan=[0,0];
+ if(tool) setTool(tool); footprint=[]; centerlines=[]; curLine=[]; coresManual=[]; $('cores_mode').value='auto'; stories=null; medianeras=[]; result=null; lastStage=null; selUnit=null; selCore=null; sel.clear(); planStory=null; zoom=1; pan=[0,0];
  externa=null; ['__rhino','__mp'].forEach(v=>{ const o=$('sample').querySelector('option[value="'+v+'"]'); if(o) o.remove(); }); selLabel('__nuevo','— En blanco —',true);
  patios=[]; curPatio=[]; $('patios_mode').value='auto'; $('height').value=$('height').defaultValue; $('lvl').innerHTML=''; lineInfo(); coreInfo(); renderMeds(); renderStories(); panels2(); unitPanel();
  $('rhinoBadge').textContent='Esperando masa de Rhino… (o usa un ejemplo)'; setView('plan'); $('tag').textContent='En blanco'; }

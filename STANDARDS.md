@@ -41,7 +41,7 @@ Reglas de distribución que aplica el motor: dormitorios y estar con fachada; do
 | Palier frente a ascensores | 1,50 m (círculo de giro); palier común 1,20 (≤ 4 aptos) / 1,40 (> 4) | Accesibilidad / Ordenanza art. 41 |
 
 Cantidad de ascensores (criterio de proyecto, editable): 1 cada 60 unidades servidas; mínimo 2 desde 10 niveles.
-El núcleo se dimensiona sumando caja de escalera de ida y vuelta + ascensores + ducto de instalaciones; el fondo es el mayor entre la escalera y palier + ducto de ascensor.
+El núcleo se dimensiona sumando caja de escalera de ida y vuelta + ascensores + ducto de instalaciones; el fondo es el mayor entre la escalera y palier + ducto de ascensor. Con giro 90° (la escalera sube a lo largo del pasillo) el frente es el largo de la escalera + ascensores + ducto y el fondo, el mayor entre el ancho de la escalera y palier + ducto de ascensor: un núcleo más ancho y menos profundo. Cada núcleo manual puede tener frente y fondo propios.
 
 ## Oficinas y comercio
 
