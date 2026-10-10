@@ -88,6 +88,118 @@ def _shared(r1, r2, tol=0.05):
     return None
 
 
+def paredes(R):
+    """Tabiques interiores: donde se tocan dos estancias, por línea, unidos si se tocan. [(eje, c, lo, hi)]: eje 0 = pared
+    vertical (x = c, de v = lo a hi), que se mueve en x; eje 1 = horizontal (v = c, de x = lo a hi), que se mueve en v."""
+    tramos, ids = {}, list(R)
+    for i in range(len(ids)):
+        for j in range(i + 1, len(ids)):
+            seg = _shared(R[ids[i]][1], R[ids[j]][1])
+            if not seg:
+                continue
+            vert = abs(seg[0][0] - seg[1][0]) < 1e-6
+            eje, c = (0, seg[0][0]) if vert else (1, seg[0][1])
+            lo, hi = sorted((seg[0][1], seg[1][1]) if vert else (seg[0][0], seg[1][0]))
+            tramos.setdefault((eje, round(c, 3)), []).append((lo, hi, c))
+    out = []
+    for (eje, _), ts in sorted(tramos.items()):
+        ts.sort()
+        a, b, c = ts[0]
+        for lo, hi, _c in ts[1:]:
+            if lo <= b + 0.05:
+                b = max(b, hi)
+            else:
+                out.append((eje, c, a, b))
+                a, b = lo, hi
+        out.append((eje, c, a, b))
+    return out
+
+
+def _mover_pared(R, e, minimo=0.6):
+    """R5.7: mueve el tabique que pasa por e["p"] hasta e["a"] (marco de la vivienda): corre el lado de todas las
+    estancias que se apoyan en él; cada una conserva al menos `minimo`. Devuelve si se aplicó."""
+    p, a = e["p"], e["a"]
+    cerca = []
+    for eje, c, lo, hi in paredes(R):
+        u, w = (p[0], p[1]) if eje == 0 else (p[1], p[0])
+        dd = ((u - c) ** 2 + max(lo - w, 0.0, w - hi) ** 2) ** 0.5
+        if dd < 0.3:
+            cerca.append((dd, eje, c, lo, hi))
+    if not cerca:
+        return False
+    _, eje, c, lo, hi = min(cerca)
+    k0, k1, o0, o1 = (0, 2, 1, 3) if eje == 0 else (1, 3, 0, 2)
+    while True:                                        # el tabique sigue por las estancias que se apoyan en él
+        mueven = [(i, k) for i, (_, r, _) in R.items() for k in (k0, k1)
+                  if abs(r[k] - c) < 1e-3 and min(r[o1], hi) - max(r[o0], lo) > -0.05]
+        lo2 = min([lo] + [R[i][1][o0] for i, _ in mueven])
+        hi2 = max([hi] + [R[i][1][o1] for i, _ in mueven])
+        if lo2 >= lo - 1e-9 and hi2 <= hi + 1e-9:
+            break
+        lo, hi = lo2, hi2
+    d = a[eje] - p[eje]
+    for i, k in mueven:                                # cada estancia conserva al menos el mínimo
+        r = R[i][1]
+        if k == k1:
+            d = max(d, r[k0] + minimo - c)
+        else:
+            d = min(d, r[k1] - minimo - c)
+    if abs(d) < 0.01 or not mueven:
+        return False
+    for i, k in mueven:
+        kind, r, name = R[i]
+        r = list(r)
+        r[k] += d
+        R[i] = (kind, tuple(r), name)
+    return True
+
+
+def _editar_puerta(doors, rect, e, v0):
+    """R5.7: la puerta entre las estancias e["entre"] (o, sin él, la más cercana a e["p"]) se corre a lo largo de su borde
+    hasta e["a"], toma el ancho e["ancho"] o abre hacia el otro lado (e["abre"]). rect(id): rectángulo de una estancia.
+    Devuelve si se aplicó."""
+    if e.get("entre"):                                 # por sus estancias: sigue valiendo si después se movió un tabique
+        par = set(e["entre"])
+        d = next((d for d in doors if {d["a"], d["b"]} == par), None)
+        if d is None:
+            return False
+    else:
+        dist = lambda d: _dist_seg(e["p"], d["p"], d["q"])
+        d = min(doors, key=dist, default=None)
+        if d is None or dist(d) > 0.4:
+            return False
+    if d.get("entry"):                                 # la de entrada, en el borde del hall sobre el pasillo común
+        r = rect(d["b"])
+        seg = ((r[0], v0), (r[2], v0))
+    else:
+        seg = _shared(rect(d["a"]), rect(d["b"]))
+    if not seg:
+        return False
+    k = 1 if d["vertical"] else 0
+    lo, hi = sorted((seg[0][k], seg[1][k]))
+    w = ((d["q"][0] - d["p"][0]) ** 2 + (d["q"][1] - d["p"][1]) ** 2) ** 0.5
+    if e.get("ancho"):
+        w = max(0.5, min(float(e["ancho"]), hi - lo - 0.1))
+    m = ((d["p"][0] + d["q"][0]) / 2, (d["p"][1] + d["q"][1]) / 2)
+    c = e["a"][k] if e.get("a") else m[k]
+    c = (lo + hi) / 2 if hi - lo < w + 0.1 else max(lo + w / 2 + 0.05, min(hi - w / 2 - 0.05, c))
+    if d["vertical"]:
+        d["p"], d["q"] = (m[0], c - w / 2), (m[0], c + w / 2)
+    else:
+        d["p"], d["q"] = (c - w / 2, m[1]), (c + w / 2, m[1])
+    d["ancho"] = w
+    if e.get("abre") and not d.get("entry"):           # la hoja abre hacia la otra estancia
+        d["a"], d["b"], d["into"] = d["b"], d["a"], -d["into"]
+    return True
+
+
+def _dist_seg(p, a, b):
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    L2 = dx * dx + dy * dy
+    t = max(0.0, min(1.0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L2)) if L2 > 0 else 0.0
+    return ((p[0] - a[0] - t * dx) ** 2 + (p[1] - a[1] - t * dy) ** 2) ** 0.5
+
+
 def _plan_rects(x0, v0, x1, v1, nb, warnings, acc=None):
     """Rectángulos de estancias y conexiones con puerta (las abiertas de la zona de día se deducen después). acc: frente
     y fondo del baño de una vivienda accesible (None si no lo es)."""
@@ -302,10 +414,12 @@ def _std_for(r, nb):
             "bath": V["bano"] if i == "bath1" else V["bano_aux"]}.get(k)
 
 
-def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None, accesible=False):
+def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None, accesible=False, ediciones=None):
     """Distribuye una unidad. poly en el marco de la unidad. Devuelve dict con estancias, puertas, grafo, equipamiento y
     comprobaciones. is_facade(p, q): opcional, dice si el segmento p-q (marco de la unidad) está sobre la fachada.
-    accesible: puertas de dormitorios y baño de DOOR_ACC, el baño abre hacia afuera y se equipa para silla de ruedas."""
+    accesible: puertas de dormitorios y baño de DOOR_ACC, el baño abre hacia afuera y se equipa para silla de ruedas.
+    ediciones (R5.7): [(k, {"op": "pared", "p", "a"} | {"op": "puerta", "p", "entre"?, "a"?, "ancho"?, "abre"?})] en el
+    marco de la unidad, en orden; el resultado trae en "ediciones" las k aplicadas y en "paredes" los tabiques interiores."""
     equip = equip or ST.DEFAULTS["equipamiento"]
     configure(vivienda or ST.DEFAULTS["vivienda"], equip, accesible)
     poly = G.ensure_ccw(poly)
@@ -314,6 +428,7 @@ def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None, accesible=F
         (x0, v0, x1, v1), annexes = _main_con_luz(poly, (x0, v0, x1, v1), annexes, is_facade)
     warnings = []
     R, E = _plan_rects(x0, v0, x1, v1, nb, warnings, equip["bano_accesible"] if accesible else None)
+    hechas = [k for k, e in (ediciones or []) if e.get("op") == "pared" and e.get("a") and _mover_pared(R, e)]
     # conexiones abiertas de la zona de día: entre estancias de día que comparten borde
     day = [i for i, (k, r, n) in R.items() if k in DAY]
     have = {(a, b) for a, b, t in E} | {(b, a) for a, b, t in E}
@@ -418,6 +533,9 @@ def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None, accesible=F
         mx = (r[0] + r[2]) / 2
         doors.append({"p": (mx - ENTRY / 2, v0), "q": (mx + ENTRY / 2, v0), "into": 1, "vertical": False,
                       "a": "exterior", "b": "hall", "entry": True, "ancho": ENTRY})
+    for k, e in (ediciones or []):                     # R5.7: puertas corridas, de otro ancho o que abren al revés
+        if e.get("op") == "puerta" and _editar_puerta(doors, lambda i: rooms[ids[i]]["rect"], e, v0):
+            hechas.append(k)
     # comprobaciones
     checks = []
     adj = {i: set() for i in ids}
@@ -494,10 +612,14 @@ def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None, accesible=F
     if tot < rng[0] or tot > rng[1]:
         checks.append({"ok": True, "info": True, "msg": "Superficie %.0f m² fuera del rango de referencia ANV para %d dorm. (%d-%d m²)" % (tot, nb, rng[0], rng[1])})
     nodes = [{"id": r["id"], "name": r["name"], "kind": r["kind"], "pos": G.centroid(r["poly"])} for r in rooms]
+    muros = [((c, lo), (c, hi)) if eje == 0 else ((lo, c), (hi, c))     # tabiques interiores (se arrastran en la web);
+             for eje, c, lo, hi in paredes({r["id"]: (r["kind"], r["rect"], r["name"]) for r in rooms   # el borde de
+                                            if not r["id"].startswith("annex")})]                     # un anexo no se mueve
     real = [c for c in checks if not c.get("info")]
     score = round(100.0 * sum(1 for c in real if c["ok"]) / len(real)) if real else 100
     for r in rooms:
         del r["rect"]
     return {"rooms": rooms, "doors": doors, "graph": {"nodes": nodes, "edges": edges}, "equipamiento": equipo,
             "checks": checks, "score": score, "bedrooms": nb, "facade": round(x1 - x0, 2),
-            "facade_min": round(facade_min(nb), 2), "accesible": bool(accesible)}
+            "facade_min": round(facade_min(nb), 2), "accesible": bool(accesible), "paredes": muros,
+            "ediciones": sorted(hechas)}

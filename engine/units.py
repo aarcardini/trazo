@@ -359,8 +359,9 @@ def bedrooms_for(area):
     return P.bedrooms_for(area)
 
 
-def unit_rooms(u, params, pc=None, plate=None):
-    """Distribuye una unidad (ver engine/plans.py) y devuelve el resultado en el marco local de la pieza."""
+def unit_rooms(u, params, pc=None, plate=None, ediciones=None):
+    """Distribuye una unidad (ver engine/plans.py) y devuelve el resultado en el marco local de la pieza. ediciones
+    (R5.7): [(k, cambio con puntos de mundo)]; se aplican los que caen en esta vivienda (en "ediciones", las k)."""
     side = u["side"]
     cw = params["corridor_width"]
     pw = params["party_wall"]
@@ -383,8 +384,17 @@ def unit_rooms(u, params, pc=None, plate=None):
                 if min(_dist_to_boundary(w, b) for b in bordes) > 0.4 or (bl and bl(w)) or (pd and pd(w)):
                     return False
             return True
+    mias = []
+    if ediciones and pc is not None:                # R5.7: los cambios cuyo punto cae en esta vivienda, en su marco
+        def marco(w):
+            x, y = G.to_local([w], pc["origin"], pc["angle"])[0]
+            return (x, side * y - y_in)
+        for k, e in ediciones:
+            q = marco(e["p"])
+            if G.point_in_poly(q, poly) or _dist_to_boundary(q, poly) < 0.05:
+                mias.append((k, dict(e, p=q, a=marco(e["a"]) if e.get("a") else None)))
     S = ST.merged(params.get("standards"))
-    res = P.layout_unit(poly, nb, is_fac, S["vivienda"], S["equipamiento"], bool(spec.get("accesible")))
+    res = P.layout_unit(poly, nb, is_fac, S["vivienda"], S["equipamiento"], bool(spec.get("accesible")), mias)
 
     def back_poly(pl):
         out = [back(p) for p in pl]
@@ -394,6 +404,7 @@ def unit_rooms(u, params, pc=None, plate=None):
     for q in res["equipamiento"]:
         q["poly"] = back_poly(q["poly"])
         q["lines"] = [[back(p) for p in ln] for ln in q["lines"]]
+    res["paredes"] = [(back(a), back(b)) for a, b in res["paredes"]]
     for d in res["doors"]:
         d["p"], d["q"] = back(d["p"]), back(d["q"])
         d["into"] = d["into"] * (side if not d["vertical"] else 1)
