@@ -942,7 +942,8 @@ if __name__ == "__main__":
 def test_equipamiento():
     """F5 (R5.6, primera parte): artefactos de baños, cocina y lavadero dentro de sus estancias, contra paredes macizas,
     sin pisarse ni pisar el barrido de las puertas. Las puertas interiores miden 0,70 y la de entrada 0,90 (editables).
-    Lo que no entra se avisa; un segundo baño sin lugar para la ducha queda como toilette. Va también al DXF."""
+    Lo que no entra se avisa; un segundo baño sin lugar para la ducha queda como toilette. Con un muro oblicuo, todo queda
+    dentro del contorno real de la estancia. Va también al DXF."""
     import math
     from engine import geometry as G, equipamiento as EQ, standards as ST, dxf
     S = ST.merged(None)["equipamiento"]
@@ -1003,6 +1004,15 @@ def test_equipamiento():
     puerta = [{"p": (0.3, 2.1), "q": (1.0, 2.1), "a": "hallway", "b": "bath2", "ancho": 0.7}]
     pz, ch = EQ.equipar([{"id": "bath2", "kind": "bath", "name": "Baño 2", "rect": (0.0, 0.0, 1.3, 2.1)}], puerta, {}, S, 2)
     assert {q["kind"] for q in pz} == {"inodoro", "lavatorio"} and len(ch) == 1 and ch[0]["ok"] and "toilette" in ch[0]["msg"], ch
+    # un muro oblicuo recorta el estar y la cocina (como en «quiebre 45°»): todo queda dentro del contorno real
+    from engine import plans as P
+    res = P.layout_unit([(2.68, 0.0), (14.11, 0.0), (14.11, 6.5), (0.0, 6.5)], 3)
+    salas = {x["id"]: x["poly"] for x in res["rooms"]}
+    assert abs(G.area(salas["kitchen"])) < 2.5 * 2.6, salas["kitchen"]                         # la cocina es un trapecio
+    for q in res["equipamiento"]:
+        fuera = sum(abs(G.area(e)) - sum(abs(G.area(h)) for h in hs) for e, hs in G.subtract(q["poly"], [salas[q["room"]]])[0])
+        assert fuera < 1e-3, (q["kind"], q["room"], fuera)
+    assert any("Cocina: no entra la mesada" in c["msg"] for c in res["checks"]), res["checks"]   # su pared maciza: 1,23 m
     # DXF y web
     assert "Trazo_L00_Equipamiento" in dxf.result_to_dxf(r)
     html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()

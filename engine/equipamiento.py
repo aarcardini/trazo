@@ -59,8 +59,34 @@ def _choca(a, b):
     return a[0] < b[2] - TOL and b[0] < a[2] - TOL and a[1] < b[3] - TOL and b[1] < a[3] - TOL
 
 
+class _Estancia(tuple):
+    """El rectángulo (x0, v0, x1, v1) de una estancia. forma: su contorno real cuando un muro oblicuo la recorta (los
+    artefactos tienen que quedar dentro de él); None si es el rectángulo entero."""
+    forma = None
+
+
+def _en_poligono(p, f, tol=1e-4):
+    """¿El punto p está dentro del polígono f o sobre su borde?"""
+    x, y = p
+    adentro = False
+    for (x1, y1), (x2, y2) in zip(f, f[1:] + f[:1]):
+        dx, dy = x2 - x1, y2 - y1
+        L2 = dx * dx + dy * dy
+        k = max(0.0, min(1.0, ((x - x1) * dx + (y - y1) * dy) / L2)) if L2 > 0 else 0.0
+        if math.hypot(x - x1 - k * dx, y - y1 - k * dy) <= tol:
+            return True
+        if (y1 > y) != (y2 > y) and x < x1 + (y - y1) * dx / dy:
+            adentro = not adentro
+    return adentro
+
+
 def _dentro(a, r):
-    return a[0] >= r[0] - TOL and a[1] >= r[1] - TOL and a[2] <= r[2] + TOL and a[3] <= r[3] + TOL
+    """¿La caja a está dentro de la estancia r: de su rectángulo y, si la recorta un muro oblicuo, de su contorno?"""
+    if a[0] < r[0] - TOL or a[1] < r[1] - TOL or a[2] > r[2] + TOL or a[3] > r[3] + TOL:
+        return False
+    f = getattr(r, "forma", None)
+    return f is None or (all(_en_poligono(p, f) for p in ((a[0], a[1]), (a[2], a[1]), (a[2], a[3]), (a[0], a[3]))) and
+                         not any(a[0] + 1e-4 < x < a[2] - 1e-4 and a[1] + 1e-4 < y < a[3] - 1e-4 for x, y in f))
 
 
 def _centro(c):
@@ -132,6 +158,15 @@ def _paredes(r, aberturas, puertas):
                 ocup[i].append(tr)
                 prof = ancho if adentro else 0.60      # barrido de la hoja, o el paso para cruzar la puerta
                 zonas.append(_caja(ld, tr[0], tr[1] - tr[0], 0.0, prof))
+    f = getattr(r, "forma", None)
+    if f:                                             # un muro oblicuo: la pared del rectángulo que queda fuera no sirve
+        for ld, oc in zip(lados, ocup):
+            (ax, av), (dx, dv), (nx, nv), L = ld
+            n = max(1, int(round(L / 0.05)))
+            for k in range(n + 1):
+                t = L * k / n
+                if not all(_en_poligono((ax + dx * t + nx * m, av + dv * t + nv * m), f) for m in (0.0, 0.70)):
+                    oc.append((t - L / n, t + L / n))
     return [(ld, _libres(ld[3], oc)) for ld, oc in zip(lados, ocup)], zonas
 
 
@@ -220,7 +255,7 @@ def _cocina(r, libres, zonas, S):
         nec = (hw if con_heladera else 0.0) + bw + tw + cw
         caja = _caja(ld, a, largo, 0.0, max(f, hd if con_heladera else f))
         frente = _caja(ld, a, largo, f, f + paso)
-        if largo + TOL < nec or not _dentro(frente, r) or any(_choca(caja, z) for z in zonas):
+        if largo + TOL < nec or not _dentro(frente, r) or not _dentro(caja, r) or any(_choca(caja, z) for z in zonas):
             return None
         sobra = largo - nec
         t = a
@@ -278,17 +313,26 @@ def resolver(rm, puertas, aberturas, S):
     pts = tuple(sorted((rel(d["p"]), rel(d["q"]), round(d["ancho"], 3), d["b"] == rm["id"])
                        for d in puertas if rm["id"] in (d["a"], d["b"])))
     abre = tuple(sorted((rel(p), rel(q)) for p, q in aberturas.get(rm["id"], [])))
-    clave = (_tipo(rm), rm["id"] == "bath1", round(x1 - x0, 4), round(v1 - v0, 4), pts, abre,
+    forma = None
+    if rm.get("poly") and abs(_area(rm["poly"])) < (x1 - x0) * (v1 - v0) - 0.01:     # un muro oblicuo la recorta
+        forma = tuple(rel(p) for p in rm["poly"])
+    clave = (_tipo(rm), rm["id"] == "bath1", round(x1 - x0, 4), round(v1 - v0, 4), pts, abre, forma,
              tuple(sorted((k, tuple(v) if isinstance(v, list) else v) for k, v in S.items())))
     if clave not in _memo:
         if len(_memo) > 4000:
             _memo.clear()
-        _memo[clave] = _equipar_estancia(clave[0], clave[1], (0.0, 0.0, x1 - x0, v1 - v0), pts, abre, S)
+        r = _Estancia((0.0, 0.0, x1 - x0, v1 - v0))
+        r.forma = list(forma) if forma else None
+        _memo[clave] = _equipar_estancia(clave[0], clave[1], r, pts, abre, S)
     return _memo[clave]
 
 
+def _area(pl):
+    return sum(pl[i - 1][0] * pl[i][1] - pl[i][0] * pl[i - 1][1] for i in range(len(pl))) / 2
+
+
 def equipar(rooms, puertas, aberturas, S, nb):
-    """Artefactos de baños, cocina y lavadero. rooms: [{id, kind, name, rect}]; puertas: [{p, q, a, b, ancho}] (la hoja
+    """Artefactos de baños, cocina y lavadero. rooms: [{id, kind, name, rect[, poly]}]; puertas: [{p, q, a, b, ancho}] (la hoja
     abre hacia b); aberturas: {id: [(p, q)]} bordes abiertos a otra estancia. Devuelve (piezas, comprobaciones)."""
     piezas, checks = [], []
     for rm in rooms:
