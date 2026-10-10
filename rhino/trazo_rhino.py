@@ -449,7 +449,7 @@ def receive_result():
                 for r in u.get("rooms", []):
                     add_poly(r["poly"], z, layer(tag + "::Rooms::" + r["kind"], LAYER_COLORS.get(r["kind"], SD.Color.Gray)),
                              inv, "%s %.1fm2" % (r["name"], r["area"]))
-                for q in u.get("equipamiento", []):      # artefactos de baños, cocina y lavadero (contorno y dibujo)
+                for q in u.get("equipamiento", []):      # artefactos y muebles (contorno y dibujo)
                     lq = layer(tag + "::Equipamiento", LAYER_COLORS["Equipamiento"])
                     add_poly(q["poly"], z, lq, inv, q["name"])
                     for ln in q.get("lines", []):

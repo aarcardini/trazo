@@ -98,7 +98,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:3px 4px;b
   <button class="s" id="btnUndo" style="padding:2px 9px" onclick="deshacer()" disabled title="Deshacer (Ctrl+Z)">↶</button><button class="s" id="btnRedo" style="padding:2px 9px" onclick="rehacer()" disabled title="Rehacer (Ctrl+Shift+Z)">↷</button>
   <span class="grp" id="lvlGrp">Nivel <select id="lvl" onchange="planStory=+this.value;draw()"></select>
    <label style="margin:0;gap:4px"><input type="checkbox" id="showGraph" checked onchange="showGraph=this.checked;draw()">Conexiones</label>
-   <label style="margin:0;gap:4px" title="Artefactos de baños, cocina y lavadero"><input type="checkbox" id="showEquip" checked onchange="showEquip=this.checked;draw()">Equipamiento</label>
+   <label style="margin:0;gap:4px" title="Artefactos de baños, cocina y lavadero, y muebles"><input type="checkbox" id="showEquip" checked onchange="showEquip=this.checked;draw()">Equipamiento</label>
    <label style="margin:0;gap:4px" title="Medidas totales por fuera de la planta y escala gráfica"><input type="checkbox" id="showDims" checked onchange="showDims=this.checked;draw()">Cotas</label>
    <label style="margin:0;gap:4px" title="Tramos de pasillo y viviendas que no cumplen el fondo de saco (naranja) o el recorrido máximo (rojo)"><input type="checkbox" id="showEvac" checked onchange="showEvac=this.checked;draw()">Evacuación</label>
    <button class="s" style="padding:2px 7px" title="Encuadrar" onclick="zoom=1;pan=[0,0];draw()">⤢</button></span>
@@ -280,23 +280,25 @@ function drawOverlay(){ const go=$('go'); go.innerHTML=''; if(!view) return; dra
  if(tool==='addcore'&&mouse){ go.appendChild(el('rect',{x:X(mouse)-8,y:Y(mouse)-8,width:16,height:16,fill:circColor('core'),'fill-opacity':.6,stroke:circStroke()})); } }
 
 /* ---------- medidas y normativa ---------- */
-const STD_LABELS={predio:'Predio',retiro_ventanas:'Retiro de medianera para ventanas (m)',patio_min:'Ancho mínimo de patio para iluminar (m)',vivienda:'Vivienda',nucleo:'Núcleo',oficinas:'Oficinas',comercial:'Comercial',estacionamiento:'Estacionamiento',equipamiento:'Equipamiento (baños, cocina y lavadero)',
+const STD_LABELS={predio:'Predio',retiro_ventanas:'Retiro de medianera para ventanas (m)',patio_min:'Ancho mínimo de patio para iluminar (m)',vivienda:'Vivienda',nucleo:'Núcleo',oficinas:'Oficinas',comercial:'Comercial',estacionamiento:'Estacionamiento',equipamiento:'Equipamiento y muebles',
  dorm_principal:'Dormitorio principal',dorm_secundario:'Dormitorio secundario',estar_comedor:'Estar-comedor',cocina:'Cocina',bano:'Baño',bano_aux:'Baño auxiliar',lavadero:'Lavadero',pasillo:'Pasillo interno',hall:'Hall de entrada',estudio:'Estudio',
  min_area:'mín. m²',min_side:'lado mín.',typ_area:'típ. m²',typ:'típ. frente × fondo',typ_side:'típico',escalera_ancho:'Ancho de tramo (m)',contrahuella:'Contrahuella máx. (m)',huella:'Huella (m)',ojo:'Ojo (m)',muro:'Muro (m)',ascensor_ducto:'Ducto ascensor (m)',ascensor_cabina:'Cabina (m)',palier:'Palier (m)',ducto_instalaciones:'Ducto instalaciones (m)',unidades_por_ascensor:'Unidades por ascensor',altura_sin_ascensor:'Altura máx. sin ascensor (m)',pisos_dos_ascensores:'Niveles para 2 ascensores',
  m2_por_persona:'m² por persona',trabajadores_por_inodoro:'Personas por inodoro',cubiculo:'Cubículo inodoro (m)',zona_lavabos:'Zona lavabos (m)',bano_accesible:'Baño accesible (m)',hall_extra:'Hall extra (m)',plaza:'Plaza (m)',calle:'Calle (m)',
- puerta_interior:'Puerta interior (m)',puerta_entrada:'Puerta de entrada (m)',inodoro:'Inodoro (largo × fondo, m)',bide:'Bidé (m)',lavatorio:'Lavatorio (m)',ducha:'Ducha (m)',paso_bano:'Paso delante de los artefactos (m)',mesada_fondo:'Fondo de mesada (m)',heladera:'Heladera (m)',bacha_cocina:'Bacha de cocina, largo (m)',cocina_horno:'Cocina y horno, largo (m)',mesada_trabajo:'Mesada entre bacha y cocina (m)',paso_cocina:'Paso delante de la mesada (m)',lavarropas:'Lavarropas (m)',pileta_lavar:'Pileta de lavar (m)',paso_lavadero:'Paso en el lavadero (m)'};
+ puerta_interior:'Puerta interior (m)',puerta_entrada:'Puerta de entrada (m)',inodoro:'Inodoro (largo × fondo, m)',bide:'Bidé (m)',lavatorio:'Lavatorio (m)',ducha:'Ducha (m)',paso_bano:'Paso delante de los artefactos (m)',mesada_fondo:'Fondo de mesada (m)',heladera:'Heladera (m)',bacha_cocina:'Bacha de cocina, largo (m)',cocina_horno:'Cocina y horno, largo (m)',mesada_trabajo:'Mesada entre bacha y cocina (m)',paso_cocina:'Paso delante de la mesada (m)',lavarropas:'Lavarropas (m)',pileta_lavar:'Pileta de lavar (m)',paso_lavadero:'Paso en el lavadero (m)',
+ cama_doble:'Cama doble (ancho × largo, m)',cama_individual:'Cama individual (m)',mesita:'Mesa de luz (m)',paso_cama:'Paso junto a la cama (m)',placard_fondo:'Fondo de placard (m)',placard_largo:'Largo de placard: principal · otros (m)',asiento:'Mesa: largo por asiento (m)',mesa_fondo:'Mesa: ancho (m)',paso_silla:'Lugar de las sillas (m)',asientos:'Asientos: monoambiente · 1 dorm. · cada dorm. más',sofa:'Sofá (largo × fondo, m)',butaca:'Butaca (m)',rack_tv:'Rack de TV (m)',distancia_tv:'Del sofá al rack de TV (m)',paso_estar:'Paso frente a hall, pasillo y cocina (m)'};
+const STD_LISTA={asientos:1,placard_largo:1};   // listas (no medidas largo × fondo)
 async function loadStd(){ try{ STD_DEF=await (await fetch('/api/standards')).json(); }catch(e){ return; } let sv=null; try{ sv=JSON.parse((localStorage.getItem('trazo.std')||localStorage.getItem('finchlocal.std'))||'null'); }catch(e){}
  STD=JSON.parse(JSON.stringify(STD_DEF)); if(sv) for(const g in sv) for(const k in sv[g]) if(STD[g]&&k in STD[g]) STD[g][k]=sv[g][k]; renderStd(); }
 function saveStd(){ try{ localStorage.setItem('trazo.std',JSON.stringify(STD)); }catch(e){} }
 function resetStd(){ STD=JSON.parse(JSON.stringify(STD_DEF)); saveStd(); renderStd(); if(lastStage) run(lastStage,{keepView:true}); }
 function setStd(path,val){ let o=STD; for(let i=0;i<path.length-1;i++) o=o[path[i]]; o[path[path.length-1]]=val; saveStd(); renderMeds(); if(lastStage) run(lastStage,{keepView:true}); }
-function numIn(path,v){ return `<input type="number" step="0.05" value="${v}" style="width:58px" onchange="setStd(${JSON.stringify(path).replace(/"/g,"'")},+this.value)">`; }
+function numIn(path,v,step=0.05){ return `<input type="number" step="${step}" value="${v}" style="width:58px" onchange="setStd(${JSON.stringify(path).replace(/"/g,"'")},+this.value)">`; }
 function renderStd(){ if(!STD) return; let h='';
  for(const g of ['vivienda','equipamiento','nucleo','oficinas','comercial','predio','estacionamiento']){ h+=`<div class="hint" style="font-weight:600;color:var(--ink);margin-top:8px">${STD_LABELS[g]}</div>`;
   for(const [k,v] of Object.entries(STD[g])){
    if(g==='vivienda'&&typeof v==='object'&&!Array.isArray(v)){ h+=`<div style="font-size:12px;margin:4px 0 2px">${STD_LABELS[k]||k}</div><div style="display:flex;gap:4px;flex-wrap:wrap;font-size:11px;color:var(--mut)">`+Object.entries(v).map(([kk,vv])=>Array.isArray(vv)?`${STD_LABELS[kk]} ${numIn([g,k,kk,0],vv[0])}×${numIn([g,k,kk,1],vv[1])}`:`${STD_LABELS[kk]} ${numIn([g,k,kk],vv)}`).join(' ')+`</div>`; }
    else if(g==='vivienda') continue;
-   else if(Array.isArray(v)) h+=`<label style="font-size:12px">${STD_LABELS[k]||k} <span>${numIn([g,k,0],v[0])}×${numIn([g,k,1],v[1])}</span></label>`;
+   else if(Array.isArray(v)) h+=`<label style="font-size:12px">${STD_LABELS[k]||k} <span>${v.map((x,i)=>numIn([g,k,i],x,k==='asientos'?1:0.05)).join(STD_LISTA[k]?' · ':'×')}</span></label>`;
    else h+=`<label style="font-size:12px">${STD_LABELS[k]||k} ${numIn([g,k],v)}</label>`; } }
  $('stdPanel').innerHTML=h; }
 
