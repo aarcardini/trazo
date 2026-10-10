@@ -79,7 +79,9 @@ Desde entonces basta con escribir `trazo` en Rhino.
    - Para controlar el pasillo, dibuja polilíneas en la capa `Trazo::Centerline` antes de enviar (cada vértice es un giro del pasillo).
    - Para fijar los núcleos, coloca puntos en la capa `Trazo::Cores`; se usan en modo manual.
    - Para marcar medianeras, dibuja líneas en la capa `Trazo::Medianeras` (nombre `retiro=3` si el edificio se retira).
+   - Para abrir patios, dibuja curvas cerradas en la capa `Trazo::Patios`; llegan a la web en modo manual.
 3. En la web: Calcular masa → Generar pasillo y núcleos → Generar mix → Generar planos.
+   - **Patios** (sección «Patios»): en modo automático, Trazo abre patios donde un predio entre medianeras es demasiado profundo para tener luz; cada bloque lleva su núcleo. Con **+ Dibujar patio** haces clic en dos esquinas opuestas (el patio se alinea con el edificio y se recorta a la masa); la × de la lista lo quita. Dibujar o quitar un patio pasa a modo manual. Las estancias que dan a un patio de al menos 3 m (editable en «Medidas y normativa → Predio») tienen luz.
    - Para empezar de cero: botón **Nuevo (en blanco)**, junto a «Ejemplo». Borra la masa, las polilíneas, los núcleos, las medianeras y el resultado, también los guardados en el servidor; conserva las medidas, el mix y los colores. Después envía una masa desde Rhino o elige un ejemplo.
    - En la planta 2D se ven las **cotas totales** de la huella (por fuera, alineadas con el edificio) y una **escala gráfica** abajo a la derecha; se ocultan con la casilla «Cotas».
    - El selector «Ejemplo» muestra siempre qué está cargado: un ejemplo, «Masa de Rhino: …» o «— En blanco —». Si miras un ejemplo, puedes volver a tu masa de Rhino eligiéndola en el selector.
@@ -126,6 +128,14 @@ Si algo falla en Rhino, ejecuta el script y elige **Diagnostico**. Si no se resu
 - **Pasillo y núcleos**: eje (automático o dibujado), ancho de pasillo, núcleos (ancho, fondo incluyendo pasillo, cantidad), distancias de evacuación (salida única / múltiple) y núcleos extra automáticos.
 - **Mix**: tipos con m² objetivo y %, ancho mínimo, muro medianero; métricas Match Score, Fit y Unidades únicas.
 - **Planos**: distribución día/noche con pasillo interno, puertas y grafo de conexiones verificado.
+
+## Novedades v2.4
+- **Patios de aire y luz en el modo Edificio:** la masa menos los patios da uno o más **bloques**, cada uno con su muro exterior, su pasillo, **su propio núcleo** y sus viviendas; el mix se reparte entre todos los bloques.
+- **Automáticos:** en un predio entre medianeras demasiado profundo (antes quedaba una «zona central sin luz»), Trazo lo divide en bloques iguales separados por patios del ancho mínimo, con la solución típica en cada bloque: núcleo en el medio y una vivienda hacia cada lado (la calle o el fondo, y el patio). Ejemplo nuevo: «Predio entre medianeras 10 × 40 (patio automático)».
+- **Manuales:** «+ Dibujar patio» (dos clics en esquinas opuestas), lista de patios con su medida y botón para quitarlos; desde Rhino, curvas cerradas en la capa `Trazo::Patios`.
+- **Luz por el patio:** las estancias que dan a un patio de al menos 3 m (editable) cuentan como iluminadas; si es más angosto, avisa y sus caras se tratan como medianera.
+- En la planta, los patios se ven rayados y acotados (cotas parciales de bloques y patios); en la axonometría cada bloque es un volumen; métricas «Bloques» y «Patios (m²)»; el GFA no cuenta los patios.
+- Todavía no: patios rodeados de edificio por los cuatro lados (avisa y no se usan) y alturas distintas por bloque.
 
 ## Novedades v2.3
 - **Cotas y escala gráfica en la planta 2D:** medida total de la huella (largo y fondo, alineadas con el edificio aunque esté girado) por fuera del dibujo, y una escala gráfica que se adapta al zoom (0 – 5 – 10 m, 0 – 10 – 20 m…). Casilla «Cotas» en la barra de la planta para mostrarlas u ocultarlas.

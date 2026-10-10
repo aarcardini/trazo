@@ -12,7 +12,7 @@ Tiene dos modos en el mismo repositorio: **Edificio** (`/`, planta tipo) y **Mas
 ## Arquitectura
 | Ruta | Qué hace |
 |---|---|
-| `engine/geometry.py` | Geometría 2D pura: área, recortes (Sutherland-Hodgman), marcos locales, offsets. |
+| `engine/geometry.py` | Geometría 2D pura: área, recortes (Sutherland-Hodgman), marcos locales, offsets; `subtract` (resta de polígonos que devuelve varias partes) y `union_parts`. |
 | `engine/layout.py` | Motor completo. `generate(data)` es la entrada única. Contiene `VERSION` y `DEFAULT_PARAMS`. |
 | `engine/plans.py` | Planos de unidad: zonas día/noche, pasillo interno, puertas, grafo de conexiones y comprobaciones. |
 | `engine/standards.py` | Medidas mínimas (normativa) y típicas; cálculo de escalera, ascensores, núcleo e inodoros. Ver `STANDARDS.md`. |
@@ -46,6 +46,7 @@ Masterplan: `GET /masterplan`, `GET /api/mp_samples`, `POST /api/masterplan` (�
 - Planos: `unit_rooms` (layout.py) pasa cada unidad a su marco propio (x = fachada, v = profundidad desde el pasillo común) y llama a `plans.layout_unit`.
   `plans.py` decide zona de día/noche, crea rectángulos de estancias, deduce conexiones abiertas (estancias de día que comparten borde) y con puerta (pasillo→dormitorios/baños), coloca puertas y comprueba: alcance desde la entrada (BFS), fachada de estancias habitables (`is_facade` contra el borde de la planta), anchos mínimos (`MIN_W`) y frente mínimo (`facade_min`). Unidades no rectangulares: rectángulo principal + anexos (estudio/depósito).
 - Medianeras: `params.medianeras` = [{a, b, retiro}]. `apply_setbacks` recorta la huella; `make_blind` crea `params["_blind"](punto)` para saber si un punto está sobre una medianera ciega (retiro < `predio.retiro_ventanas`). Lo usan la comprobación de fachada, `_single_frame` (pasillo contra la medianera) y `is_between` (predio entre medianeras: franja central con núcleo `side=0` y hall).
+- **Patios y bloques** (v2.4): `params.patios_mode` = `auto` (por defecto: `auto_patios` abre patios del ancho `predio.patio_min` en predios entre medianeras demasiado profundos) o `manual` (`params.patios` = polígonos de mundo). `split_blocks` resta los patios de la huella (`G.subtract`) y da los **bloques**; `generate` procesa cada bloque con su copia de parámetros (`pb`: pasillo, núcleos —al menos uno por bloque—, unidades, programas) y comparte el estado del mix. `make_patio_dark` crea `params["_patio_dark"](punto)` para las caras que dan a un patio más angosto que el mínimo. El resultado agrega `blocks` [{footprint, plate}], `patios`, `patios_auto` y `metrics.blocks`/`patio_area`; `plate` es la del primer bloque. Sin patios, el resultado es idéntico al de antes. Pendiente: patios rodeados de edificio (huecos) y alturas por bloque.
 - Programas por nivel: `params.stories` = [{program, height}]. Solo `Residential` recibe distribución; `metrics.programs` resume GFA/NIA/NSA por programa.
 
 ### Modelo del modo Masterplan (masterplan.py)

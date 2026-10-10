@@ -271,6 +271,21 @@ def send_mass():
                 meds.append({"a": [a.X * k, a.Y * k], "b": [b.X * k, b.Y * k], "retiro": ret})
         if meds:
             payload["medianeras"] = meds
+    # patios opcionales: curvas cerradas en la capa Trazo::Patios (patios de aire y luz; separan la masa en bloques)
+    if rs.IsLayer("Trazo::Patios"):
+        pats = []
+        for cid in rs.ObjectsByLayer("Trazo::Patios") or []:
+            crv = rs.coercecurve(cid)
+            if crv is None:
+                continue
+            if not crv.IsClosed:
+                avisos.append("Una curva de la capa Trazo::Patios no está cerrada y no se usa: ciérrala con _CloseCrv.")
+                continue
+            cp = curve_to_points(crv, tol)
+            if cp and len(cp) >= 3:
+                pats.append([[q.X * k, q.Y * k] for q in cp])
+        if pats:
+            payload["patios"] = pats
     # núcleos manuales opcionales: objetos punto en la capa Trazo::Cores
     if rs.IsLayer("Trazo::Cores"):
         pts_c = [rs.PointCoordinates(pid) for pid in (rs.ObjectsByLayer("Trazo::Cores") or []) if rs.IsPoint(pid)]
@@ -280,14 +295,15 @@ def send_mass():
     for a in avisos:
         print("Trazo: aviso: " + a)
     print("Masa enviada (versión %s): huella de %.0f m² (%.1f × %.1f m), %.2f m de alto, archivo en %s; "
-          "%d polilínea(s), %d medianera(s), %d núcleo(s) manual(es). Abre %s" %
+          "%d polilínea(s), %d medianera(s), %d patio(s), %d núcleo(s) manual(es). Abre %s" %
           (res.get("version"), _area(fp), largo, ancho, alto, unidades(), len(payload.get("centerlines", [])),
-           len(payload.get("medianeras", [])), len(payload.get("cores", [])), SERVER))
+           len(payload.get("medianeras", [])), len(payload.get("patios", [])), len(payload.get("cores", [])), SERVER))
 
 
 # ------------------------------------------------------------------ recibir resultado
 LAYER_COLORS = {
     "Footprint": SD.Color.FromArgb(120, 120, 120),
+    "Patios": SD.Color.FromArgb(150, 150, 160),
     "Corridor": SD.Color.FromArgb(150, 160, 175),
     "Cores": SD.Color.FromArgb(26, 157, 91),
     "Units": SD.Color.FromArgb(30, 40, 60),
@@ -334,6 +350,8 @@ def receive_result():
     stories = [s for s in res["stories"] if s["program"] == "Residential"] or res["stories"][:1]
     try:
         add_poly(res["footprint"], z_origin, layer("Footprint", LAYER_COLORS["Footprint"]), inv)
+        for p in res.get("patios", []):
+            add_poly(p, z_origin, layer("Patios", LAYER_COLORS["Patios"]), inv, "Patio")
         for s in stories:
             z = z_origin + s["z"] / k
             tag = "L%02d" % s["index"]
@@ -374,7 +392,7 @@ def diagnostico():
     print("  Unidades del archivo: %s (1 unidad = %g m), tolerancia %g" %
           (unidades(), meters_per_unit(), sc.doc.ModelAbsoluteTolerance))
     for capa, para in (("Trazo::Centerline", "polilíneas del pasillo"), ("Trazo::Cores", "puntos de núcleos"),
-                       ("Trazo::Medianeras", "líneas de medianeras")):
+                       ("Trazo::Medianeras", "líneas de medianeras"), ("Trazo::Patios", "curvas cerradas de patios")):
         n = len(rs.ObjectsByLayer(capa) or []) if rs.IsLayer(capa) else None
         print("  Capa %s: %s" % (capa, "no existe (es opcional: %s)" % para if n is None else "%d objeto(s)" % n))
     try:

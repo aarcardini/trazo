@@ -195,3 +195,166 @@ def min_area_rect_angle(poly):
 
 def pol_to_list(poly):
     return [[round(x, 4), round(y, 4)] for x, y in poly]
+
+
+# ---------------------------------------------------------------- resta de polígonos (patios)
+def _is_convex(poly):
+    sgn = 0.0
+    n = len(poly)
+    for i in range(n):
+        a, b, c = poly[i], poly[(i + 1) % n], poly[(i + 2) % n]
+        cr = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0])
+        if abs(cr) > 1e-9:
+            if sgn and (cr > 0) != (sgn > 0):
+                return False
+            sgn = cr
+    return True
+
+
+def _in_tri(p, a, b, c):
+    d1 = (p[0] - b[0]) * (a[1] - b[1]) - (a[0] - b[0]) * (p[1] - b[1])
+    d2 = (p[0] - c[0]) * (b[1] - c[1]) - (b[0] - c[0]) * (p[1] - c[1])
+    d3 = (p[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (p[1] - a[1])
+    return not ((d1 < 0 or d2 < 0 or d3 < 0) and (d1 > 0 or d2 > 0 or d3 > 0))
+
+
+def triangulate(poly):
+    """Triángulos de un polígono simple (corte de orejas)."""
+    pts = ensure_ccw(clean(poly))
+    out = []
+    while len(pts) > 3:
+        n = len(pts)
+        for i in range(n):
+            a, b, c = pts[i - 1], pts[i], pts[(i + 1) % n]
+            if (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]) <= 1e-12:
+                continue                                     # vértice reflejo
+            if any(_in_tri(p, a, b, c) for p in pts if p not in (a, b, c)):
+                continue
+            out.append([a, b, c])
+            pts.pop(i)
+            break
+        else:
+            return out + [pts]                               # degenerado: se devuelve tal cual
+    return out + [pts] if len(pts) == 3 else out
+
+
+def _simplify(loop, tol=1e-6):
+    """Quita vértices repetidos o alineados (distancia a la recta vecina < tol)."""
+    pts = list(loop)
+    changed = True
+    while changed and len(pts) > 3:
+        changed = False
+        for i in range(len(pts)):
+            a, b, c = pts[i - 1], pts[i], pts[(i + 1) % len(pts)]
+            L = math.hypot(c[0] - a[0], c[1] - a[1])
+            if L < tol or abs((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])) / L < tol:
+                pts.pop(i)
+                changed = True
+                break
+    return pts
+
+
+def union_parts(polys):
+    """Contornos de la unión de polígonos que no se solapan (piezas de una partición): [(exterior, [huecos])].
+    Las aristas compartidas se anulan entre sí, y también los puentes de ancho cero de Sutherland-Hodgman."""
+    key = lambda p: (round(p[0], 6) + 0.0, round(p[1], 6) + 0.0)
+    edges, verts = [], set()
+    for poly in polys:
+        q = []
+        for p in map(key, poly):
+            if not q or p != q[-1]:
+                q.append(p)
+        if len(q) > 1 and q[0] == q[-1]:
+            q.pop()
+        if len(q) < 3 or abs(area(q)) < 1e-6:
+            continue
+        if area(q) < 0:
+            q.reverse()
+        edges += [(q[i], q[(i + 1) % len(q)]) for i in range(len(q))]
+        verts.update(q)
+    cnt = {}
+    for a, b in edges:                                       # partir aristas en los vértices que caen encima
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        L2 = dx * dx + dy * dy
+        if L2 < 1e-18:
+            continue
+        mids = []
+        for p in verts:
+            if p != a and p != b:
+                t = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L2
+                if 1e-9 < t < 1 - 1e-9 and abs((p[0] - a[0]) * dy - (p[1] - a[1]) * dx) < 1e-6 * math.sqrt(L2):
+                    mids.append((t, p))
+        chain = [a] + [p for _, p in sorted(mids)] + [b]
+        for e in zip(chain, chain[1:]):
+            cnt[e] = cnt.get(e, 0) + 1
+    for (a, b) in list(cnt):                                 # aristas opuestas (compartidas) se anulan
+        k = min(cnt[(a, b)], cnt.get((b, a), 0))
+        if k:
+            cnt[(a, b)] -= k
+            cnt[(b, a)] -= k
+    nxt = {}
+    for (a, b), k in cnt.items():
+        if k > 0:
+            nxt.setdefault(a, []).extend([b] * k)
+    loops = []
+    while nxt:
+        start = next(iter(nxt))
+        prev, cur = start, nxt[start].pop()
+        if not nxt[start]:
+            del nxt[start]
+        loop = [start]
+        while cur != start and cur in nxt:
+            loop.append(cur)
+            back = math.atan2(prev[1] - cur[1], prev[0] - cur[0])
+            turn = lambda q: ((back - math.atan2(q[1] - cur[1], q[0] - cur[0])) % (2 * math.pi)) or 2 * math.pi
+            nb = min(nxt[cur], key=turn)                     # el giro más a la derecha: la región queda a la izquierda
+            nxt[cur].remove(nb)
+            if not nxt[cur]:
+                del nxt[cur]
+            prev, cur = cur, nb
+        loop = _simplify(loop)
+        if len(loop) >= 3 and abs(area(loop)) > 1e-6:
+            loops.append(loop)
+    outers = sorted([l for l in loops if area(l) > 0], key=area)
+    res = [(o, []) for o in outers]
+    for h in (l for l in loops if area(l) < 0):
+        for o, hs in res:                                    # el menor exterior que lo contiene
+            if point_in_poly(centroid(h), o):
+                hs.append(h)
+                break
+    res.sort(key=lambda r: -area(r[0]))
+    return res
+
+
+def subtract(poly, cutters):
+    """poly menos los polígonos de cutters. Devuelve (partes de poly [(exterior, [huecos])],
+    [partes de cada cutter dentro de poly]). Cada cutter se resta en piezas convexas por semiplanos."""
+    pieces = [ensure_ccw(clean(poly))]
+    inside = []
+    for cut in cutters:
+        cut = ensure_ccw(clean(cut))
+        if len(cut) < 3 or abs(area(cut)) < 1e-6:
+            inside.append([])
+            continue
+        dentro = []
+        for cp in ([cut] if _is_convex(cut) else triangulate(cut)):
+            new = []
+            for P in pieces:
+                rest = P
+                for i in range(len(cp)):
+                    a, b = cp[i], cp[(i + 1) % len(cp)]
+                    L = math.hypot(b[0] - a[0], b[1] - a[1]) or 1.0
+                    nx, ny = -(b[1] - a[1]) / L, (b[0] - a[0]) / L       # normal hacia adentro del cutter
+                    d = nx * a[0] + ny * a[1]
+                    fuera = clip_halfplane(rest, -nx, -ny, -d)
+                    if len(fuera) >= 3 and abs(area(fuera)) > 1e-6:
+                        new.append(fuera)
+                    rest = clip_halfplane(rest, nx, ny, d)
+                    if len(rest) < 3 or abs(area(rest)) < 1e-6:
+                        rest = []
+                        break
+                if rest:
+                    dentro.append(rest)
+            pieces = new
+        inside.append([o for o, _ in union_parts(dentro)])
+    return union_parts(pieces), inside

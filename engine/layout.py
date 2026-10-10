@@ -9,7 +9,7 @@ from . import plans as P
 from . import standards as ST
 from . import programs as PR
 
-VERSION = "2.3"
+VERSION = "2.4"
 
 DEFAULT_PARAMS = {
     # Masa
@@ -40,12 +40,14 @@ DEFAULT_PARAMS = {
     "core_auto": True,          # núcleo dimensionado a partir de escalera + ascensores (standards)
     "standards": None,          # valores que sobrescriben engine/standards.py
     "medianeras": None,         # [{"a":[x,y],"b":[x,y],"retiro":m}] bordes del predio contra linderos
+    "patios_mode": "auto",      # auto (patios en predios entre medianeras demasiado profundos) | manual
+    "patios": None,             # patios manuales: [[[x,y],...],...] en coordenadas de mundo
 }
 
 
 def merge_params(p):
     out = dict(DEFAULT_PARAMS)
-    out.update({k: v for k, v in (p or {}).items() if v is not None or k in ("stories", "centerline", "centerlines", "cores", "medianeras")})
+    out.update({k: v for k, v in (p or {}).items() if v is not None or k in ("stories", "centerline", "centerlines", "cores", "medianeras", "patios")})
     return out
 
 
@@ -609,6 +611,17 @@ def is_between(plate, params):
         bl(G.to_world([((a0 + a1) / 2, b1)], (0.0, 0.0), ang)[0])
 
 
+def _between_depth(params):
+    """Fondo de las viviendas hacia cada frente entre medianeras: el que da el m² objetivo con el frente mínimo
+    para sus dormitorios."""
+    mix_ = [m for m in params["unit_mix"] if m.get("percent", 0) > 0 and m.get("area", 0) > 0]
+    tot_ = sum(m["percent"] for m in mix_) or 1.0
+    avg_a = sum(m["percent"] / tot_ * m["area"] for m in mix_) if mix_ else 75.0
+    avg_f = sum(m["percent"] / tot_ * P.facade_min(int(m["dorms"]) if m.get("dorms") is not None
+                                                    else P.bedrooms_for(m["area"])) for m in mix_) if mix_ else 9.4
+    return max(7.5, min(params["max_unit_depth"], 1.15 * avg_a / max(avg_f, 1.0)))
+
+
 def _generate_circulation(plate, params):
     pieces = build_pieces(plate, params)
     cw = params["corridor_width"]
@@ -624,13 +637,7 @@ def _generate_circulation(plate, params):
         # pasillo contra la medianera hasta ellas y zona central sin luz (requiere patios)
         loc = pc["loc_plate"]
         _, ly0, _, ly1 = G.bbox(loc)
-        # fondo de las viviendas al frente: el que da el m² objetivo con el frente mínimo para sus dormitorios
-        mix_ = [m for m in params["unit_mix"] if m.get("percent", 0) > 0 and m.get("area", 0) > 0]
-        tot_ = sum(m["percent"] for m in mix_) or 1.0
-        avg_a = sum(m["percent"] / tot_ * m["area"] for m in mix_) if mix_ else 75.0
-        avg_f = sum(m["percent"] / tot_ * P.facade_min(int(m["dorms"]) if m.get("dorms") is not None
-                                                        else P.bedrooms_for(m["area"])) for m in mix_) if mix_ else 9.4
-        D = max(7.5, min(params["max_unit_depth"], 1.15 * avg_a / max(avg_f, 1.0)))
+        D = _between_depth(params)
         cwc = params.get("_cw_base", 2.0)
         pc["side_region"] = {1: loc, -1: loc}
         pc["dark"] = []
@@ -952,13 +959,13 @@ def unit_rooms(u, params, pc=None, plate=None):
     back = lambda pt: (pt[0], side * (pt[1] + y_in))
     is_fac = None
     if pc is not None and plate:
-        bl = params.get("_blind")
+        bl, pd = params.get("_blind"), params.get("_patio_dark")
 
         def is_fac(p, q):
             for t_ in (0.25, 0.5, 0.75):
                 m = (p[0] + (q[0] - p[0]) * t_, p[1] + (q[1] - p[1]) * t_)
                 w = G.to_world([back(m)], pc["origin"], pc["angle"])[0]
-                if _dist_to_boundary(w, plate) > 0.4 or (bl and bl(w)):
+                if _dist_to_boundary(w, plate) > 0.4 or (bl and bl(w)) or (pd and pd(w)):
                     return False
             return True
     res = P.layout_unit(poly, nb, is_fac, ST.merged(params.get("standards"))["vivienda"])
@@ -976,6 +983,88 @@ def unit_rooms(u, params, pc=None, plate=None):
     return res
 
 
+# ---------------------------------------------------------------- patios y bloques
+def auto_patios(fp, plate, params, ancho):
+    """Patios automáticos: un predio entre medianeras demasiado profundo para que llegue la luz a todo se divide en
+    bloques iguales separados por patios de `ancho` m (cada bloque con su núcleo y una vivienda hacia cada lado)."""
+    if not is_between(plate, params):
+        return []
+    th, (poly,) = decompose_wings(plate)
+    x0, y0, x1, y1 = G.bbox([G.rotate(p, -th) for p in poly])
+    ang = th if (x1 - x0) >= (y1 - y0) else th + math.pi / 2       # a lo largo de las medianeras
+    u0, v0, u1, v1 = G.bbox(G.to_local(fp, (0.0, 0.0), ang))
+    cw, D, muro = params["corridor_width"], _between_depth(params), params["outer_wall"]
+    franja = max(cw, params["core_depth"] - cw)              # núcleo + hall en el medio de cada bloque
+    lleno = 2 * (D + 1.5) + franja + 2 * muro                # fondo que se ilumina entero desde sus dos frentes
+    L = u1 - u0
+    if L <= 2 * (D + cw + 1.0) + franja + 2 * muro:          # sin patio quedaría a lo sumo 1 m sin luz
+        return []
+    n = max(2, int(math.ceil((L + ancho) / (lleno + ancho))))
+    B = (L - (n - 1) * ancho) / n
+    out = []
+    for k in range(1, n):
+        a = u0 + k * B + (k - 1) * ancho
+        out.append(G.to_world([(a, v0 - 1), (a + ancho, v0 - 1), (a + ancho, v1 + 1), (a, v1 + 1)], (0.0, 0.0), ang))
+    return out
+
+
+def split_blocks(fp, patios, params, warnings):
+    """Huella menos patios -> (huellas de los bloques, plantas de los bloques, patios dentro de la huella)."""
+    partes, dentro = G.subtract(fp, patios)
+    huecos = any(h for _, h in partes)
+    usar = []
+    for i, d in enumerate(dentro):
+        if not d:
+            warnings.append("Patio %d: queda fuera de la masa y no se usa" % (i + 1))
+        elif huecos and not any(_dist_to_boundary(q, fp) < 1e-3 for pp in d for q in pp):
+            warnings.append("Patio %d: está rodeado de edificio por los cuatro lados. Los patios interiores llegan en "
+                            "una próxima versión; por ahora no se usa" % (i + 1))
+        else:
+            usar.append(i)
+    if len(usar) < len(patios):
+        partes, dentro = G.subtract(fp, [patios[i] for i in usar])
+    bloques, plantas = [], []
+    for b, _ in partes:
+        b = G.ensure_ccw(G.clean(b))
+        pl = G.inset(b, params["outer_wall"]) if params["outer_wall"] > 0 else b
+        if len(pl) < 3 or G.area(pl) < 10.0:
+            warnings.append("Un bloque de %.0f m² queda demasiado chico o angosto entre patios: no se usa" % abs(G.area(b)))
+            continue
+        bloques.append(b)
+        plantas.append(G.ensure_ccw(G.clean(pl)))
+    return bloques, plantas, [pp for d in dentro for pp in d]
+
+
+def make_patio_dark(partes, ancho_min, muro, warnings):
+    """Función que dice si un punto de la planta da a un patio más angosto que ancho_min (sus caras no iluminan)."""
+    angostos = []
+    for p in partes:
+        a = G.min_area_rect_angle(p)
+        x0, y0, x1, y1 = G.bbox([G.rotate(q, -a) for q in p])
+        w = min(x1 - x0, y1 - y0)
+        if w + 1e-6 < ancho_min:
+            angostos.append(p)
+            warnings.append("Patio de %.1f m de ancho: menos de %.1f m, no ilumina (sus caras cuentan como medianera)"
+                            % (w, ancho_min))
+    if not angostos:
+        return None
+    return lambda pt: any(G.point_in_poly(pt, p) or _dist_to_boundary(pt, p) <= muro + 0.5 for p in angostos)
+
+
+def _block_of(pt, bloques):
+    for i, b in enumerate(bloques):
+        if G.point_in_poly(pt, b):
+            return i
+    return min(range(len(bloques)), key=lambda i: _dist_to_boundary(pt, bloques[i]))
+
+
+def _block_of_line(line, bloques):
+    """Bloque donde está la mayor parte de una polilínea (por sus vértices y puntos medios)."""
+    pts = list(line) + [((a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0) for a, b in zip(line, line[1:])]
+    votos = [_block_of(p, bloques) for p in pts]
+    return max(set(votos), key=votos.count)
+
+
 # ---------------------------------------------------------------- orquestación
 def generate(data):
     params = merge_params(data.get("params"))
@@ -985,22 +1074,7 @@ def generate(data):
     footprint = data["footprint"]
     height = float(data.get("height") or params["floor_height"] * 5)
     fp, plate, stories = build_massing(footprint, height, params)
-    gfa_plate = abs(G.area(plate))
-    res = {"stage": stage, "footprint": G.pol_to_list(fp), "plate": G.pol_to_list(plate),
-           "stories": stories, "warnings": [],
-           "metrics": {"plate_area": round(gfa_plate, 1), "gfa": round(abs(G.area(fp)) * len(stories), 1),
-                       "stories": len(stories)}}
-    fp_area = abs(G.area(fp))
-    progs = {}
-    for st in stories:
-        d = progs.setdefault(st["program"], {"stories": 0, "gfa": 0.0, "nia": 0.0, "nsa": 0.0, "levels": []})
-        d["stories"] += 1
-        d["gfa"] += fp_area
-        d["nia"] += gfa_plate
-        d["levels"].append(st["index"])
-    for d in progs.values():
-        d["gfa"], d["nia"] = round(d["gfa"], 1), round(d["nia"], 1)
-    res["metrics"]["programs"] = progs
+    res = {"stage": stage, "footprint": G.pol_to_list(fp), "stories": stories, "warnings": []}
     meds = params.get("medianeras") or []
     rmin = S0["predio"]["retiro_ventanas"]
     res["medianeras"] = [{"a": m["a"], "b": m["b"], "retiro": float(m.get("retiro") or 0),
@@ -1019,100 +1093,160 @@ def generate(data):
                                    (s_["index"], s_["height"], ST.stair_box(ST.merged(params.get("standards"))["nucleo"], s_["height"])[2]))
     top_h = stories[-1]["z"]
     n_res_lv = sum(1 for s_ in stories if s_["program"] == "Residential")
-    units_est = gfa_plate * 0.72 / max(_avg_unit_area(params), 1.0) * n_res_lv
+    units_est = abs(G.area(plate)) * 0.72 / max(_avg_unit_area(params), 1.0) * n_res_lv
     n_elev = ST.elevators_needed(S["nucleo"], len(stories), top_h, units_est)
     if params.get("core_auto", True):
         params["core_width"], params["core_depth"] = ST.core_size(S["nucleo"], floor_h, n_elev, cw)
     sw_, sl_, risers_ = ST.stair_box(S["nucleo"], floor_h)
     stype = ("común" if top_h <= 12 else "protegida (EP)" if top_h <= 30 else "presurizada (PFP)")
-    res["metrics"]["core"] = {"elevators": n_elev, "width": params["core_width"],
-                              "depth": round(params["core_depth"] - cw, 2), "stair_type": stype,
-                              "stair_box": [round(sw_, 2), round(sl_, 2)], "risers": risers_,
-                              "riser_h": round(floor_h / risers_, 3), "top_level": round(top_h, 2)}
-    if stage == "massing":
+    core_m = {"elevators": n_elev, "width": params["core_width"],
+              "depth": round(params["core_depth"] - cw, 2), "stair_type": stype,
+              "stair_box": [round(sw_, 2), round(sl_, 2)], "risers": risers_,
+              "riser_h": round(floor_h / risers_, 3), "top_level": round(top_h, 2)}
+    # ---- patios: la huella menos los patios da uno o más bloques, cada uno con su planta, su pasillo y su núcleo
+    ancho_patio = S0["predio"]["patio_min"]
+    auto = params.get("patios_mode", "auto") != "manual"
+    patios = auto_patios(fp, plate, params, ancho_patio) if auto else \
+        [p for p in (params.get("patios") or []) if len(p) >= 3]
+    if patios:
+        bloques, plantas, partes = split_blocks(fp, patios, params, res["warnings"])
+        params["_patio_dark"] = make_patio_dark(partes, ancho_patio, params["outer_wall"], res["warnings"])
+    else:
+        bloques, plantas, partes = [fp], [plate], []
+    gfa_plate = sum(abs(G.area(p)) for p in plantas)
+    fp_area = sum(abs(G.area(b)) for b in bloques)
+    res["plate"] = G.pol_to_list(plantas[0] if plantas else plate)
+    res["blocks"] = [{"footprint": G.pol_to_list(b), "plate": G.pol_to_list(p)} for b, p in zip(bloques, plantas)]
+    res["patios"] = [G.pol_to_list(p) for p in partes]
+    res["patios_auto"] = auto
+    res["metrics"] = {"plate_area": round(gfa_plate, 1), "gfa": round(fp_area * len(stories), 1), "stories": len(stories)}
+    if partes:
+        res["metrics"]["blocks"] = len(bloques)
+        res["metrics"]["patio_area"] = round(sum(abs(G.area(p)) for p in partes), 1)
+    progs = {}
+    for st in stories:
+        d = progs.setdefault(st["program"], {"stories": 0, "gfa": 0.0, "nia": 0.0, "nsa": 0.0, "levels": []})
+        d["stories"] += 1
+        d["gfa"] += fp_area
+        d["nia"] += gfa_plate
+        d["levels"].append(st["index"])
+    for d in progs.values():
+        d["gfa"], d["nia"] = round(d["gfa"], 1), round(d["nia"], 1)
+    res["metrics"]["programs"] = progs
+    res["metrics"]["core"] = core_m
+    if stage == "massing" or not plantas:
         return res
-    if is_between(plate, params) and params.get("cores_mode") != "manual":
-        params["_cw_base"] = params["corridor_width"]
-        params["corridor_width"] = max(params["corridor_width"], params["core_depth"] - params["corridor_width"])
-        cw = params["corridor_width"]
-        res["metrics"]["between"] = True
-    pieces = generate_circulation(plate, params)
     W = lambda pc, pl: G.pol_to_list(G.to_world(pl, pc["origin"], pc["angle"]))
-    p0 = pieces[0]
-    res["frame"] = {"origin": [round(p0["origin"][0], 4), round(p0["origin"][1], 4)],
-                    "angle": round(p0["angle"], 6), "xa": p0["xa"], "xb": p0["xb"]}
-    res["corridors"] = []
-    res["cores"] = []
-    for pc in pieces:
-        if pc["corridor_local"]:
-            res["corridors"].append(W(pc, pc["corridor_local"]))
-        for ext in pc["corridor_ext"]:
-            res["corridors"].append(G.pol_to_list(ext))
-        for c in pc["cores"]:
-            if c["poly_local"]:
-                cen = G.to_world([G.centroid(c["poly_local"])], pc["origin"], pc["angle"])[0]
-                if c.get("between"):
-                    parts = PR.core_parts(c["box"], 1, -(c["box"][3] - c["box"][1]), S["nucleo"], floor_h, n_elev)
-                else:
-                    parts = PR.core_parts(c["box"], c["side"], cw, S["nucleo"], floor_h, n_elev)
-                res["cores"].append({"poly": W(pc, c["poly_local"]), "x": round(c["x"], 3), "side": c["side"],
-                                     "center": [round(cen[0], 3), round(cen[1], 3)], "spec": c.get("spec"),
-                                     "parts": [{"kind": p_["kind"], "name": p_["name"], "poly": W(pc, p_["poly"]),
-                                                "lines": [W(pc, ln) for ln in p_["lines"]]} for p_ in parts]})
-    res["metrics"]["wings"] = len(pieces)
-    res["dark_zones"] = [G.pol_to_list(d_) for pc in pieces for d_ in pc.get("dark", [])]
+    manual = params.get("cores_mode") == "manual"
+    res["corridors"], res["cores"], res["dark_zones"] = [], [], []
+    bloques_pc = []                                          # por bloque: (piezas, parámetros, planta, núcleos)
+    emax = 0.0
+    for bi, pl_b in enumerate(plantas):
+        pb = dict(params)
+        mapa = None
+        if len(plantas) > 1:
+            pb["core_count"] = 1                             # cada bloque, al menos un núcleo propio
+            if manual:
+                mapa = [k for k, c in enumerate(params.get("cores") or []) if _block_of(c, bloques) == bi]
+                pb["cores"] = [params["cores"][k] for k in mapa]
+            if params.get("centerlines"):
+                pb["centerlines"] = [l for l in params["centerlines"] if _block_of_line(l, bloques) == bi] or None
+        if is_between(pl_b, pb) and not manual:
+            pb["_cw_base"] = pb["corridor_width"]
+            pb["corridor_width"] = max(pb["corridor_width"], pb["core_depth"] - pb["corridor_width"])
+            res["metrics"]["between"] = True
+        cw_b = pb["corridor_width"]
+        pieces = generate_circulation(pl_b, pb)
+        if "frame" not in res:
+            p0 = pieces[0]
+            res["frame"] = {"origin": [round(p0["origin"][0], 4), round(p0["origin"][1], 4)],
+                            "angle": round(p0["angle"], 6), "xa": p0["xa"], "xb": p0["xb"]}
+        cpolys = []
+        for pc in pieces:
+            if pc["corridor_local"]:
+                res["corridors"].append(W(pc, pc["corridor_local"]))
+            for ext in pc["corridor_ext"]:
+                res["corridors"].append(G.pol_to_list(ext))
+            for c in pc["cores"]:
+                if c["poly_local"]:
+                    cen = G.to_world([G.centroid(c["poly_local"])], pc["origin"], pc["angle"])[0]
+                    if c.get("between"):
+                        parts = PR.core_parts(c["box"], 1, -(c["box"][3] - c["box"][1]), S["nucleo"], floor_h, n_elev)
+                    else:
+                        parts = PR.core_parts(c["box"], c["side"], cw_b, S["nucleo"], floor_h, n_elev)
+                    spec = c.get("spec")
+                    if mapa is not None and spec is not None:
+                        spec = mapa[spec]
+                    res["cores"].append({"poly": W(pc, c["poly_local"]), "x": round(c["x"], 3), "side": c["side"],
+                                         "center": [round(cen[0], 3), round(cen[1], 3)], "spec": spec,
+                                         "parts": [{"kind": p_["kind"], "name": p_["name"], "poly": W(pc, p_["poly"]),
+                                                    "lines": [W(pc, ln) for ln in p_["lines"]]} for p_ in parts]})
+                    cpolys.append(res["cores"][-1]["poly"])
+        if len(plantas) > 1 and not cpolys:
+            res["warnings"].append("El bloque %d no tiene núcleo: añade uno (en modo manual cada bloque necesita el suyo)" % (bi + 1))
+        res["dark_zones"] += [G.pol_to_list(d_) for pc in pieces for d_ in pc.get("dark", [])]
+        for i, pc in enumerate(pieces):
+            n = max(2, int((pc["xb"] - pc["xa"])))
+            for k in range(n + 1):
+                emax = max(emax, egress_at(pieces, i, pc["xa"] + (pc["xb"] - pc["xa"]) * k / n))
+        bloques_pc.append((pieces, pb, pl_b, cpolys))
+    res["metrics"]["wings"] = sum(len(b[0]) for b in bloques_pc)
     if res["dark_zones"]:
         dz_area = sum(abs(G.area(d_)) for d_ in res["dark_zones"])
         res["warnings"].append("Zona central sin luz natural (%.0f m² por planta): entre medianeras solo los frentes "
                                "iluminan; hacen falta patios de aire y luz" % dz_area)
         res["metrics"]["dark_area"] = round(dz_area, 1)
     res["metrics"]["core_count"] = len(res["cores"])
-    emax = 0.0
-    for i, pc in enumerate(pieces):
-        n = max(2, int((pc["xb"] - pc["xa"])))
-        for k in range(n + 1):
-            emax = max(emax, egress_at(pieces, i, pc["xa"] + (pc["xb"] - pc["xa"]) * k / n))
     res["metrics"]["egress_max"] = round(emax, 1)
     if emax > params["egress_multi"]:
         res["warnings"].append("Hay puntos del pasillo a %.1f m de un núcleo (> %.0f m permitidos)" %
                                (emax, params["egress_multi"]))
     # ---- programas no residenciales (misma posición de núcleos en todos los niveles)
-    cores_area = sum(abs(G.area(c["poly"])) for c in res["cores"])
     layouts = {}
     for prog in sorted({s_["program"] for s_ in stories}):
         if prog in ("Office", "Retail", "Amenities"):
             P_ = S["oficinas"] if prog == "Office" else S["comercial"]
-            fp_ = PR.free_plan(pieces, gfa_plate, cores_area, cw, P_)
-            if fp_:
-                layouts[prog] = {"kind": "free", "workers": fp_["workers"], "wc": fp_["wc"],
-                                 "free_area": fp_["free_area"], "bath_area": fp_["bath_area"],
-                                 "hall_area": fp_["hall_area"],
-                                 "shapes": [{"kind": sh["kind"], "name": sh["name"], "poly": W(sh["pc"], sh["poly"])}
-                                            for sh in fp_["shapes"]]}
+            acc = None
+            for pieces, pb, pl_b, cpolys in bloques_pc:
+                fp_ = PR.free_plan(pieces, abs(G.area(pl_b)), sum(abs(G.area(c)) for c in cpolys), pb["corridor_width"], P_)
+                if fp_:
+                    if acc is None:
+                        acc = {"kind": "free", "workers": 0, "wc": 0, "free_area": 0.0, "bath_area": 0.0,
+                               "hall_area": 0.0, "shapes": []}
+                    for k in ("workers", "wc", "free_area", "bath_area", "hall_area"):
+                        acc[k] += fp_[k]
+                    acc["shapes"] += [{"kind": sh["kind"], "name": sh["name"], "poly": W(sh["pc"], sh["poly"])}
+                                      for sh in fp_["shapes"]]
+            if acc:
+                layouts[prog] = acc
                 d = res["metrics"]["programs"].get(prog)
                 if d:
-                    d["free_area"] = round(fp_["free_area"] * d["stories"], 1)
-                    d["workers"] = fp_["workers"] * d["stories"]
+                    d["free_area"] = round(acc["free_area"] * d["stories"], 1)
+                    d["workers"] = acc["workers"] * d["stories"]
         elif prog == "Parking":
-            pk = PR.parking(plate, [c["poly"] for c in res["cores"]], S["estacionamiento"])
-            layouts[prog] = {"kind": "parking", "count": pk["count"],
-                             "stalls": [G.pol_to_list(p_) for p_ in pk["stalls"]],
-                             "aisles": [G.pol_to_list(p_) for p_ in pk["aisles"]]}
+            acc = {"kind": "parking", "count": 0, "stalls": [], "aisles": []}
+            for pieces, pb, pl_b, cpolys in bloques_pc:
+                pk = PR.parking(pl_b, cpolys, S["estacionamiento"])
+                acc["count"] += pk["count"]
+                acc["stalls"] += [G.pol_to_list(p_) for p_ in pk["stalls"]]
+                acc["aisles"] += [G.pol_to_list(p_) for p_ in pk["aisles"]]
+            layouts[prog] = acc
             d = res["metrics"]["programs"].get(prog)
             if d:
-                d["stalls"] = pk["count"] * d["stories"]
+                d["stalls"] = acc["count"] * d["stories"]
     res["program_layouts"] = layouts
     if stage == "corridor":
         return res
     state = {}
     units = []
-    for i, pc in enumerate(pieces):
-        us, warns = generate_unit_mix(pc, params, state)
-        res["warnings"] += warns
-        for u in us:
-            u["piece"] = i
-            u["egress"] = egress_at(pieces, i, (u["x0"] + u["x1"]) / 2.0) + pc.get("egress_extra", {}).get(u["side"], 0.0)
-        units += us
+    for pieces, pb, pl_b, _ in bloques_pc:
+        for i, pc in enumerate(pieces):
+            us, warns = generate_unit_mix(pc, pb, state)
+            res["warnings"] += warns
+            for u in us:
+                u["_pc"], u["_pb"], u["_plate"] = pc, pb, pl_b
+                u["egress"] = egress_at(pieces, i, (u["x0"] + u["x1"]) / 2.0) + pc.get("egress_extra", {}).get(u["side"], 0.0)
+            units += us
     for i, u in enumerate(units):
         u["id"] = "U%02d" % (i + 1)
         if u["target"] and abs(u["area"] - u["target"]) > 0.35 * u["target"]:
@@ -1124,7 +1258,7 @@ def generate(data):
     res["metrics"]["efficiency"] = round(served / gfa_plate * 100, 1) if gfa_plate else 0
     res["units"] = []
     for u in units:
-        pc = pieces[u["piece"]]
+        pc = u["_pc"]
         eg = u["egress"]
         status = "ok" if eg <= params["egress_single"] else ("multi" if eg <= params["egress_multi"] else "fail")
         item = {"id": u["id"], "type": u["type"], "area": round(u["area"], 1), "target": u["target"],
@@ -1132,7 +1266,7 @@ def generate(data):
                 "egress_status": status, "poly": W(pc, u["poly_local"]),
                 "door": [round(v, 3) for v in G.to_world([u["door_local"]], pc["origin"], pc["angle"])[0]]}
         if stage == "plans":
-            pl = unit_rooms(u, params, pc, plate)
+            pl = unit_rooms(u, u["_pb"], pc, u["_plate"])
             Wp = lambda pt, pc=pc: [round(v, 3) for v in G.to_world([pt], pc["origin"], pc["angle"])[0]]
             item["bedrooms"] = pl["bedrooms"]
             item["rooms"] = [{"id": r["id"], "name": r["name"], "kind": r["kind"], "area": round(r["area"], 1),

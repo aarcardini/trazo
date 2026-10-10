@@ -100,7 +100,7 @@ def test_con_servidor():
         out = salida(m.diagnostico)
         assert "Servidor: Trazo v%s conectado" % layout.VERSION in out, out
         assert "Masa en el servidor: ninguna" in out and "Resultado en el servidor: ninguno" in out, out
-        assert "Capa Trazo::Centerline: no existe" in out and "todo listo" in out, out
+        assert "Capa Trazo::Centerline: no existe" in out and "Capa Trazo::Patios: no existe" in out and "todo listo" in out, out
         m.http("POST", "/api/mass", {"name": "Barra de prueba", "footprint": [[0, 0], [60, 0], [60, 16], [0, 16]]})
         assert "«Barra de prueba»" in salida(m.diagnostico)
         with redirect_stderr(io.StringIO()):                 # el servidor imprime el error en su ventana

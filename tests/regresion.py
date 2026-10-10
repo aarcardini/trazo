@@ -42,6 +42,8 @@ METRICAS = {
         "sin_luz": ("zona sin luz (m²)", 1.0, 0.02),
         "plazas": ("plazas de estacionamiento", 0, 0),
         "planta_libre": ("planta libre oficinas/comercio (m²)", 1.0, 0.01),
+        "bloques": ("bloques (separados por patios)", 0, 0),
+        "patios_m2": ("patios (m²)", 1.0, 0.02),
     },
     "masterplan": {
         "manzanas": ("manzanas", 0, 0),
@@ -70,6 +72,8 @@ def _edificio(s):
     for k in ("stories", "medianeras"):
         if s.get(k):
             p[k] = s[k]
+    if s.get("patios"):
+        p["patios_mode"], p["patios"] = "manual", s["patios"]
     m = layout.generate({"footprint": s["footprint"], "height": s.get("height"), "stage": "plans", "params": p})["metrics"]
     progs = m.get("programs", {})
     libre = sum(v.get("free_area", 0) for v in progs.values())
@@ -81,7 +85,7 @@ def _edificio(s):
            "circulacion": m["circulation_pct"], "match_score": m["mix"]["match_score"], "fit_m2": m["mix"]["fit_m2"],
            "calidad_planos": m.get("plan_score"), "evacuacion_max": m["egress_max"], "nsa_total": m["nsa_total"],
            "sin_luz": m.get("dark_area"), "plazas": progs.get("Parking", {}).get("stalls"),
-           "planta_libre": round(libre, 1) if libre else None}
+           "planta_libre": round(libre, 1) if libre else None, "bloques": m.get("blocks"), "patios_m2": m.get("patio_area")}
     return {k: v for k, v in out.items() if v is not None}
 
 

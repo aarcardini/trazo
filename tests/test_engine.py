@@ -123,10 +123,10 @@ if __name__ == "__main__":
 
 
 def test_no_giant_units():
-    """Barra larga con las dos medianeras largas: unidades cerca del m² objetivo, nunca gigantes."""
+    """Barra larga con las dos medianeras largas y sin patios: unidades cerca del m² objetivo, nunca gigantes."""
     fp = [[0,0],[60,0],[60,16],[0,16]]
     meds = [{"a":[0,0],"b":[60,0],"retiro":0},{"a":[60,16],"b":[0,16],"retiro":0}]
-    r = run(fp, medianeras=meds)
+    r = run(fp, medianeras=meds, patios_mode="manual")       # sin patios (en automático se abren patios)
     assert r["units"] and all(u["area"] < 1.4 * u["target"] for u in r["units"]), [(u["area"], u["target"]) for u in r["units"]]
     assert r.get("dark_zones"), "debe marcar la zona sin luz"
 
@@ -261,3 +261,47 @@ def test_web_cotas_y_escala():
 
 if __name__ == "__main__":
     test_web_cotas_y_escala(); print("OK13")
+
+
+def test_patios():
+    """Patios (v2.4): automáticos en predios entre medianeras profundos, y manuales; cada bloque con su núcleo."""
+    from engine import geometry as G
+    meds = lambda w, d: [{"a":[w,0],"b":[w,d],"retiro":0},{"a":[0,d],"b":[0,0],"retiro":0}]
+    # el ejemplo pedido: lote 10 × 40 entre medianeras -> bloque al frente y al fondo, patio de 3 m, un núcleo en cada uno
+    fp = [[0,0],[10,0],[10,40],[0,40]]
+    r = run(fp, medianeras=meds(10, 40))
+    m = r["metrics"]
+    assert m["blocks"] == 2 and len(r["patios"]) == 1 and not r.get("dark_zones"), m
+    assert abs(m["patio_area"] - 30) < 0.5 and m["gfa"] < 400 * m["stories"], m      # 10 × 3 m, que no se construye
+    for b in r["blocks"]:
+        assert sum(G.point_in_poly(c["center"], b["footprint"]) for c in r["cores"]) == 1, "un núcleo por bloque"
+        assert any(G.point_in_poly(G.centroid(u["poly"]), b["footprint"]) for u in r["units"]), "viviendas en cada bloque"
+    assert not [c for u in r["units"] for c in u["checks"] if not c["ok"] and "sin fachada" in c["msg"]], \
+        "las viviendas que dan al patio tienen luz"
+    assert run(fp, medianeras=meds(10, 40), patios_mode="manual").get("dark_zones"), "sin patios vuelve la zona sin luz"
+    # el lote de 10 × 28 no es tan profundo: sigue sin patio
+    assert not run([[0,0],[10,0],[10,28],[0,28]], medianeras=meds(10, 28))["patios"]
+    # 16 × 60: tres bloques con su núcleo y planos sin observaciones
+    r = run([[0,0],[60,0],[60,16],[0,16]], h=18, medianeras=[{"a":[0,0],"b":[60,0],"retiro":0},{"a":[60,16],"b":[0,16],"retiro":0}])
+    assert r["metrics"]["blocks"] == 3 and r["metrics"]["core_count"] == 3 and r["metrics"]["plan_score"] == 100, r["metrics"]
+    # patio manual angosto (2 m): avisa y sus caras no iluminan
+    r = run(fp, medianeras=meds(10, 40), patios_mode="manual", patios=[[[-1,19],[11,19],[11,21],[-1,21]]])
+    assert any("no ilumina" in w for w in r["warnings"]), r["warnings"]
+    assert any("sin fachada" in c["msg"] for u in r["units"] for c in u["checks"] if not c["ok"])
+    # patio manual que parte una barra, con núcleos manuales: cada núcleo va a su bloque y conserva su índice
+    r = run([[0,0],[60,0],[60,16],[0,16]], patios_mode="manual", patios=[[[28,-1],[32,-1],[32,17],[28,17]]],
+            cores_mode="manual", cores=[[50, 8], [10, 8]])
+    assert r["metrics"]["blocks"] == 2 and sorted(c["spec"] for c in r["cores"]) == [0, 1], r["cores"]
+    # patio interior (rodeado de edificio): todavía no se resuelve; avisa y no se usa
+    r = run([[0,0],[40,0],[40,40],[0,40]], patios_mode="manual", patios=[[[15,15],[25,15],[25,25],[15,25]]])
+    assert any("rodeado de edificio" in w for w in r["warnings"]) and not r["patios"]
+    # geometría: banda que parte, muesca (U), patio no convexo
+    R = lambda x0, y0, x1, y1: [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+    assert [round(G.area(o)) for o, _ in G.subtract(R(0, 0, 10, 40), [R(-1, 18, 11, 21)])[0]] == [190, 180]
+    (u, h), = G.subtract(R(0, 0, 12, 30), [R(9, 10, 13, 18)])[0]
+    assert len(u) == 8 and not h and round(G.area(u)) == 336
+    (l, _), = G.subtract(R(0, 0, 20, 30), [[(-1, 10), (12, 10), (12, 14), (8, 14), (8, 21), (-1, 21)]])[0]
+    assert round(G.area(l)) == 496
+
+if __name__ == "__main__":
+    test_patios(); print("OK14")

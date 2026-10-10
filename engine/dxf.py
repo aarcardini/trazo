@@ -11,6 +11,8 @@ def _poly(layer, pts, z=0.0, closed=True):
 def result_to_dxf(res):
     out = "0\nSECTION\n2\nENTITIES\n"
     out += _poly("Trazo_Footprint", res["footprint"])
+    for p in res.get("patios", []):
+        out += _poly("Trazo_Patios", p)
     stories = res.get("stories", [])
     res_stories = [s for s in stories if s["program"] == "Residential"] or stories[:1]
     for s in res_stories:
