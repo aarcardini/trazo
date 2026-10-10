@@ -18,6 +18,7 @@ DOOR = 0.8            # ancho de puerta
 LIV_MIN = 3.4         # frente mínimo del estar
 BED_MAIN = 3.2        # frente dormitorio principal
 BED_W = 2.8           # frente dormitorio secundario
+BED_D = 3.0           # fondo mínimo de un dormitorio detrás del pasillo interno
 MIN_W = {"bedroom": 2.6, "living": 3.0, "dining": 2.4, "bath": 1.5, "hallway": 0.9, "kitchen": 1.6, "hall": 1.1,
          "laundry": 1.0, "storage": 0.8, "study": 2.2}
 DAY = ("hall", "kitchen", "dining", "living", "hallway")     # se conectan en abierto si comparten borde
@@ -51,6 +52,11 @@ def bedrooms_for(area):
     if area < 85:
         return 2
     return 3
+
+
+def fondo_min():
+    """Fondo mínimo de una vivienda: el pasillo interno y un dormitorio detrás."""
+    return BED_D + HALL
 
 
 def facade_min(nb):
@@ -149,8 +155,8 @@ def _plan_rects(x0, v0, x1, v1, nb, warnings):
         hv0, hv1 = v0, v0 + HALL
         add("hallway", "hallway", (xs, hv0, x1, hv1))
         bedD = D - HALL
-        if bedD < 3.0:
-            warnings.append("Fondo de %.1f m escaso para dormitorios (mín. %.1f m)" % (D, 3.0 + HALL))
+        if bedD < BED_D:
+            warnings.append("Fondo de %.1f m escaso para dormitorios (mín. %.1f m)" % (D, fondo_min()))
         kd = min(2.6, max(1.8, D * 0.4))
 
     # que cada dormitorio alcance su área mínima con el fondo disponible (si el frente lo permite)

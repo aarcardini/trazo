@@ -292,8 +292,8 @@ def test_patios():
     r = run([[0,0],[60,0],[60,16],[0,16]], patios_mode="manual", patios=[[[28,-1],[32,-1],[32,17],[28,17]]],
             cores_mode="manual", cores=[[50, 8], [10, 8]])
     assert r["metrics"]["blocks"] == 2 and sorted(c["spec"] for c in r["cores"]) == [0, 1], r["cores"]
-    # patio interior (rodeado de edificio): todavía no se resuelve; avisa y no se usa
-    r = run([[0,0],[40,0],[40,40],[0,40]], patios_mode="manual", patios=[[[15,15],[25,15],[25,25],[15,25]]])
+    # patio interior girado respecto de la masa: todavía no se resuelve; avisa y no se usa (ver test_patios_interiores)
+    r = run([[0,0],[40,0],[40,40],[0,40]], patios_mode="manual", patios=[[[20,14],[26,20],[20,26],[14,20]]])
     assert any("rodeado de edificio" in w for w in r["warnings"]) and not r["patios"]
     # geometría: banda que parte, muesca (U), patio no convexo
     R = lambda x0, y0, x1, y1: [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
@@ -305,3 +305,64 @@ def test_patios():
 
 if __name__ == "__main__":
     test_patios(); print("OK14")
+
+
+def test_patios_interiores():
+    """Patios rodeados de edificio (v2.6, R1.3): el bloque es un anillo dividido en alas alrededor del patio, con un
+    pasillo que da la vuelta, viviendas con luz hacia el patio y solo los núcleos que pide la evacuación."""
+    import math
+    from engine import geometry as G
+    from engine import layout as L
+    R = lambda x0, y0, x1, y1: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]
+    sin_fachada = lambda r: [c for u in r["units"] for c in u["checks"] if not c["ok"] and "sin fachada" in c["msg"]]
+    # 40 × 30 con patio central de 14 × 8 (ejemplo «patio_central»): cuatro alas, dos núcleos, todo con luz
+    r = run(R(0, 0, 40, 30), patios_mode="manual", patios=[R(13, 11, 27, 19)])
+    m = r["metrics"]
+    assert m["blocks"] == 1 and m["wings"] == 4 and m["core_count"] == 2, m
+    assert abs(m["patio_area"] - 112) < 0.5 and abs(m["gfa"] - (1200 - 112) * m["stories"]) < 1, m
+    b, = r["blocks"]
+    assert len(b["holes"]) == 1 and len(b["plate_holes"]) == 1, b
+    patio = r["patios"][0]
+    assert not any(G.point_in_poly(G.centroid(u["poly"]), patio) for u in r["units"]), "nada dentro del patio"
+    assert not sin_fachada(r) and m["egress_max"] <= 30 and m["efficiency"] > 65 and m["plan_score"] >= 85, m
+    for lado in ((13, 15), (27, 15), (20, 11), (20, 19)):     # el pasillo da la vuelta: bordea los cuatro lados
+        assert min(L._dist_to_boundary(lado, c) for c in r["corridors"]) < 1.0, lado
+    # la misma masa girada y en coordenadas UTM (como llega de un plano georreferenciado) da lo mismo:
+    # el centro de un polígono ya no pierde precisión con coordenadas grandes (antes el patio no se reconocía)
+    ang, o = 0.5, (580000.0, 6140000.0)
+    utm = lambda pl: [[o[0] + x * math.cos(ang) - y * math.sin(ang), o[1] + x * math.sin(ang) + y * math.cos(ang)] for x, y in pl]
+    ru = run(utm(R(0, 0, 40, 30)), patios_mode="manual", patios=[utm(R(13, 11, 27, 19))])
+    mu = ru["metrics"]
+    assert (mu["blocks"], mu["wings"], mu["core_count"], len(ru["units"])) == (1, 4, 2, len(r["units"])), mu
+    assert abs(mu["efficiency"] - m["efficiency"]) < 0.5 and abs(mu["patio_area"] - 112) < 0.5, mu
+    c, e = G.centroid(utm(R(0.35, 0.35, 19.2, 4.13))), utm([[9.775, 2.24]])[0]       # antes: 5 m de error
+    assert math.hypot(c[0] - e[0], c[1] - e[1]) < 1e-6 and abs(G.area(utm(R(0.35, 0.35, 19.2, 4.13))) - 71.253) < 1e-3, c
+    # entre medianeras 30 × 45 con patio de 12 × 17 (U cerrada): viviendas a los cuatro lados del patio, con luz
+    meds = [{"a": [30, 0], "b": [30, 45], "retiro": 0}, {"a": [0, 45], "b": [0, 0], "retiro": 0}]
+    r = run(R(0, 0, 30, 45), medianeras=meds, patios_mode="manual", patios=[R(9, 14, 21, 31)])
+    m = r["metrics"]
+    assert m["core_count"] == 2 and m["plan_score"] == 100 and not r.get("dark_zones") and not m.get("between"), m
+    medios = lambda pl: [((a[0] + b[0]) / 2, (a[1] + b[1]) / 2) for a, b in zip(pl, pl[1:] + pl[:1])]
+    al_patio = [u for u in r["units"] if min(L._dist_to_boundary(p, R(9, 14, 21, 31)) for p in medios(u["poly"])) < 0.6]
+    lados = {("O" if G.centroid(u["poly"])[0] < 9 else "E" if G.centroid(u["poly"])[0] > 21 else
+              "S" if G.centroid(u["poly"])[1] < 14 else "N") for u in al_patio}
+    assert lados == {"N", "S", "E", "O"}, lados
+    # claustro de alas profundas (40 × 40, patio 10 × 10): las esquinas interiores no llevan viviendas a oscuras
+    r = run(R(0, 0, 40, 40), patios_mode="manual", patios=[R(15, 15, 25, 25)])
+    assert r["units"] and not sin_fachada(r) and r["metrics"]["core_count"] == 2, r["metrics"]
+    # alas de menos de 5 m alrededor del patio: avisa y no lo usa; un patio en L en una masa ortogonal sí se usa
+    r = run(R(0, 0, 20, 14), patios_mode="manual", patios=[R(3, 3, 17, 11)])
+    assert any("menos de 5 m" in w for w in r["warnings"]) and not r["patios"], r["warnings"]
+    r = run(R(0, 0, 50, 40), patios_mode="manual", patios=[[[15, 12], [35, 12], [35, 18], [21, 18], [21, 28], [15, 28]]])
+    assert r["metrics"]["blocks"] == 1 and r["units"] and not any("Patio" in w for w in r["warnings"]), r["warnings"]
+    # patio interior angosto (2 m): avisa y sus caras cuentan como medianera
+    r = run(R(0, 0, 40, 30), patios_mode="manual", patios=[R(19, 11, 21, 19)])
+    assert any("no ilumina" in w for w in r["warnings"]) and sin_fachada(r), r["warnings"]
+    # núcleos manuales en el anillo: quedan donde se pidieron; las polilíneas no se usan y lo avisa
+    r = run(R(0, 0, 40, 30), patios_mode="manual", patios=[R(13, 11, 27, 19)], cores_mode="manual",
+            cores=[[13, 5], [27, 25]], centerlines=[[[0, 5], [40, 5]]])
+    assert sorted(c["spec"] for c in r["cores"]) == [0, 1] and len(r["cores"]) == 2, r["cores"]
+    assert any("polilíneas" in w for w in r["warnings"]) and r["units"], r["warnings"]
+
+if __name__ == "__main__":
+    test_patios_interiores(); print("OK15")

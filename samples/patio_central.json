@@ -1,0 +1,3 @@
+{"name": "Edificio con patio central 40 × 30 (patio 14 × 8)", "height": 15,
+ "footprint": [[0,0],[40,0],[40,30],[0,30]],
+ "patios": [[[13,11],[27,11],[27,19],[13,19]]]}

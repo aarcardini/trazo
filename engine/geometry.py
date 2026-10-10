@@ -5,12 +5,16 @@ EPS = 1e-9
 
 
 def area(poly):
-    """Área con signo (positiva si es antihoraria)."""
+    """Área con signo (positiva si es antihoraria). Se calcula desde el primer vértice: así es precisa también con
+    coordenadas grandes (UTM), donde los productos x·y pierden decimales."""
+    if not poly:
+        return 0.0
+    ox, oy = poly[0]
     s = 0.0
     n = len(poly)
     for i in range(n):
-        x1, y1 = poly[i]
-        x2, y2 = poly[(i + 1) % n]
+        x1, y1 = poly[i][0] - ox, poly[i][1] - oy
+        x2, y2 = poly[(i + 1) % n][0] - ox, poly[(i + 1) % n][1] - oy
         s += x1 * y2 - x2 * y1
     return s / 2.0
 
@@ -47,15 +51,16 @@ def centroid(poly):
         xs = [p[0] for p in poly]
         ys = [p[1] for p in poly]
         return (sum(xs) / len(xs), sum(ys) / len(ys))
+    ox, oy = poly[0]                     # desde el primer vértice: preciso con coordenadas UTM
     cx = cy = 0.0
     n = len(poly)
     for i in range(n):
-        x1, y1 = poly[i]
-        x2, y2 = poly[(i + 1) % n]
+        x1, y1 = poly[i][0] - ox, poly[i][1] - oy
+        x2, y2 = poly[(i + 1) % n][0] - ox, poly[(i + 1) % n][1] - oy
         f = x1 * y2 - x2 * y1
         cx += (x1 + x2) * f
         cy += (y1 + y2) * f
-    return (cx / (6 * a), cy / (6 * a))
+    return (ox + cx / (6 * a), oy + cy / (6 * a))
 
 
 def bbox(poly):
@@ -170,6 +175,20 @@ def line_intervals(poly, y):
         x2, y2 = poly[(i + 1) % n]
         if (y1 > y) != (y2 > y):
             xs.append(x1 + (y - y1) * (x2 - x1) / (y2 - y1))
+    xs.sort()
+    return [(xs[i], xs[i + 1]) for i in range(0, len(xs) - 1, 2)]
+
+
+def line_intervals_multi(loops, y):
+    """Como line_intervals, para un polígono con huecos dado como lista de contornos (exterior y huecos)."""
+    xs = []
+    for poly in loops:
+        n = len(poly)
+        for i in range(n):
+            x1, y1 = poly[i]
+            x2, y2 = poly[(i + 1) % n]
+            if (y1 > y) != (y2 > y):
+                xs.append(x1 + (y - y1) * (x2 - x1) / (y2 - y1))
     xs.sort()
     return [(xs[i], xs[i + 1]) for i in range(0, len(xs) - 1, 2)]
 

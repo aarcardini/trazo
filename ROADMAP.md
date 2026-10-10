@@ -21,7 +21,7 @@ Leyenda de esfuerzo: S = pequeño, M = mediano, L = grande (dividir antes de emp
 - [x] **R1.1 (M) Diagnóstico en Rhino.** Mensajes claros en la consola de Rhino para cada fallo (servidor apagado, objeto no válido, sin base plana, unidades). Comando de prueba que muestre versión de Rhino, unidades y estado del servidor.
   *Hecho cuando:* el usuario ejecuta Enviar/Recibir en Mac y Windows sin errores, o con un mensaje que explica qué hacer.
 - [ ] **R1.2 (S) Modo archivo de respaldo.** Si la conexión HTTP falla, el script guarda/lee un JSON en una carpeta conocida, y la web permite cargarlo/descargarlo.
-- [~] **R1.3 (M) Masas con varios volúmenes y huecos.** (v2.4: patios que separan la masa en bloques, automáticos y manuales, también desde Rhino con la capa `Trazo::Patios`; faltan varias masas a la vez y patios rodeados de edificio) Aceptar varias masas a la vez y huellas con patios (huecos interiores).
+- [~] **R1.3 (M) Masas con varios volúmenes y huecos.** (v2.4: patios que separan la masa en bloques, automáticos y manuales, también desde Rhino con la capa `Trazo::Patios`; v2.6: patios rodeados de edificio —U cerrada o claustro— en masas ortogonales, con el pasillo alrededor del patio; falta: varias masas a la vez, con alturas distintas por bloque) Aceptar varias masas a la vez y huellas con patios (huecos interiores).
   *Hecho cuando:* una masa en U cerrada (con patio) genera unidades alrededor del patio.
 - [x] **R1.4 (S) Recibir sin duplicar.** (v2.5: pregunta Reemplazar / Agregar / Cancelar; reemplaza también lo oculto o bloqueado y quita los niveles que sobran; los patios recibidos van en `Trazo::Lnn::Patios`) Al recibir de nuevo, borrar o reemplazar las capas `Trazo::L..` anteriores (preguntando antes).
 

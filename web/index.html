@@ -183,18 +183,19 @@ function draw(){ const gb=$('gb'); gb.innerHTML='';
   gb.appendChild(el('text',{x:W/2,y:H/2+14,'text-anchor':'middle','font-size':13,fill:'#667085'},'Envía una masa desde Rhino (script → Enviar) o elige un ejemplo.')); drawOverlay(); return; }
  fit(); const sw=1.2;
  gb.appendChild(el('polygon',{points:pts(footprint),fill:'none',stroke:'#667085','stroke-dasharray':'4 3'}));
- const plates=result&&result.blocks&&result.blocks.length?result.blocks.map(b=>b.plate):result?[result.plate]:[];
+ const plates=result&&result.blocks&&result.blocks.length?result.blocks.map(b=>[b.plate].concat(b.plate_holes||[])):result?[[result.plate]]:[];
+ const ring=(loops,at)=>el('path',Object.assign({d:loops.map(l=>'M'+pts(l)+'Z').join(' '),'fill-rule':'evenodd'},at));   // planta con patios interiores
  (result&&result.patios?result.patios:patios).forEach(p=>{ gb.appendChild(el('polygon',{points:pts(p),fill:'url(#hatch)',stroke:'#8a8f99','stroke-dasharray':'5 3'}));
   const c=centroidOf(p), d=patioDims(p); gb.appendChild(el('text',{x:X(c),y:Y(c)+4,'text-anchor':'middle','font-size':11,fill:'#5b616b','pointer-events':'none'},'Patio '+Math.min(d[0],d[1]).toFixed(1)+' m')); });
  if(result&&result.footprint&&medianeras.some(m=>(+m.retiro||0)>0)) gb.appendChild(el('polygon',{points:pts(result.footprint),fill:'none',stroke:'#667085','stroke-width':1.2}));
  const stCur=result&&result.stories&&planStory!=null?result.stories[planStory]:null;
- if(result&&stCur&&stCur.program!=='Residential'){ plates.forEach(pl=>gb.appendChild(el('polygon',{points:pts(pl),fill:tone(progColor(stCur.program),0.88),stroke:tone(progColor(stCur.program),0.35)})));
+ if(result&&stCur&&stCur.program!=='Residential'){ plates.forEach(pl=>gb.appendChild(ring(pl,{fill:tone(progColor(stCur.program),0.88),stroke:tone(progColor(stCur.program),0.35)})));
   const sh=progShapes(stCur.program); drawShapes2D(gb,sh); drawShapes2D(gb,coreShapes());
   const c=centroidOf(result.plate); const L=(result.program_layouts||{})[stCur.program];
   const info=!L?'sin distribución':L.kind==='parking'?L.count+' plazas':('planta libre '+L.free_area+' m² · '+L.workers+' personas · '+L.wc+' inodoros');
   gb.appendChild(el('text',{x:X(c),y:Y(c)-6,'text-anchor':'middle','font-size':14,'font-weight':600,fill:'#1b2430','pointer-events':'none'},'Nivel '+planStory+' · '+progLabel(stCur.program)));
   gb.appendChild(el('text',{x:X(c),y:Y(c)+12,'text-anchor':'middle','font-size':12,fill:'#1b2430','pointer-events':'none'},info));
- } else if(result){ plates.forEach(pl=>gb.appendChild(el('polygon',{points:pts(pl),fill:'rgba(120,130,150,.08)',stroke:'#667085'})));
+ } else if(result){ plates.forEach(pl=>gb.appendChild(ring(pl,{fill:'rgba(120,130,150,.08)',stroke:'#667085'})));
   (result.corridors||[]).forEach(c=>gb.appendChild(el('polygon',{points:pts(c),fill:circColor('corridor'),stroke:circStroke(),'stroke-width':.6})));
   (result.dark_zones||[]).forEach(d=>{ gb.appendChild(el('polygon',{points:pts(d),fill:'url(#hatch)',stroke:'#8a8f99','stroke-dasharray':'4 3'})); const c=centroidOf(d);
    gb.appendChild(el('text',{x:X(c),y:Y(c)-4,'text-anchor':'middle','font-size':12,fill:'#5b616b','pointer-events':'none'},'Sin luz natural'));
@@ -426,24 +427,27 @@ function drawAxo(){ const A=$('axo'); A.innerHTML=''; if(!result||!result.storie
  const ca=Math.cos(view3.az), sa=Math.sin(view3.az), se=Math.sin(view3.el), ce=Math.cos(view3.el);
  const P=(x,y,z)=>{ const xr=x*ca-y*sa, d=x*sa+y*ca; return [xr,-(d*se+z*ce)]; };
  const zb=i=>st[i].z+i*view3.explode, zt=i=>zb(i)+st[i].height;
- // cada bloque es un volumen (los patios quedan como huecos entre ellos)
- const fs=(result.blocks&&result.blocks.length?result.blocks.map(b=>b.footprint):[result.footprint]).map(ff=>{ const f=ff.map(p=>[p[0],p[1]]); let ar=0; f.forEach((p,i)=>{const q=f[(i+1)%f.length]; ar+=p[0]*q[1]-q[0]*p[1];}); if(ar<0) f.reverse(); return f; }), f=[].concat(...fs);
+ // cada bloque es un volumen (los patios quedan como huecos entre ellos o dentro de un bloque)
+ const orient=(ff,ccw)=>{ const f=ff.map(p=>[p[0],p[1]]); let ar=0; f.forEach((p,i)=>{const q=f[(i+1)%f.length]; ar+=p[0]*q[1]-q[0]*p[1];}); if((ar<0)===ccw) f.reverse(); return f; };
+ const blks=(result.blocks&&result.blocks.length?result.blocks:[{footprint:result.footprint}]).map(b=>({f:orient(b.footprint,true),h:(b.holes||[]).map(h=>orient(h,false))}));
+ const fs=blks.map(b=>b.f), f=[].concat(...fs);
  const top=zt(st.length-1); let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;
  f.forEach(p=>[0,top].forEach(z=>{ const q=P(p[0],p[1],z); x0=Math.min(x0,q[0]);x1=Math.max(x1,q[0]);y0=Math.min(y0,q[1]);y1=Math.max(y1,q[1]); }));
  const m=50, mr=170, sc=Math.min((W-m-mr)/((x1-x0)||1),(H-2*m-40)/((y1-y0)||1)), ox=m-x0*sc+((W-m-mr)-(x1-x0)*sc)/2, oy=m+40-y0*sc+((H-2*m-40)-(y1-y0)*sc)/2;
  const S=(x,y,z)=>{ const q=P(x,y,z); return (ox+q[0]*sc).toFixed(1)+','+(oy+q[1]*sc).toFixed(1); };
  const poly=(pts,z)=>pts.map(p=>S(p[0],p[1],z)).join(' ');
- const edges=fs.flatMap(f=>f.map((a,i)=>{ const b=f[(i+1)%f.length]; let nx=b[1]-a[1], ny=-(b[0]-a[0]); const L=Math.hypot(nx,ny)||1; nx/=L; ny/=L;
+ const edges=fs.concat(...blks.map(b=>b.h)).flatMap(f=>f.map((a,i)=>{ const b=f[(i+1)%f.length]; let nx=b[1]-a[1], ny=-(b[0]-a[0]); const L=Math.hypot(nx,ny)||1; nx/=L; ny/=L;
    return {a,b,dot:-(nx*sa+ny*ca),depth:((a[0]+b[0])/2)*sa+((a[1]+b[1])/2)*ca,lit:0.5+0.5*(nx*0.6-ny*0.8),med:medianeras.some(m=>(+m.retiro||0)<(STD&&STD.predio?STD.predio.retiro_ventanas:3)&&sameSeg(m,a,b))}; })).filter(e=>e.dot>1e-6).sort((p,q)=>q.depth-p.depth);
  const anySel=sel.size>0, dark=matchMedia('(prefers-color-scheme: dark)').matches, ln=dark?'rgba(255,255,255,.35)':'rgba(0,0,0,.35)';
  medianeras.forEach(m=>A.appendChild(el('line',{x1:S(m.a[0],m.a[1],0).split(',')[0],y1:S(m.a[0],m.a[1],0).split(',')[1],x2:S(m.b[0],m.b[1],0).split(',')[0],y2:S(m.b[0],m.b[1],0).split(',')[1],stroke:MED,'stroke-width':3,'stroke-linecap':'round'})));
  // sombra en el suelo
- fs.forEach(f=>A.appendChild(el('polygon',{points:poly(f,0),fill:dark?'rgba(0,0,0,.35)':'rgba(0,0,0,.06)'})));
+ const cap=(b,z,at)=>el('path',Object.assign({d:[b.f].concat(b.h).map(l=>'M'+poly(l,z)+'Z').join(' '),'fill-rule':'evenodd'},at));
+ blks.forEach(b=>A.appendChild(cap(b,0,{fill:dark?'rgba(0,0,0,.35)':'rgba(0,0,0,.06)'})));
  st.forEach((story,i)=>{ const g=el('g',{'data-story':i,style:'cursor:pointer'}); const ghost=view3.isolate&&anySel&&!sel.has(i), isSel=sel.has(i);
   g.setAttribute('opacity',ghost?0.12:1); const col=progColor(story.program), z0=zb(i), z1=zt(i);
   edges.forEach(e=>{ g.appendChild(el('polygon',{points:[S(e.a[0],e.a[1],z0),S(e.b[0],e.b[1],z0),S(e.b[0],e.b[1],z1),S(e.a[0],e.a[1],z1)].join(' '),
      fill:view3.wire?'none':(e.med?mixRed(shade(col,0.7+0.25*e.lit)):shade(col,0.7+0.25*e.lit)),stroke:isSel?'#2f6fed':e.med?MED:ln,'stroke-width':isSel?1.8:e.med?1:0.6})); });
-  fs.forEach(f=>g.appendChild(el('polygon',{points:poly(f,z1),fill:view3.wire?'none':shade(col,1.06),stroke:isSel?'#2f6fed':ln,'stroke-width':isSel?2.2:0.8})));
+  blks.forEach(b=>g.appendChild(cap(b,z1,{fill:view3.wire?'none':shade(col,1.06),stroke:isSel?'#2f6fed':ln,'stroke-width':isSel?2.2:0.8})));
   const showPlan=view3.plans&&!ghost&&(view3.explode>0||i===st.length-1||(view3.isolate&&isSel));
   if(showPlan&&story.program==='Residential'&&result.units){
    (result.corridors||[]).forEach(c=>g.appendChild(el('polygon',{points:poly(c,z1),fill:circColor('corridor')})));

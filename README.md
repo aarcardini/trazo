@@ -82,6 +82,7 @@ Desde entonces basta con escribir `trazo` en Rhino.
    - Para abrir patios, dibuja curvas cerradas en la capa `Trazo::Patios`; llegan a la web en modo manual.
 3. En la web: Calcular masa → Generar pasillo y núcleos → Generar mix → Generar planos.
    - **Patios** (sección «Patios»): en modo automático, Trazo abre patios donde un predio entre medianeras es demasiado profundo para tener luz; cada bloque lleva su núcleo. Con **+ Dibujar patio** haces clic en dos esquinas opuestas (el patio se alinea con el edificio y se recorta a la masa); la × de la lista lo quita. Dibujar o quitar un patio pasa a modo manual. Las estancias que dan a un patio de al menos 3 m (editable en «Medidas y normativa → Predio») tienen luz.
+   - Un patio **dentro** de la masa (sin tocar el borde) la convierte en un anillo: alas alrededor del patio y un pasillo que da la vuelta (U cerrada o claustro). Ejemplos: «Edificio con patio central 40 × 30» y «Entre medianeras 30 × 45 con patio central (U cerrada)».
    - Para empezar de cero: botón **Nuevo (en blanco)**, junto a «Ejemplo». Borra la masa, las polilíneas, los núcleos, las medianeras y el resultado, también los guardados en el servidor; conserva las medidas, el mix y los colores. Después envía una masa desde Rhino o elige un ejemplo.
    - En la planta 2D se ven las **cotas totales** de la huella (por fuera, alineadas con el edificio) y una **escala gráfica** abajo a la derecha; se ocultan con la casilla «Cotas».
    - El selector «Ejemplo» muestra siempre qué está cargado: un ejemplo, «Masa de Rhino: …» o «— En blanco —». Si miras un ejemplo, puedes volver a tu masa de Rhino eligiéndola en el selector.
@@ -131,6 +132,13 @@ Si algo falla en Rhino, ejecuta el script y elige **Diagnostico**. Si no se resu
 - **Pasillo y núcleos**: eje (automático o dibujado), ancho de pasillo, núcleos (ancho, fondo incluyendo pasillo, cantidad), distancias de evacuación (salida única / múltiple) y núcleos extra automáticos.
 - **Mix**: tipos con m² objetivo y %, ancho mínimo, muro medianero; métricas Match Score, Fit y Unidades únicas.
 - **Planos**: distribución día/noche con pasillo interno, puertas y grafo de conexiones verificado.
+
+## Novedades v2.6
+- **Patios rodeados de edificio (U cerrada o claustro):** un patio dibujado dentro de la masa, sin tocar el borde, ya se usa (antes avisaba y lo ignoraba). El edificio queda como un anillo alrededor del patio, dividido en alas, con un **pasillo que da la vuelta al patio**: se puede evacuar hacia los dos lados, así que no hace falta un núcleo en cada esquina (van los de «Cantidad» y los que pida la evacuación; una punta de pasillo de hasta 18 m no necesita núcleo propio).
+- Las viviendas que dan al patio tienen luz si mide al menos 3 m. En alas de poco fondo, pasillo de borde (hacia el patio o contra la medianera) para que las viviendas no queden playas. En las esquinas interiores, donde no llega la luz, no se ponen viviendas (quedan «sin usar»; las unidades de esquina llegan con la mejora de codos, R3.2).
+- En la planta el patio se ve como un hueco del edificio, con sus cotas; en la axonometría, con sus caras interiores. Ejemplos nuevos: «Edificio con patio central 40 × 30» y «Entre medianeras 30 × 45 con patio central (U cerrada)».
+- **Corrección:** con coordenadas grandes (UTM, planos georreferenciados) el centro y el área de los polígonos perdían precisión (hasta 5 m), y un patio interior podía no reconocerse.
+- Todavía no: patios interiores en masas que no son ortogonales o patios girados respecto de la masa (avisa y no lo usa), y polilíneas dibujadas en un bloque con patio interior (avisa y traza el pasillo solo).
 
 ## Novedades v2.5
 - **Recibir sin duplicar (Rhino):** si el archivo ya tiene un resultado de Trazo, Recibir dice cuántos objetos hay y en qué capas, y pregunta: **Reemplazar** (borra el anterior, también lo oculto, bloqueado o en capas apagadas, y dibuja el nuevo), **Agregar** (deja los dos) o **Cancelar** (no cambia nada). Al reemplazar, también quita las capas de los niveles que ya no existen (por ejemplo, al pasar de 10 a 5 pisos). Solo toca las capas de resultado (`Trazo::Footprint` y `Trazo::L00…`), nunca las que usas para enviar.

@@ -9,7 +9,7 @@ from . import plans as P
 from . import standards as ST
 from . import programs as PR
 
-VERSION = "2.5"
+VERSION = "2.6"
 
 DEFAULT_PARAMS = {
     # Masa
@@ -138,16 +138,18 @@ def _is_rectilinear(loc, tol=1e-3):
     return True
 
 
-def _slabs(loc, vertical):
-    """Rectángulos de la descomposición por franjas (vertical u horizontal), fusionando iguales."""
+def _slabs(loc, vertical, holes=()):
+    """Rectángulos de la descomposición por franjas (vertical u horizontal), fusionando iguales.
+    Con huecos (patios interiores), las franjas también se cortan en sus bordes."""
     pts = [(p[1], p[0]) for p in loc] if vertical else list(loc)
+    hs = [[(p[1], p[0]) for p in h] if vertical else list(h) for h in holes]
     # ahora las franjas son horizontales sobre pts: cortes en y
-    ys = sorted({round(p[1], 6) for p in pts})
+    ys = sorted({round(p[1], 6) for p in pts + [q for h in hs for q in h]})
     slabs = []
     for y0, y1 in zip(ys, ys[1:]):
         if y1 - y0 < 1e-6:
             continue
-        ivs = G.line_intervals(pts, (y0 + y1) / 2.0)
+        ivs = G.line_intervals_multi([pts] + hs, (y0 + y1) / 2.0) if hs else G.line_intervals(pts, (y0 + y1) / 2.0)
         slabs.append([y0, y1, [(round(a, 6), round(b, 6)) for a, b in ivs]])
     merged = []
     for sl in slabs:
@@ -163,24 +165,39 @@ def _slabs(loc, vertical):
     return rects
 
 
-def decompose_wings(plate, min_side=5.0):
-    """Divide una planta ortogonal en rectángulos (alas). Devuelve (ángulo, [polígonos mundo]) o None."""
+def decompose_wings(plate, min_side=5.0, holes=None, blind=None):
+    """Divide una planta ortogonal en rectángulos (alas). Devuelve (ángulo, [polígonos mundo]) o None.
+    holes: patios interiores (la planta es un anillo); tienen que ser ortogonales en el mismo marco.
+    blind: en un anillo, las alas a lo largo de una medianera ciega puntúan menos (sus viviendas no tienen luz)."""
     th = _dominant_angle(plate)
     loc = G.ensure_ccw([G.rotate(p, -th) for p in plate])
-    if not _is_rectilinear(loc):
+    hl = [[G.rotate(p, -th) for p in h] for h in (holes or [])]
+    if not _is_rectilinear(loc) or not all(_is_rectilinear(h) for h in hl):
         return None
     best = None
     for vertical in (True, False):
-        rects = _slabs(loc, vertical)
+        rects = _slabs(loc, vertical, hl)
         rects = [r for r in rects if min(G.bbox(r)[2] - G.bbox(r)[0], G.bbox(r)[3] - G.bbox(r)[1]) >= min_side]
         if not rects:
             continue
         score = sum(max(G.bbox(r)[2] - G.bbox(r)[0], G.bbox(r)[3] - G.bbox(r)[1]) for r in rects) - 8.0 * len(rects)
+        if hl and blind:
+            score -= sum(_lado_ciego(r, th, blind) for r in rects)
         if best is None or score > best[0]:
             best = (score, rects)
     if best is None:
         return None
     return th, [[G.rotate(p, th) for p in r] for r in best[1]]
+
+
+def _lado_ciego(r, th, blind):
+    """Largo de un ala (rectángulo en el marco girado th) si uno de sus lados largos es medianera ciega, si no 0."""
+    x0, y0, x1, y1 = G.bbox(r)
+    if x1 - x0 >= y1 - y0:
+        lados = [((x0 + x1) / 2, y0), ((x0 + x1) / 2, y1)]
+    else:
+        lados = [(x0, (y0 + y1) / 2), (x1, (y0 + y1) / 2)]
+    return max(x1 - x0, y1 - y0) if any(blind(G.rotate(p, th)) for p in lados) else 0.0
 
 
 # ---------------------------------------------------------------- pasillo y núcleos
@@ -259,6 +276,23 @@ def _choose_single(short, params):
     return abs(math.log(avg / d1 ** 2)) < abs(math.log(avg / d2 ** 2))
 
 
+def _ring_single(short, largo, puente, params):
+    """Ala de un anillo alrededor de un patio: ¿pasillo de borde? Con pasillo central cada vivienda tiene la mitad
+    del fondo, y en un ala corta que une otras dos el frente lo limita su largo. Pasillo de borde si con pasillo
+    central no entra un dormitorio; en un ala que une, la opción con viviendas más cercanas a la superficie del mix."""
+    if params.get("loading", "auto") != "auto":
+        return params["loading"] == "single"
+    cw, pw = params["corridor_width"], params["party_wall"]
+    d2 = (short - cw) / 2.0 - pw
+    d1 = min(short - cw - pw, params["max_unit_depth"])
+    if d2 < P.fondo_min():
+        return True
+    if puente:
+        avg = _avg_unit_area(params)
+        return abs(math.log(largo * d1 / avg)) < abs(math.log(largo * d2 / avg))
+    return _choose_single(short, params)
+
+
 def _single_frame(poly, ang, params, centre):
     """Marco con el pasillo pegado a un borde del ala (el más cercano al centro de la planta)."""
     cw = params["corridor_width"]
@@ -277,12 +311,40 @@ def _single_frame(poly, ang, params, centre):
     return best[1:]
 
 
+def _bridge_axis(poly, polys, th, holes, params):
+    """En un anillo alrededor de un patio: eje (0 = x, 1 = y del marco th) en el que el ala une otras dos por sus lados
+    opuestos, o None. Solo un ala que da al patio y no más ancha que un ala con pasillo central. Su pasillo va de una
+    a la otra, así el pasillo da la vuelta al patio."""
+    r = G.bbox([G.rotate(p, -th) for p in poly])
+    otros = [G.bbox([G.rotate(p, -th) for p in q]) for q in polys if q is not poly]
+    hb = [G.bbox([G.rotate(p, -th) for p in h]) for h in holes]
+    ancho_max = 2 * params["max_unit_depth"] + params["corridor_width"] + params["party_wall"]
+
+    def toca(axis, at):
+        a0, a1 = (r[1], r[3]) if axis == 0 else (r[0], r[2])
+        for o in otros:
+            lo, hi = (o[0], o[2]) if axis == 0 else (o[1], o[3])
+            b0, b1 = (o[1], o[3]) if axis == 0 else (o[0], o[2])
+            if (abs(hi - at) < 1e-6 or abs(lo - at) < 1e-6) and min(a1, b1) - max(a0, b0) > 1.0:
+                return True
+        return False
+    for axis in (0, 1):
+        lo, hi = (r[0], r[2]) if axis == 0 else (r[1], r[3])
+        c0, c1 = (r[1], r[3]) if axis == 0 else (r[0], r[2])        # sus lados a lo largo del pasillo
+        al_patio = any(abs(c - (h[1] if axis == 0 else h[0])) < 0.05 or abs(c - (h[3] if axis == 0 else h[2])) < 0.05
+                       for h in hb for c in (c0, c1))
+        if al_patio and c1 - c0 <= ancho_max and toca(axis, lo) and toca(axis, hi):
+            return axis
+    return None
+
+
 def build_pieces(plate, params):
     if params.get("centerlines") or params.get("centerline"):
         up = build_user_pieces(plate, params)
         if up:
             return up
-    dec = decompose_wings(plate)
+    holes = params.get("_huecos")
+    dec = decompose_wings(plate, holes=holes, blind=params.get("_blind"))
     if not dec:
         o, a, xa, xb = pick_frame(plate, params)
         pc = _make_piece(plate, o, a, xa, xb)
@@ -303,6 +365,11 @@ def build_pieces(plate, params):
         x0, y0, x1, y1 = G.bbox([G.rotate(p, -th) for p in poly])
         ang = th if (x1 - x0) >= (y1 - y0) else th + math.pi / 2
         short = min(x1 - x0, y1 - y0)
+        puente = _bridge_axis(poly, polys, th, holes, params) if holes else None
+        if puente is not None:
+            ang = th if puente == 0 else th + math.pi / 2
+            short = (y1 - y0) if puente == 0 else (x1 - x0)
+        largo = ((x1 - x0) + (y1 - y0)) - short                 # a lo largo del pasillo
         lb = [False, False]
         if bl:
             l0 = G.to_local(poly, (0.0, 0.0), ang)
@@ -320,7 +387,7 @@ def build_pieces(plate, params):
             pc["single"] = True
             pieces.append(pc)
             continue
-        if _choose_single(short, params):
+        if _ring_single(short, largo, puente is not None, params) if holes else _choose_single(short, params):
             pc = _make_piece(poly, *_single_frame(poly, ang, params, centre))
             pc["single"] = True
         else:
@@ -366,6 +433,35 @@ def _connect(pieces, plate, params):
             nb = next((j for j, q in enumerate(pieces) if j != i and G.point_in_poly(probe, q["poly"])), None)
             if nb is not None:
                 _link(pieces, i, e, nb, params)
+                if params.get("_huecos"):            # anillo: la unión sirve en los dos sentidos (el pasillo da la vuelta)
+                    j = pc["junctions"][-1]
+                    pieces[nb]["junctions"].append({"x": j["nbx"], "nb": i, "nbx": j["x"]})
+
+
+def _ring_corners(pieces, plate, params):
+    """Anillo: las viviendas van donde su fondo da a una fachada o al patio. Donde el fondo de la franja de viviendas
+    no tiene luz (esquinas interiores del patio, o un ala descartada por angosta), no se ponen viviendas: queda sin
+    usar (las unidades de esquina llegan con la mejora de codos)."""
+    bordes = [plate] + list(params.get("_huecos") or [])
+    bl, pw, paso = params.get("_blind"), params["party_wall"], 0.25
+    for q in pieces:
+        _, qy0, _, qy1 = G.bbox(q["loc_plate"])
+        n = max(1, int((q["xb"] - q["xa"]) / paso))
+        xs = [q["xa"] + (q["xb"] - q["xa"]) * k / n for k in range(n + 1)]
+        for sd, yf in ((1, qy1 - 0.05), (-1, qy0 + 0.05)):
+            ws = G.to_world([(x, yf) for x in xs], q["origin"], q["angle"])
+            luz = [min(_dist_to_boundary(w, b) for b in bordes) <= 0.4 and not (bl and bl(w)) for w in ws]
+            k = 0
+            while k <= n:
+                if luz[k]:
+                    k += 1
+                    continue
+                j = k
+                while j < n and not luz[j + 1]:
+                    j += 1
+                if xs[j] - xs[k] >= 1.0:
+                    q["extra_blocks"][sd].append((xs[k] - pw / 2, xs[j] + pw / 2))
+                k = j + 1
 
 
 def _dist_point_segment(p, a, b):
@@ -598,7 +694,7 @@ def generate_circulation(plate, params):
 def is_between(plate, params):
     """Predio entre medianeras: planta rectangular con los dos lados largos ciegos."""
     bl = params.get("_blind")
-    if not bl or params.get("centerlines") or params.get("centerline"):
+    if not bl or params.get("centerlines") or params.get("centerline") or params.get("_huecos"):
         return False
     dec = decompose_wings(plate)
     if not dec or len(dec[1]) != 1:
@@ -669,6 +765,8 @@ def _generate_circulation(plate, params):
             pc["corridor_local"] = G.clip_rect(pc["loc_plate"], pc["xa"], pc["xb"], -cw / 2, cw / 2)
     if not user:
         _connect(pieces, plate, params)
+    if params.get("_huecos") and not user:
+        _ring_corners(pieces, plate, params)
     counter = [0]
 
     def next_side():
@@ -699,9 +797,14 @@ def _generate_circulation(plate, params):
             _add_core(pc, lx, side, params)
             pc["cores"][-1]["spec"] = idx
         return pieces
+    ring = bool(params.get("_huecos"))
     for pc in pieces:               # un núcleo en cada extremo libre
         for e, free in enumerate(pc["free"]):
             if free:
+                xe = pc["xa"] if e == 0 else pc["xb"]
+                if ring and pc["junctions"] and \
+                        min(abs(xe - j["x"]) for j in pc["junctions"]) <= params["egress_single"]:
+                    continue        # punta corta de un pasillo que da la vuelta al patio: se sale hacia los dos lados
                 x = pc["xa"] + half if e == 0 else pc["xb"] - half
                 if pc["xb"] - pc["xa"] < 2 * half:
                     x = (pc["xa"] + pc["xb"]) / 2.0
@@ -960,12 +1063,13 @@ def unit_rooms(u, params, pc=None, plate=None):
     is_fac = None
     if pc is not None and plate:
         bl, pd = params.get("_blind"), params.get("_patio_dark")
+        bordes = [plate] + list(params.get("_huecos") or [])      # fachada exterior y caras a los patios interiores
 
         def is_fac(p, q):
             for t_ in (0.25, 0.5, 0.75):
                 m = (p[0] + (q[0] - p[0]) * t_, p[1] + (q[1] - p[1]) * t_)
                 w = G.to_world([back(m)], pc["origin"], pc["angle"])[0]
-                if _dist_to_boundary(w, plate) > 0.4 or (bl and bl(w)) or (pd and pd(w)):
+                if min(_dist_to_boundary(w, b) for b in bordes) > 0.4 or (bl and bl(w)) or (pd and pd(w)):
                     return False
             return True
     res = P.layout_unit(poly, nb, is_fac, ST.merged(params.get("standards"))["vivienda"])
@@ -1008,30 +1112,48 @@ def auto_patios(fp, plate, params, ancho):
     return out
 
 
+def _anillo(b, hs, muro):
+    """Planta de un bloque (huella b con patios interiores hs): el muro exterior hacia afuera y hacia cada patio."""
+    pl = G.inset(b, muro) if muro > 0 else b
+    ph = [G.ensure_ccw(G.clean(G.inset(G.ensure_ccw(h), -muro) if muro > 0 else G.ensure_ccw(h))) for h in hs]
+    return G.ensure_ccw(G.clean(pl)), ph
+
+
 def split_blocks(fp, patios, params, warnings):
-    """Huella menos patios -> (huellas de los bloques, plantas de los bloques, patios dentro de la huella)."""
-    partes, dentro = G.subtract(fp, patios)
-    huecos = any(h for _, h in partes)
-    usar = []
-    for i, d in enumerate(dentro):
-        if not d:
-            warnings.append("Patio %d: queda fuera de la masa y no se usa" % (i + 1))
-        elif huecos and not any(_dist_to_boundary(q, fp) < 1e-3 for pp in d for q in pp):
-            warnings.append("Patio %d: está rodeado de edificio por los cuatro lados. Los patios interiores llegan en "
-                            "una próxima versión; por ahora no se usa" % (i + 1))
-        else:
-            usar.append(i)
-    if len(usar) < len(patios):
+    """Huella menos patios -> (bloques, plantas, patios dentro de la huella). Cada bloque y cada planta es
+    (exterior, [huecos]): un patio rodeado de edificio deja un hueco y el bloque es un anillo alrededor del patio."""
+    muro = params["outer_wall"]
+    usar = list(range(len(patios)))
+    while True:
         partes, dentro = G.subtract(fp, [patios[i] for i in usar])
+        fuera = [k for k, d in zip(usar, dentro) if not d]
+        for k in fuera:
+            warnings.append("Patio %d: queda fuera de la masa y no se usa" % (k + 1))
+        malos = []
+        for b, hs in partes:                 # un anillo tiene que poder dividirse en alas ortogonales
+            if hs:
+                pl, ph = _anillo(G.ensure_ccw(G.clean(b)), hs, muro)
+                if decompose_wings(pl, holes=ph) is None:
+                    th = _dominant_angle(pl)
+                    orto = all(_is_rectilinear([G.rotate(p, -th) for p in l]) for l in [pl] + ph)
+                    for k, d in zip(usar, dentro):       # los patios de este anillo: sus vértices están en un hueco
+                        if d and any(_dist_to_boundary(q, h) < 1e-3 for pp in d for q in pp for h in hs):
+                            malos.append(k)
+                            warnings.append(("Patio %d: deja alas de menos de 5 m a su alrededor; no se usa" if orto else
+                                             "Patio %d: está rodeado de edificio en una masa que no es ortogonal (o el "
+                                             "patio está girado respecto de la masa); todavía no se puede usar") % (k + 1))
+        if not fuera and not malos:
+            break
+        usar = [k for k in usar if k not in fuera and k not in malos]
     bloques, plantas = [], []
-    for b, _ in partes:
+    for b, hs in partes:
         b = G.ensure_ccw(G.clean(b))
-        pl = G.inset(b, params["outer_wall"]) if params["outer_wall"] > 0 else b
-        if len(pl) < 3 or G.area(pl) < 10.0:
+        pl, ph = _anillo(b, hs, muro)
+        if len(pl) < 3 or G.area(pl) - sum(abs(G.area(h)) for h in ph) < 10.0:
             warnings.append("Un bloque de %.0f m² queda demasiado chico o angosto entre patios: no se usa" % abs(G.area(b)))
             continue
-        bloques.append(b)
-        plantas.append(G.ensure_ccw(G.clean(pl)))
+        bloques.append((b, [G.ensure_ccw(G.clean(h)) for h in hs]))
+        plantas.append((pl, ph))
     return bloques, plantas, [pp for d in dentro for pp in d]
 
 
@@ -1112,11 +1234,17 @@ def generate(data):
         bloques, plantas, partes = split_blocks(fp, patios, params, res["warnings"])
         params["_patio_dark"] = make_patio_dark(partes, ancho_patio, params["outer_wall"], res["warnings"])
     else:
-        bloques, plantas, partes = [fp], [plate], []
-    gfa_plate = sum(abs(G.area(p)) for p in plantas)
-    fp_area = sum(abs(G.area(b)) for b in bloques)
-    res["plate"] = G.pol_to_list(plantas[0] if plantas else plate)
-    res["blocks"] = [{"footprint": G.pol_to_list(b), "plate": G.pol_to_list(p)} for b, p in zip(bloques, plantas)]
+        bloques, plantas, partes = [(fp, [])], [(plate, [])], []
+    neta = lambda bh: abs(G.area(bh[0])) - sum(abs(G.area(h)) for h in bh[1])     # sin los patios interiores
+    gfa_plate = sum(neta(p) for p in plantas)
+    fp_area = sum(neta(b) for b in bloques)
+    res["plate"] = G.pol_to_list(plantas[0][0] if plantas else plate)
+    res["blocks"] = []
+    for (b, hb), (p, hp) in zip(bloques, plantas):
+        res["blocks"].append({"footprint": G.pol_to_list(b), "plate": G.pol_to_list(p)})
+        if hb:                                               # anillo alrededor de patios interiores
+            res["blocks"][-1].update(holes=[G.pol_to_list(h) for h in hb], plate_holes=[G.pol_to_list(h) for h in hp])
+    huellas = [b for b, _ in bloques]
     res["patios"] = [G.pol_to_list(p) for p in partes]
     res["patios_auto"] = auto
     res["metrics"] = {"plate_area": round(gfa_plate, 1), "gfa": round(fp_area * len(stories), 1), "stories": len(stories)}
@@ -1141,16 +1269,22 @@ def generate(data):
     res["corridors"], res["cores"], res["dark_zones"] = [], [], []
     bloques_pc = []                                          # por bloque: (piezas, parámetros, planta, núcleos)
     emax = 0.0
-    for bi, pl_b in enumerate(plantas):
+    for bi, (pl_b, ph_b) in enumerate(plantas):
         pb = dict(params)
         mapa = None
         if len(plantas) > 1:
             pb["core_count"] = 1                             # cada bloque, al menos un núcleo propio
             if manual:
-                mapa = [k for k, c in enumerate(params.get("cores") or []) if _block_of(c, bloques) == bi]
+                mapa = [k for k, c in enumerate(params.get("cores") or []) if _block_of(c, huellas) == bi]
                 pb["cores"] = [params["cores"][k] for k in mapa]
             if params.get("centerlines"):
-                pb["centerlines"] = [l for l in params["centerlines"] if _block_of_line(l, bloques) == bi] or None
+                pb["centerlines"] = [l for l in params["centerlines"] if _block_of_line(l, huellas) == bi] or None
+        if ph_b:                                             # anillo: alas alrededor del patio y pasillo que da la vuelta
+            pb["_huecos"] = ph_b
+            if pb.get("centerlines") or pb.get("centerline"):
+                res["warnings"].append("Bloque %d: con un patio interior, el pasillo se traza solo alrededor del patio; "
+                                       "las polilíneas dibujadas todavía no se usan ahí" % (bi + 1))
+                pb["centerlines"] = pb["centerline"] = None
         if is_between(pl_b, pb) and not manual:
             pb["_cw_base"] = pb["corridor_width"]
             pb["corridor_width"] = max(pb["corridor_width"], pb["core_depth"] - pb["corridor_width"])
@@ -1189,6 +1323,7 @@ def generate(data):
             n = max(2, int((pc["xb"] - pc["xa"])))
             for k in range(n + 1):
                 emax = max(emax, egress_at(pieces, i, pc["xa"] + (pc["xb"] - pc["xa"]) * k / n))
+        pb["_neta"] = neta((pl_b, ph_b))
         bloques_pc.append((pieces, pb, pl_b, cpolys))
     res["metrics"]["wings"] = sum(len(b[0]) for b in bloques_pc)
     if res["dark_zones"]:
@@ -1208,7 +1343,7 @@ def generate(data):
             P_ = S["oficinas"] if prog == "Office" else S["comercial"]
             acc = None
             for pieces, pb, pl_b, cpolys in bloques_pc:
-                fp_ = PR.free_plan(pieces, abs(G.area(pl_b)), sum(abs(G.area(c)) for c in cpolys), pb["corridor_width"], P_)
+                fp_ = PR.free_plan(pieces, pb["_neta"], sum(abs(G.area(c)) for c in cpolys), pb["corridor_width"], P_)
                 if fp_:
                     if acc is None:
                         acc = {"kind": "free", "workers": 0, "wc": 0, "free_area": 0.0, "bath_area": 0.0,
@@ -1226,10 +1361,12 @@ def generate(data):
         elif prog == "Parking":
             acc = {"kind": "parking", "count": 0, "stalls": [], "aisles": []}
             for pieces, pb, pl_b, cpolys in bloques_pc:
-                pk = PR.parking(pl_b, cpolys, S["estacionamiento"])
+                huecos = pb.get("_huecos") or []
+                pk = PR.parking(pl_b, cpolys + huecos, S["estacionamiento"])      # sin plazas en los patios
                 acc["count"] += pk["count"]
                 acc["stalls"] += [G.pol_to_list(p_) for p_ in pk["stalls"]]
-                acc["aisles"] += [G.pol_to_list(p_) for p_ in pk["aisles"]]
+                acc["aisles"] += [G.pol_to_list(o) for p_ in pk["aisles"]
+                                  for o, _ in (G.subtract(p_, huecos)[0] if huecos else [(p_, [])])]
             layouts[prog] = acc
             d = res["metrics"]["programs"].get(prog)
             if d:
