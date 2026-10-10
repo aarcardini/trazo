@@ -18,10 +18,10 @@ Leyenda de esfuerzo: S = pequeño, M = mediano, L = grande (dividir antes de emp
   *Hecho cuando:* cambiar el motor sin querer rompe una prueba con un mensaje claro. **Requisito de R2.1.**
 
 ## Fase 1 — Puente con Rhino fiable (requiere pruebas del usuario)
-- [ ] **R1.1 (M) Diagnóstico en Rhino.** Mensajes claros en la consola de Rhino para cada fallo (servidor apagado, objeto no válido, sin base plana, unidades). Comando de prueba que muestre versión de Rhino, unidades y estado del servidor.
+- [x] **R1.1 (M) Diagnóstico en Rhino.** Mensajes claros en la consola de Rhino para cada fallo (servidor apagado, objeto no válido, sin base plana, unidades). Comando de prueba que muestre versión de Rhino, unidades y estado del servidor.
   *Hecho cuando:* el usuario ejecuta Enviar/Recibir en Mac y Windows sin errores, o con un mensaje que explica qué hacer.
 - [ ] **R1.2 (S) Modo archivo de respaldo.** Si la conexión HTTP falla, el script guarda/lee un JSON en una carpeta conocida, y la web permite cargarlo/descargarlo.
-- [ ] **R1.3 (M) Masas con varios volúmenes y huecos.** Aceptar varias masas a la vez y huellas con patios (huecos interiores).
+- [~] **R1.3 (M) Masas con varios volúmenes y huecos.** (v2.4: patios que separan la masa en bloques, automáticos y manuales, también desde Rhino con la capa `Trazo::Patios`; faltan varias masas a la vez y patios rodeados de edificio) Aceptar varias masas a la vez y huellas con patios (huecos interiores).
   *Hecho cuando:* una masa en U cerrada (con patio) genera unidades alrededor del patio.
 - [ ] **R1.4 (S) Recibir sin duplicar.** Al recibir de nuevo, borrar o reemplazar las capas `Trazo::L..` anteriores (preguntando antes).
 
@@ -83,7 +83,7 @@ Segundo modo de la herramienta: subdividir un predio en calles, veredas, manzana
 
 ## Fase 11 — Predio y restricciones (continúa v1.8)
 - [ ] **R11.1 (M) Predio y edificio separados:** dibujar el predio completo y el retiro frontal/posterior (FOS, retiros obligatorios) para que la masa se calcule desde el predio.
-- [ ] **R11.2 (M) Patios de aire y luz:** abrir patios interiores con medida mínima y que las estancias que dan al patio cuenten como iluminadas.
+- [~] **R11.2 (M) Patios de aire y luz:** (v2.4: patios entre bloques con ancho mínimo editable; las estancias que dan a ellos tienen luz) abrir patios interiores con medida mínima y que las estancias que dan al patio cuenten como iluminadas.
 - [ ] **R11.3 (S) Ventanas de baño y cocina a patio o ducto** según normativa (ventilación por ducto permitida para baños).
 - [ ] **R11.4 (M) Entre medianeras con más de dos viviendas por piso:** pasillo a lo largo contra una medianera y viviendas pasantes o con patio.
 - [ ] **R11.5 (S) Confirmar con el Digesto de Montevideo** la regla de 3 m de retiro para abrir vanos hacia el lindero.

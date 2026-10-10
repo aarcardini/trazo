@@ -64,6 +64,7 @@ DEFAULTS = {
     },
     "predio": {
         "retiro_ventanas": 3.0,          # retiro desde la medianera para poder abrir ventanas
+        "patio_min": 3.0,                # ancho mínimo de un patio para que las estancias que dan a él tengan luz
     },
     "masterplan": {
         "calzada": 9.0,                  # ancho de calzada de calle local (criterio de proyecto)

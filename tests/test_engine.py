@@ -123,10 +123,10 @@ if __name__ == "__main__":
 
 
 def test_no_giant_units():
-    """Barra larga con las dos medianeras largas: unidades cerca del m² objetivo, nunca gigantes."""
+    """Barra larga con las dos medianeras largas y sin patios: unidades cerca del m² objetivo, nunca gigantes."""
     fp = [[0,0],[60,0],[60,16],[0,16]]
     meds = [{"a":[0,0],"b":[60,0],"retiro":0},{"a":[60,16],"b":[0,16],"retiro":0}]
-    r = run(fp, medianeras=meds)
+    r = run(fp, medianeras=meds, patios_mode="manual")       # sin patios (en automático se abren patios)
     assert r["units"] and all(u["area"] < 1.4 * u["target"] for u in r["units"]), [(u["area"], u["target"]) for u in r["units"]]
     assert r.get("dark_zones"), "debe marcar la zona sin luz"
 
@@ -178,3 +178,130 @@ def test_regresion():
 
 if __name__ == "__main__":
     test_regresion(); print("OK8")
+
+
+def test_masterplan_samples_manzana():
+    """Cada ejemplo del Masterplan trae su manzana (la propia o la estándar): al cambiar de ejemplo no se arrastra la anterior."""
+    import server
+    from engine import standards as ST
+    s = server.mp_samples()
+    std = list(ST.DEFAULTS["masterplan"]["manzana"])
+    assert s["barrio_jardin"]["masterplan"]["manzana"] == [75, 95], s["barrio_jardin"]
+    assert s["predio_rectangular"]["masterplan"]["manzana"] == std, s["predio_rectangular"]
+    assert s["predio_irregular"]["masterplan"]["manzana"] == std, s["predio_irregular"]
+
+if __name__ == "__main__":
+    test_masterplan_samples_manzana(); print("OK9")
+
+
+def test_puente_rhino():
+    """Script de Rhino con Rhino simulado: mensajes claros, diagnóstico y menú (R1.1). Detalle en tests/test_rhino.py."""
+    import test_rhino
+    test_rhino.todas()
+
+if __name__ == "__main__":
+    test_puente_rhino(); print("OK10")
+
+
+def test_nuevo_en_blanco():
+    """«Nuevo» en la web: /api/reset olvida la masa y el resultado del servidor (Rhino ya no recibe uno viejo)."""
+    import threading, urllib.request, urllib.error
+    import server
+    srv = server.ThreadingHTTPServer(("127.0.0.1", 0), server.H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    url = "http://127.0.0.1:%d" % srv.server_address[1]
+
+    def api(path, body=None):
+        req = urllib.request.Request(url + path, data=None if body is None else json.dumps(body).encode(),
+                                     method="GET" if body is None else "POST", headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return json.loads(r.read().decode())
+    try:
+        api("/api/mass", {"name": "Masa vieja", "footprint": [[0, 0], [60, 0], [60, 16], [0, 16]], "height": 15})
+        api("/api/generate", {"footprint": [[0, 0], [60, 0], [60, 16], [0, 16]], "height": 15, "stage": "massing"})
+        antes = api("/api/mass")["version"]
+        assert api("/api/result")["result"]
+        assert api("/api/reset", {})["ok"]
+        m = api("/api/mass")
+        assert m["mass"] is None and m["version"] > antes, m       # la web no vuelve a cargar la masa vieja
+        assert api("/api/result")["result"] is None
+        try:
+            api("/api/dxf")
+            raise AssertionError("sin resultado, el DXF debía dar 404")
+        except urllib.error.HTTPError as e:
+            assert e.code == 404
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+if __name__ == "__main__":
+    test_nuevo_en_blanco(); print("OK11")
+
+
+def test_web_circulacion_no_vuelve_a_masa():
+    """Web: cambiar el modo de núcleos, «Auto» o editar polilíneas y núcleos calcula al menos el pasillo (runCirc).
+    Antes, con la masa recién recibida de Rhino, volvía a calcular solo la masa y quedaba la axonometría sin pasillo.
+    (La comprobación completa se hizo en navegador; esta prueba evita que vuelva el patrón que causaba el error.)"""
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    assert "run(lastStage)" not in html, "los cambios de pasillo y núcleos deben usar runCirc()"
+    for f in ("function finishLine", "function undoLine", "function clearLines", "function coresModeChanged"):
+        assert "runCirc()" in html.split(f, 1)[1].split("\nfunction ", 1)[0], f
+
+if __name__ == "__main__":
+    test_web_circulacion_no_vuelve_a_masa(); print("OK12")
+
+
+def test_web_cotas_y_escala():
+    """Web: la planta dibuja las cotas totales y la escala gráfica, y la casilla «Cotas» las muestra u oculta.
+    (El dibujo se comprobó en navegador; esta prueba evita que se pierda la llamada o la casilla.)"""
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    assert 'id="showDims"' in html and "function drawDims" in html and "function cota(" in html
+    cuerpo = html.split("function draw(){", 1)[1].split("\nfunction ", 1)[0]
+    assert "drawDims(gb)" in cuerpo, "draw() debe dibujar las cotas"
+
+if __name__ == "__main__":
+    test_web_cotas_y_escala(); print("OK13")
+
+
+def test_patios():
+    """Patios (v2.4): automáticos en predios entre medianeras profundos, y manuales; cada bloque con su núcleo."""
+    from engine import geometry as G
+    meds = lambda w, d: [{"a":[w,0],"b":[w,d],"retiro":0},{"a":[0,d],"b":[0,0],"retiro":0}]
+    # el ejemplo pedido: lote 10 × 40 entre medianeras -> bloque al frente y al fondo, patio de 3 m, un núcleo en cada uno
+    fp = [[0,0],[10,0],[10,40],[0,40]]
+    r = run(fp, medianeras=meds(10, 40))
+    m = r["metrics"]
+    assert m["blocks"] == 2 and len(r["patios"]) == 1 and not r.get("dark_zones"), m
+    assert abs(m["patio_area"] - 30) < 0.5 and m["gfa"] < 400 * m["stories"], m      # 10 × 3 m, que no se construye
+    for b in r["blocks"]:
+        assert sum(G.point_in_poly(c["center"], b["footprint"]) for c in r["cores"]) == 1, "un núcleo por bloque"
+        assert any(G.point_in_poly(G.centroid(u["poly"]), b["footprint"]) for u in r["units"]), "viviendas en cada bloque"
+    assert not [c for u in r["units"] for c in u["checks"] if not c["ok"] and "sin fachada" in c["msg"]], \
+        "las viviendas que dan al patio tienen luz"
+    assert run(fp, medianeras=meds(10, 40), patios_mode="manual").get("dark_zones"), "sin patios vuelve la zona sin luz"
+    # el lote de 10 × 28 no es tan profundo: sigue sin patio
+    assert not run([[0,0],[10,0],[10,28],[0,28]], medianeras=meds(10, 28))["patios"]
+    # 16 × 60: tres bloques con su núcleo y planos sin observaciones
+    r = run([[0,0],[60,0],[60,16],[0,16]], h=18, medianeras=[{"a":[0,0],"b":[60,0],"retiro":0},{"a":[60,16],"b":[0,16],"retiro":0}])
+    assert r["metrics"]["blocks"] == 3 and r["metrics"]["core_count"] == 3 and r["metrics"]["plan_score"] == 100, r["metrics"]
+    # patio manual angosto (2 m): avisa y sus caras no iluminan
+    r = run(fp, medianeras=meds(10, 40), patios_mode="manual", patios=[[[-1,19],[11,19],[11,21],[-1,21]]])
+    assert any("no ilumina" in w for w in r["warnings"]), r["warnings"]
+    assert any("sin fachada" in c["msg"] for u in r["units"] for c in u["checks"] if not c["ok"])
+    # patio manual que parte una barra, con núcleos manuales: cada núcleo va a su bloque y conserva su índice
+    r = run([[0,0],[60,0],[60,16],[0,16]], patios_mode="manual", patios=[[[28,-1],[32,-1],[32,17],[28,17]]],
+            cores_mode="manual", cores=[[50, 8], [10, 8]])
+    assert r["metrics"]["blocks"] == 2 and sorted(c["spec"] for c in r["cores"]) == [0, 1], r["cores"]
+    # patio interior (rodeado de edificio): todavía no se resuelve; avisa y no se usa
+    r = run([[0,0],[40,0],[40,40],[0,40]], patios_mode="manual", patios=[[[15,15],[25,15],[25,25],[15,25]]])
+    assert any("rodeado de edificio" in w for w in r["warnings"]) and not r["patios"]
+    # geometría: banda que parte, muesca (U), patio no convexo
+    R = lambda x0, y0, x1, y1: [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+    assert [round(G.area(o)) for o, _ in G.subtract(R(0, 0, 10, 40), [R(-1, 18, 11, 21)])[0]] == [190, 180]
+    (u, h), = G.subtract(R(0, 0, 12, 30), [R(9, 10, 13, 18)])[0]
+    assert len(u) == 8 and not h and round(G.area(u)) == 336
+    (l, _), = G.subtract(R(0, 0, 20, 30), [[(-1, 10), (12, 10), (12, 14), (8, 14), (8, 21), (-1, 21)]])[0]
+    assert round(G.area(l)) == 496
+
+if __name__ == "__main__":
+    test_patios(); print("OK14")

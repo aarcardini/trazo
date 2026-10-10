@@ -60,7 +60,9 @@ El puente es el archivo `rhino/trazo_rhino.py`. Funciona con **Rhino 8** (usa Py
    - La primera vez, Rhino prepara Python 3 y puede tardar un poco.
    - En Mac, si el sistema pregunta si Rhino puede acceder a la carpeta Documentos, elige **Permitir**.
    - Alternativa: comando `_ScriptEditor`, abre el archivo y pulsa ▶ (Run).
-3. En la línea de comandos elige **Enviar** (manda la masa seleccionada a la web) o **Recibir** (dibuja en Rhino lo generado en la web).
+3. En la línea de comandos elige **Enviar** (manda la masa seleccionada a la web), **Recibir** (dibuja en Rhino lo generado en la web) o **Diagnostico**.
+   - **Diagnostico** comprueba que todo esté listo: muestra la versión de Rhino y de Python, las unidades del archivo, las capas de Trazo y si el servidor responde. Úsalo primero si algo no funciona.
+   - Al enviar, la consola muestra la huella (m²), las medidas y la altura **en metros**: así ves enseguida si las unidades del archivo están bien.
 
 Las unidades del archivo de Rhino (mm, cm o m) se convierten solas: Trazo trabaja en metros.
 
@@ -77,7 +79,12 @@ Desde entonces basta con escribir `trazo` en Rhino.
    - Para controlar el pasillo, dibuja polilíneas en la capa `Trazo::Centerline` antes de enviar (cada vértice es un giro del pasillo).
    - Para fijar los núcleos, coloca puntos en la capa `Trazo::Cores`; se usan en modo manual.
    - Para marcar medianeras, dibuja líneas en la capa `Trazo::Medianeras` (nombre `retiro=3` si el edificio se retira).
+   - Para abrir patios, dibuja curvas cerradas en la capa `Trazo::Patios`; llegan a la web en modo manual.
 3. En la web: Calcular masa → Generar pasillo y núcleos → Generar mix → Generar planos.
+   - **Patios** (sección «Patios»): en modo automático, Trazo abre patios donde un predio entre medianeras es demasiado profundo para tener luz; cada bloque lleva su núcleo. Con **+ Dibujar patio** haces clic en dos esquinas opuestas (el patio se alinea con el edificio y se recorta a la masa); la × de la lista lo quita. Dibujar o quitar un patio pasa a modo manual. Las estancias que dan a un patio de al menos 3 m (editable en «Medidas y normativa → Predio») tienen luz.
+   - Para empezar de cero: botón **Nuevo (en blanco)**, junto a «Ejemplo». Borra la masa, las polilíneas, los núcleos, las medianeras y el resultado, también los guardados en el servidor; conserva las medidas, el mix y los colores. Después envía una masa desde Rhino o elige un ejemplo.
+   - En la planta 2D se ven las **cotas totales** de la huella (por fuera, alineadas con el edificio) y una **escala gráfica** abajo a la derecha; se ocultan con la casilla «Cotas».
+   - El selector «Ejemplo» muestra siempre qué está cargado: un ejemplo, «Masa de Rhino: …» o «— En blanco —». Si miras un ejemplo, puedes volver a tu masa de Rhino eligiéndola en el selector.
 4. En Rhino: ejecuta de nuevo el script y elige **Recibir** (capas `Trazo::L00::Units`, `Rooms`, etc.).
    Alternativa sin script: botón **DXF (Rhino)** y luego `Import`.
 
@@ -98,12 +105,16 @@ Después cierra Trazo (Ctrl+C), vuelve a arrancarlo y recarga la página en el n
 | `can't open file ... server.py` | La terminal no está en la carpeta de Trazo. Repite el paso 3 desde la carpeta que contiene `server.py`. |
 | `Solo se permite un uso de cada dirección de socket` (Windows) o `Address already in use` (Mac) | Trazo ya está abierto en otra ventana: usa esa o ciérrala antes de arrancarlo de nuevo. |
 | El navegador no abre la página («No se puede acceder a este sitio», «rechazó la conexión») | Trazo no está corriendo: arráncalo (paso 3) y recarga la página. |
-| Rhino: `No puedo conectar con http://127.0.0.1:8765` | Arranca Trazo antes de ejecutar el script. |
-| Rhino: `No encontré una cara inferior horizontal` | La masa necesita una base plana y horizontal (por ejemplo, una extrusión cerrada). |
+| Rhino: `No hay conexión con Trazo` | Arranca Trazo antes de ejecutar el script: el mensaje dice el comando para tu sistema. |
+| Rhino: `Seleccionaste una curva` (o una malla, un bloque, un SubD…) | La masa tiene que ser un sólido cerrado (polisuperficie o extrusión): el mensaje dice cómo convertirlo. |
+| Rhino: `No encontré una cara inferior plana y horizontal` | La masa necesita una base plana y horizontal (por ejemplo, una extrusión cerrada). Si está abierta abajo, `_Cap`. |
+| Rhino: `La masa es muy pequeña` o `La masa es enorme` | Casi siempre son las unidades del archivo: revísalas con `_Units` (Trazo trabaja en metros). Pregunta antes de enviar. |
 | Rhino: `Todavía no hay un resultado` | Genera primero en la web y después elige **Recibir**. |
+| Rhino: `El resultado no viene de una masa de Rhino` o `no coincide con la última masa` | En la web elegiste un ejemplo u otra masa: vuelve a **Enviar** tu masa, genera y recibe de nuevo. |
+| Rhino: `error inesperado` | Copia el mensaje completo y pégalo en la sesión de Claude Code. |
 | Rhino: `No module named request` o errores de sintaxis | El script se ejecutó con el Python 2 de Rhino 7. Usa Rhino 8: la primera línea del archivo (`#! python 3`) le indica que use Python 3. |
 
-Si algo falla, copia el mensaje completo de la terminal o de la línea de comandos de Rhino y pégalo en la sesión de Claude Code.
+Si algo falla en Rhino, ejecuta el script y elige **Diagnostico**. Si no se resuelve, copia el mensaje completo de la terminal o de la línea de comandos de Rhino y pégalo en la sesión de Claude Code.
 
 ## Desarrollo con Claude Code (en la nube)
 1. Entra en https://claude.ai/code y elige el repositorio `aarcardini/trazo`.
@@ -117,6 +128,34 @@ Si algo falla, copia el mensaje completo de la terminal o de la línea de comand
 - **Pasillo y núcleos**: eje (automático o dibujado), ancho de pasillo, núcleos (ancho, fondo incluyendo pasillo, cantidad), distancias de evacuación (salida única / múltiple) y núcleos extra automáticos.
 - **Mix**: tipos con m² objetivo y %, ancho mínimo, muro medianero; métricas Match Score, Fit y Unidades únicas.
 - **Planos**: distribución día/noche con pasillo interno, puertas y grafo de conexiones verificado.
+
+## Novedades v2.4
+- **Patios de aire y luz en el modo Edificio:** la masa menos los patios da uno o más **bloques**, cada uno con su muro exterior, su pasillo, **su propio núcleo** y sus viviendas; el mix se reparte entre todos los bloques.
+- **Automáticos:** en un predio entre medianeras demasiado profundo (antes quedaba una «zona central sin luz»), Trazo lo divide en bloques iguales separados por patios del ancho mínimo, con la solución típica en cada bloque: núcleo en el medio y una vivienda hacia cada lado (la calle o el fondo, y el patio). Ejemplo nuevo: «Predio entre medianeras 10 × 40 (patio automático)».
+- **Manuales:** «+ Dibujar patio» (dos clics en esquinas opuestas), lista de patios con su medida y botón para quitarlos; desde Rhino, curvas cerradas en la capa `Trazo::Patios`.
+- **Luz por el patio:** las estancias que dan a un patio de al menos 3 m (editable) cuentan como iluminadas; si es más angosto, avisa y sus caras se tratan como medianera.
+- En la planta, los patios se ven rayados y acotados (cotas parciales de bloques y patios); en la axonometría cada bloque es un volumen; métricas «Bloques» y «Patios (m²)»; el GFA no cuenta los patios.
+- Todavía no: patios rodeados de edificio por los cuatro lados (avisa y no se usan) y alturas distintas por bloque.
+
+## Novedades v2.3
+- **Cotas y escala gráfica en la planta 2D:** medida total de la huella (largo y fondo, alineadas con el edificio aunque esté girado) por fuera del dibujo, y una escala gráfica que se adapta al zoom (0 – 5 – 10 m, 0 – 10 – 20 m…). Casilla «Cotas» en la barra de la planta para mostrarlas u ocultarlas.
+
+## Novedades v2.2.1
+- **Corrección:** con una masa recién recibida (de Rhino o de un ejemplo), cambiar «Núcleos → Modo» a automático, pulsar «Auto» en las polilíneas o editar polilíneas y núcleos volvía a calcular solo la masa y dejaba la axonometría sin pasillo. Ahora calcula el pasillo y los núcleos y muestra la planta.
+- Si el motor da un error o el servidor está apagado, el mensaje aparece en «Avisos» (antes solo en la etiqueta de abajo).
+
+## Novedades v2.2
+- **Nuevo (en blanco):** botón en el modo Edificio para empezar un proyecto de cero. Deja la planta vacía con el aviso «Envía una masa desde Rhino o elige un ejemplo» y borra también la masa y el resultado guardados en el servidor: al recargar la página no vuelve la masa vieja y «Recibir» en Rhino no trae un resultado anterior.
+- El selector «Ejemplo» muestra qué está cargado: al llegar una masa de Rhino dice «Masa de Rhino: nombre» (antes seguía mostrando el ejemplo anterior) y se puede volver a ella después de mirar un ejemplo.
+
+## Novedades v2.1
+- **Diagnóstico en Rhino:** el script tiene una tercera opción, **Diagnostico**, que muestra la versión de Rhino y de Python, las unidades del archivo, las capas de Trazo, si el servidor responde y qué masa y resultado tiene.
+- **Mensajes claros en Rhino** para cada fallo, siempre con qué hacer: servidor apagado (con el comando para Mac o Windows), objeto que no es un sólido (dice qué seleccionaste y cómo convertirlo), base que no es plana, base en varias partes, resultado que no corresponde a la masa enviada y errores inesperados.
+- **Unidades a la vista:** al enviar se muestran la huella, las medidas y la altura en metros. Si parecen un error de unidades (una masa de 6 cm o de 60 km), avisa y pregunta antes de enviar.
+- Más robusto: si Recibir falla a mitad, la vista de Rhino ya no queda sin redibujar.
+
+## Novedades v2.0.1
+- **Corrección (Masterplan):** al cambiar de ejemplo ya no se arrastra el tamaño de manzana del ejemplo anterior. Cada ejemplo usa su manzana o la estándar (80 × 120): por ejemplo, «Predio rectangular» da siempre 4 manzanas y 64 lotes, aunque antes se haya abierto «Barrio con plaza central» (75 × 95).
 
 ## Novedades v2.0
 - **Modo Masterplan** (`http://127.0.0.1:8765/masterplan`, enlace arriba a la izquierda en ambos modos): predio → calles con perfil (calzada + veredas) → manzanas con ochavas → lotes por frente con mix de tamaños → construcción por lote (retiros, FOS, pisos).

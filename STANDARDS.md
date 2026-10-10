@@ -61,6 +61,7 @@ Distribución: hall de acceso frente al núcleo, batería de baños (mujeres, ho
 | Parámetro | Valor | Referencia |
 |---|---|---|
 | Retiro desde medianera para abrir ventanas | 3,00 m | Criterio indicado por el usuario (práctica en Montevideo); confirmar en el Digesto |
+| Ancho mínimo de patio para iluminar | 3,00 m | Criterio indicado por el usuario (mismo criterio que el retiro para ventanas); confirmar en el Digesto, que puede exigir más según la altura |
 
 ## Masterplan (fraccionamiento)
 

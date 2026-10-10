@@ -48,6 +48,23 @@ def generate(data):
 def result_to_dxf(res):
     return engine()[1].result_to_dxf(res)
 
+
+def mp_samples():
+    """Ejemplos del modo Masterplan. Cada uno trae su manzana (la propia o la estándar de standards.py)
+    para que la web no arrastre la del ejemplo anterior al cambiar de ejemplo."""
+    std = engine()[0].ST.DEFAULTS["masterplan"]["manzana"]
+    d = os.path.join(ROOT, "samples", "masterplan")
+    out = {}
+    for fn in sorted(os.listdir(d)) if os.path.isdir(d) else []:
+        if fn.endswith(".json"):
+            with open(os.path.join(d, fn), encoding="utf-8") as f:
+                s = json.load(f)
+            mp = s.setdefault("masterplan", {})
+            if not mp.get("manzana"):
+                mp["manzana"] = list(std)
+            out[fn[:-5]] = s
+    return out
+
 STATE = {"mass": None, "mass_version": 0, "result": None, "result_version": 0}
 LOCK = threading.Lock()
 DATA = os.path.join(ROOT, "data")
@@ -85,13 +102,7 @@ class H(BaseHTTPRequestHandler):
             with open(os.path.join(ROOT, "web", "masterplan.html"), "rb") as f:
                 return self._send(200, f.read(), "text/html")
         if p == "/api/mp_samples":
-            d = os.path.join(ROOT, "samples", "masterplan")
-            out = {}
-            for fn in sorted(os.listdir(d)) if os.path.isdir(d) else []:
-                if fn.endswith(".json"):
-                    with open(os.path.join(d, fn), encoding="utf-8") as f:
-                        out[fn[:-5]] = json.load(f)
-            return self._send(200, out)
+            return self._send(200, mp_samples())
         if p in ("/", "/index.html"):
             with open(os.path.join(ROOT, "web", "index.html"), "rb") as f:
                 return self._send(200, f.read(), "text/html")
@@ -126,6 +137,12 @@ class H(BaseHTTPRequestHandler):
             body = self._body()
         except Exception as e:
             return self._send(400, {"error": str(e)})
+        if p == "/api/reset":     # web «Nuevo»: olvida la masa y el resultado (al recargar no vuelven; Rhino no recibe uno viejo)
+            with LOCK:
+                STATE["mass"], STATE["result"] = None, None
+                STATE["mass_version"] += 1
+                STATE["result_version"] += 1
+            return self._send(200, {"ok": True})
         if p == "/api/mass":      # Rhino -> servidor
             with LOCK:
                 STATE["mass"] = body
