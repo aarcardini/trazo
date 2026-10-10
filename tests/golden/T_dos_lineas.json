@@ -1,7 +1,7 @@
 {
  "ejemplo": "samples/T_dos_lineas.json",
  "nombre": "T con 2 polilíneas",
- "version_motor": "2.7",
+ "version_motor": "2.10",
  "metricas": {
   "unidades": 15,
   "unidades_totales": 75,
@@ -20,7 +20,7 @@
   "match_score": 96.7,
   "fit_m2": 10.2,
   "calidad_planos": 17,
-  "evacuacion_max": 26.3,
+  "evacuacion_max": 16.0,
   "nsa_total": 6094.0
  }
 }

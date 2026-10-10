@@ -133,6 +133,13 @@ Si algo falla en Rhino, ejecuta el script y elige **Diagnostico**. Si no se resu
 - **Mix**: tipos con m² objetivo y %, ancho mínimo, muro medianero; métricas Match Score, Fit y Unidades únicas.
 - **Planos**: distribución día/noche con pasillo interno, puertas y grafo de conexiones verificado.
 
+## Novedades v2.10
+- **Pasillos dibujados que se cruzan (R3.3):** dos polilíneas que se cruzan en X ya no ponen viviendas encimadas (en una planta en cruz, unos 500 m² de viviendas se pisaban entre sí y otros 110 m² con pasillos y núcleos). En cada cruce, la línea más larga sigue de largo y la otra se corta en dos; cada mitad se une a la primera como una T. Si una línea pasa del otro lado menos de 4,5 m (el sobrante típico al dibujar una T), ese resto se quita.
+- También sin solapes en pasillos dibujados: el codo de una polilínea cuando la planta se ensancha en la esquina, las ramas de una U muy cercanas, el bolsillo detrás de un núcleo junto a otro pasillo y dos núcleos en la misma punta. Un ramal oblicuo ya no bloquea viviendas de más en el pasillo al que llega. En 350 casos al azar con cruces, T, L y U dibujadas, la superficie encimada pasa de unos 218 000 m² (en 258 casos) a prácticamente cero (menos de 1 m² en total).
+- La evacuación pasa por las uniones de pasillos dibujados en los dos sentidos: desde el pasillo principal se puede salir por el núcleo de un ramal (en «T con 2 polilíneas», la distancia máxima a un núcleo baja de 26,3 a 16,0 m). En «L con polilínea», dos viviendas del codo se pisaban 3,6 m²: ya no (la eficiencia pasa de 72,7 % a 72,3 % porque ese tramo contaba dos veces).
+- Si algo todavía se pisa (por ejemplo, con tres líneas que se cruzan en un mismo punto), la vivienda se recorta o, si pierde más de la mitad, se quita y se avisa.
+- Ejemplo nuevo: «Cruz con 2 polilíneas que se cruzan (X)».
+
 ## Novedades v2.9
 - **Codos más eficientes (R3.2):** en el codo de una L, una T o una U (y en las esquinas de un patio), las viviendas que daban a otra ala quedaban con dormitorios sin ventana: en formas L, T y U al azar, casi 1 de cada 5. Ahora:
   - donde no llega la luz no se ponen viviendas; si el pasillo tiene una punta corta junto al codo, su núcleo va a esa esquina interior (que no necesita luz) y la esquina exterior, con dos fachadas, queda para las viviendas;

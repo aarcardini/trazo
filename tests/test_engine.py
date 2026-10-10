@@ -464,3 +464,80 @@ def test_codos():
 
 if __name__ == "__main__":
     test_codos(); print("OK19")
+
+
+def test_cruces():
+    """R3.3: pasillos dibujados sin solapes. Dos líneas que se cruzan en X, una T que pasa de largo, el codo de una
+    polilínea en una planta ancha, una U de ramas cercanas, tres líneas por un mismo punto y una línea corta que cruza
+    otra: ninguna vivienda pisa a otra, a un pasillo o a un núcleo, y los núcleos no se pisan entre sí."""
+    from engine import geometry as G, circulation as C, layout as LY
+    caja = lambda p: G.bbox([tuple(q) for q in p])
+    toca = lambda a, b: a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]
+    pisa = lambda a, b: sum(abs(G.area(o)) for o in G.subtract(a, [b])[1][0]) if toca(caja(a), caja(b)) else 0.0
+
+    def solapes(r):
+        us, cs = [u["poly"] for u in r["units"]], [c["poly"] for c in r["cores"]]
+        return (round(sum(pisa(a, b) for i, a in enumerate(us) for b in us[i + 1:]), 1),
+                round(sum(pisa(a, b) for a in us for b in r["corridors"] + cs), 1),
+                round(sum(pisa(a, b) for i, a in enumerate(cs) for b in cs[i + 1:]), 1))
+    # planta en cruz con dos líneas que se cruzan en el centro: viviendas en las cuatro alas, sin solapes
+    cruz = [[20, 0], [36, 0], [36, 20], [56, 20], [56, 36], [36, 36], [36, 56], [20, 56], [20, 36], [0, 36], [0, 20],
+            [20, 20]]
+    lineas = [[[28, 1], [28, 55]], [[1, 28], [55, 28]]]
+    r = run(cruz, centerlines=lineas)
+    assert solapes(r) == (0, 0, 0), solapes(r)
+    cen = [G.centroid([tuple(q) for q in u["poly"]]) for u in r["units"]]
+    for ala in (lambda p: p[0] < 20, lambda p: p[0] > 36, lambda p: p[1] < 20, lambda p: p[1] > 36):
+        assert any(ala(p) for p in cen), cen
+    # la otra línea se corta en el cruce: cada mitad se une a la que sigue de largo, en los dos sentidos
+    pcs = C.build_user_pieces(cruz, LY.merge_params({"centerlines": lineas}))
+    assert len(pcs) == 3 and sum(1 for j in pcs[0]["junctions"] if j.get("llega")) == 2, \
+        [(len(pcs), pc["junctions"]) for pc in pcs]
+    # una T que pasa 2 m del otro lado es la misma T: sin un resto de pasillo del otro lado
+    s = json.load(open(os.path.join(os.path.dirname(__file__), "..", "samples", "T_dos_lineas.json"), encoding="utf-8"))
+    r1 = run(s["footprint"], centerlines=s["centerlines"])
+    r2 = run(s["footprint"], centerlines=[s["centerlines"][0], [[30, 8], [30, 48]]])
+    assert [u["poly"] for u in r1["units"]] == [u["poly"] for u in r2["units"]]
+    assert min(caja(c)[1] for c in r2["corridors"]) >= 9 - 0.01, [caja(c) for c in r2["corridors"]]
+    # codo de una polilínea en una L ancha, U de ramas cercanas, tres líneas por un punto, línea corta que cruza
+    casos = [([[0, 0], [70, 0], [70, 20], [20, 20], [20, 60], [0, 60]], [[[10, 58], [10, 10], [68, 10]]]),
+             ([[0, 0], [40, 0], [40, 40], [0, 40]], [[[10, 1], [10, 24], [30, 24], [30, 1]]]),
+             ([[0, 0], [83.5, 0], [83.5, 35.6], [0, 35.6]], [[[20.9, 1], [20.9, 21.3], [62.6, 21.3], [62.6, 1]],
+                                                             [[1, 10.7], [82.5, 10.7]]]),
+             ([[0, 0], [60, 0], [60, 60], [0, 60]], [[[1, 30], [59, 30]], [[30, 1], [30, 59]], [[3, 3], [57, 57]]]),
+             ([[0, 0], [77, 0], [77, 17], [18.8, 17], [18.8, 68.4], [0, 68.4]],
+              [[[9.4, 67.4], [9.4, 8], [76, 8]], [[47.8, 1], [47.8, 15]]])]
+    for fp, ls in casos:
+        r = run(fp, centerlines=ls)
+        assert r["units"] and solapes(r) == (0, 0, 0), (ls, solapes(r))
+    # en el codo y en la U, ya las franjas de viviendas de cada tramo se reparten la planta (sin recortes al final)
+    params = LY.merge_params({})
+    c = params["corridor_width"] / 2 + params["party_wall"] / 2
+    for fp, ls in casos[:2]:
+        pcs = C.build_user_pieces(fp, LY.merge_params({"centerlines": ls}))
+        fr = [G.to_world(G.clip_rect(pc["side_region"][sd], None, None, c, None) if sd > 0 else
+                         G.clip_rect(pc["side_region"][sd], None, None, None, -c), pc["origin"], pc["angle"])
+              for pc in pcs for sd in (1, -1) if pc["side_region"].get(sd)]
+        assert sum(pisa(a, b) for i, a in enumerate(fr) for b in fr[i + 1:] if a and b) < 0.5, ls
+    # cruce oblicuo: el pasillo que llega solo bloquea la franja de viviendas que atraviesa, no toda su proyección
+    fp, ls = [[0, 0], [70, 0], [70, 50], [0, 50]], [[[2, 25], [68, 25]], [[15, 2], [60, 47]]]
+    r = run(fp, centerlines=ls)
+    assert solapes(r) == (0, 0, 0), solapes(r)
+    pcs = C.build_user_pieces(fp, LY.merge_params({"centerlines": ls}))
+    assert all(b - a < 20 for sd in (1, -1) for a, b in pcs[0]["extra_blocks"][sd]), pcs[0]["extra_blocks"]
+    # tres líneas por un punto: las otras dos se unen a la que pasa de largo (la diagonal), no entre sí
+    pcs = C.build_user_pieces(casos[3][0], LY.merge_params({"centerlines": casos[3][1]}))
+    tronco = [pc for pc in pcs if pc["free"] == [True, True]]
+    assert len(tronco) == 1 and sum(1 for j in tronco[0]["junctions"] if j.get("llega")) == 4, \
+        [(pc["free"], pc["junctions"]) for pc in pcs]
+    # el bolsillo detrás de un núcleo no se suma a la vivienda vecina si ahí llega otro pasillo
+    from engine import units as UN
+    rect = [(0, -15), (30, -15), (30, 15), (0, 15)]
+    circ = {"side_region": {1: rect, -1: rect}, "cores": [{"side": 1, "box": (10, -1, 15, 6)}],
+            "extra_blocks": {1: [(12, 14)], -1: []}, "loc_plate": rect, "xa": 0, "xb": 30}
+    segs = UN._segments(rect, circ, {"corridor_width": 2.0, "party_wall": 0.3})
+    assert all(G.bbox(sg["region"])[2] <= 10.05 or G.bbox(sg["region"])[0] >= 14.95 for sg in segs if sg["side"] > 0), \
+        [G.bbox(sg["region"]) for sg in segs]
+
+if __name__ == "__main__":
+    test_cruces(); print("OK20")

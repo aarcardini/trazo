@@ -59,6 +59,7 @@ def _segments(loc, circ, params):
             y0, y1 = None, -cw / 2 - pw / 2
         blocks = []
         pockets = []
+        otros = list(circ.get("extra_blocks", {}).get(side, []))
         for c in circ["cores"]:
             if c["side"] == side:
                 b = c["box"]
@@ -67,9 +68,11 @@ def _segments(loc, circ, params):
                     pk = G.clip_rect(loc, b[0], b[2], b[3] + pw / 2, None)
                 else:
                     pk = G.clip_rect(loc, b[0], b[2], None, b[1] - pw / 2)
-                if pk and abs(G.area(pk)) >= 6 and _is_rect(pk):
+                # sin bolsillo si detrás del núcleo hay otro bloqueo (el pasillo de otra línea que llega, otro núcleo)
+                if pk and abs(G.area(pk)) >= 6 and _is_rect(pk) and \
+                        not any(o0 < b[2] - 0.05 and o1 > b[0] + 0.05 for o0, o1 in otros):
                     pockets.append((b[0], b[2], pk))
-        blocks += list(circ.get("extra_blocks", {}).get(side, []))
+        blocks += otros
         blocks.sort()
         cur = xa
         ivs = []
@@ -183,6 +186,46 @@ def generate_unit_mix(circ, params, state=None):
             warnings.append("Unidad %s de %.0f m² tiene profundidad %.1f m (> %.1f m): poca luz natural" %
                             (u["type"], u["area"], u["depth"], params["max_unit_depth"]))
     return units, warnings
+
+
+def sin_solapes(units, pieces, nucleos, params):
+    """Pasillos dibujados (R3.3): última comprobación. Una vivienda que pisa a otra anterior, un pasillo o un núcleo se
+    recorta; si lo que queda es menos de la mitad, no va. Las reglas de uniones, codos y cruces ya evitan casi todos los
+    solapes: esto cubre los casos que quedan (por ejemplo, tres líneas que se cruzan en un mismo punto)."""
+    if not any(pc.get("user") for pc in pieces):
+        return units, []
+    cw = params["corridor_width"]
+    W = lambda pc, pl: G.to_world(pl, pc["origin"], pc["angle"])
+    fijos = [W(pc, p) for pc in pieces for p in G.split_parts(pc["corridor_local"])] + \
+        [list(e) for pc in pieces for e in pc["corridor_ext"]] + [list(c) for c in nucleos]
+    toca = lambda a, b: a[0] < b[2] - 1e-6 and b[0] < a[2] - 1e-6 and a[1] < b[3] - 1e-6 and b[1] < a[3] - 1e-6
+    fijos = [(G.bbox(p), p) for p in fijos if len(p) >= 3]
+    out, quitadas, ya = [], 0, []
+    for u in units:
+        pc = u["_pc"]
+        w = W(pc, u["poly_local"])
+        bw = G.bbox(w)
+        otros = [p for b, p in fijos + ya if toca(bw, b)]
+        if otros:
+            resto, dentro = G.subtract(w, otros)
+            if sum(abs(G.area(o)) for parts in dentro for o in parts) > 0.05:
+                partes = [o for o, _ in resto]
+                mayor = max(partes, key=lambda o: abs(G.area(o))) if partes else None
+                if mayor is None or abs(G.area(mayor)) < 0.5 * abs(G.area(w)):
+                    quitadas += 1
+                    continue
+                loc = G.to_local(mayor, pc["origin"], pc["angle"])
+                if (G.area(loc) > 0) != (G.area(u["poly_local"]) > 0):
+                    loc = loc[::-1]                     # el mismo sentido de giro que la vivienda original
+                x0, _, x1, _ = G.bbox(loc)
+                ys = [p[1] for p in loc]
+                u.update({"poly_local": loc, "area": abs(G.area(loc)), "x0": x0, "x1": x1, "width": x1 - x0,
+                          "depth": max(ys) - min(ys), "door_local": ((x0 + x1) / 2.0, (cw / 2) * u["side"])})
+                w = mayor
+        ya.append((G.bbox(w), w))
+        out.append(u)
+    avisos = ["%d vivienda(s) no entran donde se cruzan los pasillos dibujados: revisa las líneas" % quitadas] if quitadas else []
+    return out, avisos
 
 
 def metrics_mix(units, params):

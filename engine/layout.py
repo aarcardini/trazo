@@ -15,10 +15,10 @@ from .circulation import (pick_frame, core_positions, side_for, _frame_for_poly,
                           _add_core, _propagate_core_blocks, generate_circulation, is_between, _between_depth,
                           _generate_circulation)  # noqa: F401
 from .units import (_bisect_x, _chain_union, _is_rect, _segments, generate_unit_mix, metrics_mix, bedrooms_for,
-                    unit_rooms)  # noqa: F401
+                    unit_rooms, sin_solapes)  # noqa: F401
 from .patios import (auto_patios, _anillo, split_blocks, make_patio_dark, _block_of, _block_of_line)  # noqa: F401
 
-VERSION = "2.9"
+VERSION = "2.10"
 
 DEFAULT_PARAMS = {
     # Masa
@@ -258,14 +258,20 @@ def generate(data):
         return res
     state = {}
     units = []
-    for pieces, pb, pl_b, _ in bloques_pc:
+    for pieces, pb, pl_b, cpolys in bloques_pc:
+        del_bloque = []
         for i, pc in enumerate(pieces):
             us, warns = generate_unit_mix(pc, pb, state)
             res["warnings"] += warns
             for u in us:
-                u["_pc"], u["_pb"], u["_plate"] = pc, pb, pl_b
-                u["egress"] = egress_at(pieces, i, (u["x0"] + u["x1"]) / 2.0) + pc.get("egress_extra", {}).get(u["side"], 0.0)
-            units += us
+                u["_pc"], u["_pb"], u["_plate"], u["_i"] = pc, pb, pl_b, i
+            del_bloque += us
+        del_bloque, warns = sin_solapes(del_bloque, pieces, cpolys, pb)
+        res["warnings"] += warns
+        for u in del_bloque:
+            pc = u["_pc"]
+            u["egress"] = egress_at(pieces, u["_i"], (u["x0"] + u["x1"]) / 2.0) + pc.get("egress_extra", {}).get(u["side"], 0.0)
+        units += del_bloque
     for i, u in enumerate(units):
         u["id"] = "U%02d" % (i + 1)
         if u["target"] and abs(u["area"] - u["target"]) > 0.35 * u["target"]:

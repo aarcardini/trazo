@@ -193,6 +193,22 @@ def line_intervals_multi(loops, y):
     return [(xs[i], xs[i + 1]) for i in range(0, len(xs) - 1, 2)]
 
 
+def seg_intersection(a, b, c, d):
+    """Cruce de los segmentos ab y cd: (t, u) con el punto a + t·(b − a) = c + u·(d − c), o None si no se cortan
+    (o son paralelos)."""
+    rx, ry = b[0] - a[0], b[1] - a[1]
+    sx, sy = d[0] - c[0], d[1] - c[1]
+    den = rx * sy - ry * sx
+    if abs(den) <= EPS * max(1.0, math.hypot(rx, ry) * math.hypot(sx, sy)):
+        return None
+    qx, qy = c[0] - a[0], c[1] - a[1]
+    t = (qx * sy - qy * sx) / den
+    u = (qx * ry - qy * rx) / den
+    if -EPS <= t <= 1 + EPS and -EPS <= u <= 1 + EPS:
+        return t, u
+    return None
+
+
 def min_area_rect_angle(poly):
     """Ángulo (rad) del lado del rectángulo mínimo orientado, alineado con su eje largo."""
     pts = poly

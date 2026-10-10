@@ -341,6 +341,96 @@ def _clip_sr(pc, fn):
         pc["side_region"][sd] = fn(r) if r else []
 
 
+def _largo(pts):
+    return sum(math.hypot(b[0] - a[0], b[1] - a[1]) for a, b in zip(pts, pts[1:]))
+
+
+def _tramo(pts, s0, s1):
+    """Parte de una polilínea entre las longitudes s0 y s1 medidas desde su inicio."""
+    out, s = [], 0.0
+    for a, b in zip(pts, pts[1:]):
+        L = math.hypot(b[0] - a[0], b[1] - a[1])
+        if L > 0 and s + L >= s0 and s <= s1:
+            for t in (max(0.0, (s0 - s) / L), min(1.0, (s1 - s) / L)):
+                p = (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
+                if not out or math.hypot(p[0] - out[-1][0], p[1] - out[-1][1]) > 1e-9:
+                    out.append(p)
+        s += L
+    d = lambda p, q: math.hypot(p[0] - q[0], p[1] - q[1])
+    res = out[:1]                                    # sin tramos diminutos: un corte junto a un vértice
+    for p in out[1:-1]:
+        if d(p, res[-1]) > 0.05:
+            res.append(p)
+    if len(out) >= 2:
+        if len(res) > 1 and d(out[-1], res[-1]) <= 0.05:
+            res[-1] = out[-1]                        # el extremo exacto (el cruce) manda sobre el vértice
+        else:
+            res.append(out[-1])
+    return res
+
+
+def _cruces_de(A, B):
+    """Cruces entre dos polilíneas como longitudes (sA, sB) desde sus inicios, sin los que caen en un extremo
+    (esos son empalmes en T o en L dibujados justo) ni los de ángulo muy agudo."""
+    LA, LB = _largo(A), _largo(B)
+    out, sa = [], 0.0
+    for a, b in zip(A, A[1:]):
+        la = math.hypot(b[0] - a[0], b[1] - a[1])
+        sb = 0.0
+        for c, d in zip(B, B[1:]):
+            lb = math.hypot(d[0] - c[0], d[1] - c[1])
+            tu = G.seg_intersection(a, b, c, d)
+            seno = abs((b[0] - a[0]) * (d[1] - c[1]) - (b[1] - a[1]) * (d[0] - c[0])) / ((la * lb) or 1.0)
+            if tu and seno >= 0.2:
+                s1, s2 = sa + tu[0] * la, sb + tu[1] * lb
+                if 0.05 < s1 < LA - 0.05 and 0.05 < s2 < LB - 0.05 and \
+                        all(abs(s1 - p) > 0.05 or abs(s2 - q) > 0.05 for p, q in out):
+                    out.append((s1, s2))
+            sb += lb
+        sa += la
+    return out
+
+
+def _cruces(lineas, params):
+    """Cruces en X entre polilíneas distintas. En cada cruce la línea más larga sigue de largo (tronco) y la otra se
+    corta en dos que terminan sobre el eje del tronco: cada mitad se une a él como un empalme en T, así ninguna
+    vivienda pisa el pasillo ni las viviendas de la otra línea. Si una línea pasa al otro lado menos que la distancia
+    de empalme de una T, lo que sobra es del dibujo y se quita (la línea termina en el cruce).
+    Devuelve [(índice de la línea dibujada, puntos)]."""
+    corto = params["corridor_width"] + 2.5
+    largos = [_largo(p) for p in lineas]
+    cortes = [[] for _ in lineas]                    # (longitud, None = corte | "antes"/"despues" = se quita)
+    for i in range(len(lineas)):
+        for j in range(i + 1, len(lineas)):
+            for si, sj in _cruces_de(lineas[i], lineas[j]):
+                hi, hj = (si, largos[i] - si), (sj, largos[j] - sj)
+                ci, cj = sum(h < corto for h in hi), sum(h < corto for h in hj)
+                if ci == 0 and cj == 0:
+                    if (largos[i], -i) >= (largos[j], -j):
+                        cortes[j].append((sj, None))
+                    else:
+                        cortes[i].append((si, None))
+                elif ci == 1 and cj == 0:
+                    cortes[i].append((si, "antes" if hi[0] < corto else "despues"))
+                elif cj == 1 and ci == 0:
+                    cortes[j].append((sj, "antes" if hj[0] < corto else "despues"))
+    out = []
+    for i, pts in enumerate(lineas):
+        if not cortes[i]:
+            out.append((i, pts))
+            continue
+        s0 = max([s for s, q in cortes[i] if q == "antes"], default=0.0)
+        s1 = min([s for s, q in cortes[i] if q == "despues"], default=largos[i])
+        if s1 - s0 < 0.05:
+            s0, s1 = 0.0, largos[i]
+        bs = [s0] + sorted(s for s, q in cortes[i] if q is None and s0 + 0.05 < s < s1 - 0.05) + [s1]
+        for a, b in zip(bs, bs[1:]):
+            parte = _tramo(pts, a, b)
+            if len(parte) >= 2 and _largo(parte) > 0.05:
+                out.append((i, parte))
+    return out
+
+
 def build_user_pieces(plate, params):
     """Una pieza por tramo de cada polilínea dibujada. La planta se reparte entre tramos:
     en giros de ~90° con cortes ortogonales (el tramo anterior se queda con el codo interior),
@@ -349,15 +439,17 @@ def build_user_pieces(plate, params):
     D = params["max_unit_depth"]
     c = cw / 2 + pw / 2
     cls = params.get("centerlines") or ([params["centerline"]] if params.get("centerline") else [])
-    pieces, chains = [], []
+    lineas = []
     for pl in cls:
         pts = []
         for p in pl:
             p = (float(p[0]), float(p[1]))
             if not pts or math.hypot(p[0] - pts[-1][0], p[1] - pts[-1][1]) > 0.05:
                 pts.append(p)
-        if len(pts) < 2:
-            continue
+        if len(pts) >= 2:
+            lineas.append(pts)
+    pieces, chains = [], []
+    for linea, pts in _cruces(lineas, params):
         n = len(pts) - 1
         idxs = []
         for k in range(n):
@@ -408,8 +500,17 @@ def build_user_pieces(plate, params):
                     if depths:
                         depths.sort()
                         start_in = max(c, depths[len(depths) // 2] + pw / 2)
+                    zona = G.clip_rect(sr[inner], start_in - pw / 2, None, None, None) if sr[inner] else []
                     sr[inner] = G.clip_rect(sr[inner], start_in, None, None, None)
                     sr[outer] = G.clip_rect(sr[outer], c, None, None, None)
+                    prev_sr = prev_pc["side_region"].get(ts) if ts else None
+                    if zona and prev_sr:
+                        # donde la planta se ensancha en la esquina (la otra ala), la franja interior del tramo anterior
+                        # es más honda que ese fondo típico: no pisa la de este tramo
+                        zl = G.to_local(G.to_world(zona, a, ang), prev_pc["origin"], prev_pc["angle"])
+                        partes = [o for o, _ in G.subtract(prev_sr, [zl])[0]]
+                        if abs(G.area(prev_sr)) - sum(abs(G.area(o)) for o in partes) > 0.01:
+                            prev_pc["side_region"][ts] = max(partes, key=lambda o: abs(G.area(o))) if partes else []
                 else:
                     nx, ny = 1 - wx_, -wy_
                     if math.hypot(nx, ny) > 1e-6:
@@ -432,9 +533,10 @@ def build_user_pieces(plate, params):
             pieces[v]["free"][0] = False
             pieces[u]["junctions"].append({"x": pieces[u]["xb"], "nb": v, "nbx": 0.0})
             pieces[v]["junctions"].append({"x": 0.0, "nb": u, "nbx": pieces[u]["xb"]})
-        chains.append(idxs)
-    # extremos libres que tocan el pasillo de otra polilínea (empalme en T)
-    chain_of = {i: ci for ci, idxs in enumerate(chains) for i in idxs}
+        chains.append((linea, idxs))
+    # extremos libres que tocan el pasillo de otra polilínea (empalme en T); las dos mitades de una línea cortada
+    # en un cruce son de la misma línea y no se unen entre sí
+    chain_of = {i: ci for ci, idxs in chains for i in idxs}
     for i, pc in enumerate(pieces):
         for e in (0, 1):
             if not pc["free"][e]:
@@ -448,12 +550,17 @@ def build_user_pieces(plate, params):
                 A = q["origin"]
                 B = G.to_world([(q["xb"], 0.0)], q["origin"], q["angle"])[0]
                 dd = _dist_point_segment(E, A, B)
+                lx = G.to_local([E], q["origin"], q["angle"])[0][0]
+                if not (q["xa"] + 0.05 < lx < q["xb"] - 0.05):
+                    dd += 0.01        # a igual distancia, el pasillo que pasa de largo (no el extremo de otro ramal)
                 if dd < cw + 2.5 and (best is None or dd < best[0]):
                     best = (dd, j)
             if best:
                 _link(pieces, i, e, best[1], params)
+                j = pc["junctions"][-1]       # la unión sirve en los dos sentidos (evacuación por el ramal)
+                pieces[best[1]]["junctions"].append({"x": j["nbx"], "nb": i, "nbx": j["x"], "llega": True})
                 _stem_vs_trunk(pieces, i, e, best[1], params)
-    _split_parallel(pieces, chain_of, params)
+    _split_parallel(pieces, params)
     return pieces
 
 
@@ -466,10 +573,13 @@ def _stem_vs_trunk(pieces, i, e, j, params):
     F = G.to_world([(xf, 0.0)], stem["origin"], stem["angle"])[0]
     sb = 1 if G.to_local([F], trunk["origin"], trunk["angle"])[0][1] > 0 else -1
     cor_w = G.to_world(stem["corridor_local"], stem["origin"], stem["angle"]) if stem.get("corridor_local") else []
-    if cor_w:
-        bx0, by0, bx1, by1 = G.bbox(G.to_local(cor_w, trunk["origin"], trunk["angle"]))
-        trunk["extra_blocks"][sb].append((bx0 - pw / 2, bx1 + pw / 2))
     th = cw / 2 + pw + D
+    if cor_w:
+        cl = G.to_local(cor_w, trunk["origin"], trunk["angle"])
+        # solo donde el pasillo del ramal cruza la franja de viviendas del tronco: un ramal oblicuo no bloquea de más
+        franja = G.clip_rect(cl, None, None, 0.0, th) if sb > 0 else G.clip_rect(cl, None, None, -th, 0.0)
+        bx0, by0, bx1, by1 = G.bbox(franja or cl)
+        trunk["extra_blocks"][sb].append((bx0 - pw / 2, bx1 + pw / 2))
 
     def fn(r):
         tw = G.to_local(G.to_world(r, stem["origin"], stem["angle"]), trunk["origin"], trunk["angle"])
@@ -478,12 +588,13 @@ def _stem_vs_trunk(pieces, i, e, j, params):
     _clip_sr(stem, fn)
 
 
-def _split_parallel(pieces, chain_of, params):
-    """Pasillos paralelos de distintas líneas: la planta entre ambos se reparte por la línea media."""
+def _split_parallel(pieces, params):
+    """Pasillos paralelos (de distintas líneas o tramos de una misma línea, como las ramas de una U): la planta entre
+    ambos se reparte por la línea media."""
     cw, pw, D = params["corridor_width"], params["party_wall"], params["max_unit_depth"]
     for i, pc in enumerate(pieces):
         for j, q in enumerate(pieces):
-            if i == j or chain_of.get(i) == chain_of.get(j) or not pc.get("side_region"):
+            if i == j or not pc.get("side_region"):
                 continue
             if abs(math.sin(pc["angle"] - q["angle"])) > 0.03 or math.cos(pc["angle"] - q["angle"]) == 0:
                 continue
@@ -602,6 +713,20 @@ def _add_core(pc, x, side, params):
             box = (box[0], min(ys), box[2], box[3])
     pc["cores"].append({"x": x, "side": side, "box": box,
                         "poly_local": G.clip_rect(pc["loc_plate"], box[0], box[2], box[1], box[3])})
+
+
+def _pisa_nucleo(pieces, pc, nuevo):
+    """¿El núcleo nuevo de la pieza pc se superpone con uno que ya está (de cualquier pieza)?"""
+    b = nuevo["box"]
+    for q in pieces:
+        for c in q["cores"]:
+            if c is nuevo or not c.get("poly_local"):
+                continue
+            ol = G.to_local(G.to_world(c["poly_local"], q["origin"], q["angle"]), pc["origin"], pc["angle"])
+            z = G.clip_rect(ol, b[0], b[2], b[1], b[3])
+            if z and abs(G.area(z)) > 0.1:
+                return True
+    return False
 
 
 def _propagate_core_blocks(pieces, params):
@@ -757,6 +882,9 @@ def _generate_circulation(plate, params):
                 if pc["xb"] - pc["xa"] < 2 * half:
                     x = (pc["xa"] + pc["xb"]) / 2.0
                 _add_core(pc, x, 1 if pc.get("single") else next_side(), params)
+                if pc.get("user") and _pisa_nucleo(pieces, pc, pc["cores"][-1]):
+                    pc["cores"].pop()       # ya hay un núcleo ahí (las dos mitades cortas de una línea cortada en un cruce)
+                    continue
                 pc["cores"][-1]["punta"] = e
 
     def worst():
