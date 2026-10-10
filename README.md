@@ -133,6 +133,14 @@ Si algo falla en Rhino, ejecuta el script y elige **Diagnostico**. Si no se resu
 - **Mix**: tipos con m² objetivo y %, ancho mínimo, muro medianero; métricas Match Score, Fit y Unidades únicas.
 - **Planos**: distribución día/noche con pasillo interno, puertas y grafo de conexiones verificado.
 
+## Novedades v2.9
+- **Codos más eficientes (R3.2):** en el codo de una L, una T o una U (y en las esquinas de un patio), las viviendas que daban a otra ala quedaban con dormitorios sin ventana: en formas L, T y U al azar, casi 1 de cada 5. Ahora:
+  - donde no llega la luz no se ponen viviendas; si el pasillo tiene una punta corta junto al codo, su núcleo va a esa esquina interior (que no necesita luz) y la esquina exterior, con dos fachadas, queda para las viviendas;
+  - la franja de viviendas del ala que llega baja hasta el pasillo de la otra cuando su fondo sigue dando a la fachada;
+  - lo que queda sin luz se ve rayado como «Sin luz natural» y se avisa («Esquinas sin luz natural»): no es superficie desperdiciada, es la que no recibe luz (para núcleos, ductos o depósitos);
+  - en el plano de cada vivienda, las estancias habitables van bajo la parte del fondo que tiene luz y el resto queda como depósito.
+- En el ejemplo «Forma en L»: ninguna vivienda a oscuras (antes 1), 0 m² sin usar, calidad de planos 94 (antes 88) y 17,4 m de evacuación máxima (antes 21,4), con 72,1 % de eficiencia (antes 71,8 %). En formas T y U la eficiencia baja (de 71 a 64 % y de 72 a 67 % en promedio) porque ya no cuenta viviendas inválidas: la superficie de viviendas **con luz** sube un 11 %.
+
 ## Novedades v2.8
 - **Sin restos sueltos en las puntas (R3.1):** cuando el pasillo (por ejemplo, una polilínea dibujada) termina antes de la fachada, el núcleo de esa punta dejaba una franja de 1 a 4 m hasta el borde, demasiado chica para una vivienda, que quedaba sin usar. Ahora el núcleo se apoya contra la fachada y la vivienda del otro lado del núcleo crece en su lugar. Solo si el núcleo ya llega a la fachada (si detrás le queda un bolsillo, franja y bolsillo ya forman una vivienda) y si la evacuación sigue dentro del máximo. En el ejemplo «L con polilínea», la eficiencia pasa de 69,8 % a 72,7 %; en «T con 2 polilíneas», de 69,9 % a 70,7 %.
 

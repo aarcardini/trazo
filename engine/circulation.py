@@ -5,6 +5,9 @@ from . import geometry as G
 from . import plans as P
 from .massing import _dist_point_segment, _dist_to_boundary, decompose_wings
 
+BOLSILLO = 4.5     # fondo detrás de un núcleo por debajo del cual no cabe una unidad útil (el núcleo llega a la
+#   fachada) y largo de un tramo sin luz que todavía puede ser depósito de la vivienda vecina
+
 
 # ---------------------------------------------------------------- pasillo y núcleos
 def pick_frame(plate, params):
@@ -228,6 +231,7 @@ def _link(pieces, i, e, nb, params):
     protrusion = max(by1 - cw / 2, -cw / 2 - by0, 0.0)
     if protrusion > 0.6:      # el conector invade la zona de unidades; si no, vive dentro del pasillo
         q["extra_blocks"][side].append((bx0 - pw / 2, bx1 + pw / 2))
+        q.setdefault("conectores", []).append((side, bx0 - pw / 2, bx1 + pw / 2))
     pc["junctions"].append({"x": xe, "nb": nb, "nbx": P[0] + d[0] * t})
 
 
@@ -239,24 +243,30 @@ def _connect(pieces, plate, params):
             nb = next((j for j, q in enumerate(pieces) if j != i and G.point_in_poly(probe, q["poly"])), None)
             if nb is not None:
                 _link(pieces, i, e, nb, params)
-                if params.get("_huecos"):            # anillo: la unión sirve en los dos sentidos (el pasillo da la vuelta)
-                    j = pc["junctions"][-1]
-                    pieces[nb]["junctions"].append({"x": j["nbx"], "nb": i, "nbx": j["x"]})
+                j = pc["junctions"][-1]               # la unión sirve en los dos sentidos (evacuación por la otra ala)
+                pieces[nb]["junctions"].append({"x": j["nbx"], "nb": i, "nbx": j["x"], "llega": True})
 
 
-def _ring_corners(pieces, plate, params):
-    """Anillo: las viviendas van donde su fondo da a una fachada o al patio. Donde el fondo de la franja de viviendas
-    no tiene luz (esquinas interiores del patio, o un ala descartada por angosta), no se ponen viviendas: queda sin
-    usar (las unidades de esquina llegan con la mejora de codos)."""
+def _franjas_sin_luz(pieces, plate, params):
+    """Codos (R3.2, antes solo anillos): donde el fondo de una franja de viviendas no da a ningún borde del edificio
+    (da a otra ala: el codo de una L, una T o una U, las esquinas de un patio, o un ala descartada por angosta), no se
+    ponen viviendas. Un tramo de hasta BOLSILLO queda como depósito de la vivienda vecina; uno más largo se anota en
+    «oscuros»: ahí puede ir un núcleo (_nucleo_en_codo) y lo que quede se marca sin luz (_zonas_oscuras)."""
     bordes = [plate] + list(params.get("_huecos") or [])
     bl, pw, paso = params.get("_blind"), params["party_wall"], 0.25
     for q in pieces:
-        _, qy0, _, qy1 = G.bbox(q["loc_plate"])
         n = max(1, int((q["xb"] - q["xa"]) / paso))
         xs = [q["xa"] + (q["xb"] - q["xa"]) * k / n for k in range(n + 1)]
-        for sd, yf in ((1, qy1 - 0.05), (-1, qy0 + 0.05)):
-            ws = G.to_world([(x, yf) for x in xs], q["origin"], q["angle"])
-            luz = [min(_dist_to_boundary(w, b) for b in bordes) <= 0.4 and not (bl and bl(w)) for w in ws]
+        tr = [(p[1], p[0]) for p in q["loc_plate"]]               # el ala traspuesta: su borde en cada x
+        for sd in (1, -1):
+            pts = []
+            for x in xs:                                          # el fondo real del ala en x (también si es inclinado)
+                ivs = G.line_intervals(tr, x)
+                yb = (max(b for _, b in ivs) - 0.05 if sd > 0 else min(a for a, _ in ivs) + 0.05) if ivs else None
+                pts.append((x, yb if yb is not None else 0.0))
+            # solo los codos: un fondo que no está sobre ningún borde (da a otra ala). Contra una medianera no se bloquea:
+            # esas viviendas las marca la ficha, como siempre
+            luz = [l or pt[1] == 0.0 for l, pt in zip(_luz(G.to_world(pts, q["origin"], q["angle"]), bordes, None), pts)]
             k = 0
             while k <= n:
                 if luz[k]:
@@ -265,9 +275,63 @@ def _ring_corners(pieces, plate, params):
                 j = k
                 while j < n and not luz[j + 1]:
                     j += 1
-                if xs[j] - xs[k] >= 1.0:
+                if xs[j] - xs[k] >= BOLSILLO:          # un tramo más corto queda como depósito de la vivienda vecina
                     q["extra_blocks"][sd].append((xs[k] - pw / 2, xs[j] + pw / 2))
+                    q.setdefault("oscuros", []).append((sd, xs[k], xs[j]))
                 k = j + 1
+
+
+def _luz(ws, bordes, bl):
+    """¿Cada punto de mundo está sobre una fachada (borde de la planta o de un patio) que no es medianera ciega?"""
+    return [min(_dist_to_boundary(w, b) for b in bordes) <= 0.4 and not (bl and bl(w)) for w in ws]
+
+
+def _codos(pieces, plate, params):
+    """Codos (R3.2): donde un ala llega de costado al pasillo de otra, cada franja de viviendas del ala que llega baja
+    hasta el pasillo de la otra si su fondo sigue dando a una fachada (la esquina exterior del codo, o del anillo). Esa
+    parte de la otra ala ya no lleva viviendas porque no tiene luz (_franjas_sin_luz); así la esquina pasa a ser parte
+    de una vivienda con luz en lugar de quedar vacía."""
+    cw, pw, paso = params["corridor_width"], params["party_wall"], 0.25
+    bordes = [plate] + list(params.get("_huecos") or [])
+    bl = params.get("_blind")
+    for pc in pieces:
+        if pc.get("between") or pc.get("side_region"):
+            continue
+        _, y0b, _, y1b = G.bbox(pc["loc_plate"])
+        loc_full = G.to_local(plate, pc["origin"], pc["angle"])
+        huecos = [G.to_local(h, pc["origin"], pc["angle"]) for h in (params.get("_huecos") or [])]
+        ext = {1: [], -1: []}                                    # esquinas que se suma cada franja
+        for j in pc["junctions"]:
+            e = 0 if abs(j["x"] - pc["xa"]) < 1e-6 else 1 if abs(j["x"] - pc["xb"]) < 1e-6 else None
+            if e is None:
+                continue                                        # unión de otra ala sobre esta (anillo): no es extremo
+            q = pieces[j["nb"]]
+            E = G.to_world([(j["x"], 0.0)], pc["origin"], pc["angle"])[0]
+            largo = abs(G.to_local([E], q["origin"], q["angle"])[0][1]) - cw / 2 - pw / 2
+            if largo < 1.0:
+                continue
+            xs0, xs1 = (pc["xa"] - largo, pc["xa"]) if e == 0 else (pc["xb"], pc["xb"] + largo)
+            for sd in ((1,) if pc.get("single") else (1, -1)):
+                ya, yb = (cw / 2 + pw / 2, y1b) if sd > 0 else (y0b, -cw / 2 - pw / 2)
+                if yb - ya < 2.0:
+                    continue
+                zona = G.clip_rect(loc_full, xs0, xs1, ya, yb)
+                if not zona or abs(G.area(zona)) < 0.95 * (xs1 - xs0) * (yb - ya) or \
+                        any(G.clip_rect(h, xs0, xs1, ya, yb) for h in huecos):
+                    continue                                    # la esquina no está entera dentro de la planta
+                n = max(1, int(largo / paso))
+                yf = y1b - 0.05 if sd > 0 else y0b + 0.05
+                ws = G.to_world([(xs0 + (xs1 - xs0) * k / n, yf) for k in range(n + 1)], pc["origin"], pc["angle"])
+                if sum(_luz(ws, bordes, bl)) < 0.9 * (n + 1):
+                    continue                                    # su fondo no da a una fachada: esquina interior
+                ext[sd].append(zona)
+                zw = G.to_world(zona, pc["origin"], pc["angle"])     # la otra ala no pone viviendas ahí
+                bx0, by0, bx1, by1 = G.bbox(G.to_local(zw, q["origin"], q["angle"]))
+                q["extra_blocks"][1 if by0 + by1 > 0 else -1].append((bx0 - pw / 2, bx1 + pw / 2))
+                q.setdefault("ocupados", []).append((bx0 - pw / 2, bx1 + pw / 2))
+        if ext[1] or ext[-1]:                                # el ala más sus esquinas (nunca la planta entera)
+            pc["side_region"] = {sd: G.union_parts([pc["loc_plate"]] + ext[sd])[0][0] if ext[sd] else pc["loc_plate"]
+                                 for sd in (1, -1)}
 
 
 def _clip_sr(pc, fn):
@@ -443,7 +507,57 @@ def egress_at(pieces, i, x, depth=3):
     return best
 
 
-BOLSILLO = 4.5     # fondo detrás de un núcleo por debajo del cual no cabe una unidad útil: el núcleo llega a la fachada
+def _zonas_oscuras(pieces, params):
+    """Las esquinas sin luz que quedaron vacías (sin viviendas, núcleo ni pasillo) se marcan en la planta («Sin luz
+    natural») y cuentan aparte en las métricas: no es superficie desperdiciada, es la que no recibe luz."""
+    cw, pw = params["corridor_width"], params["party_wall"]
+    for pc in pieces:
+        _, qy0, _, qy1 = G.bbox(pc["loc_plate"])
+        for sd, a, b in pc.get("oscuros", []):
+            if pc.get("single") and sd < 0:
+                continue
+            tapados = sorted([(c["box"][0], c["box"][2]) for c in pc["cores"] if c["side"] == sd] +
+                             [(o0, o1) for o0, o1 in pc.get("ocupados", [])] +
+                             [(c0, c1) for s_, c0, c1 in pc.get("conectores", []) if s_ == sd])
+            cur, libres = a, []
+            for t0, t1 in tapados:
+                if t0 > cur:
+                    libres.append((cur, min(t0, b)))
+                cur = max(cur, t1)
+            if cur < b:
+                libres.append((cur, b))
+            for x0, x1 in libres:
+                if x1 - x0 < 1.0:
+                    continue
+                z = G.clip_rect(pc["loc_plate"], x0, x1, cw / 2 + pw / 2 if sd > 0 else None,
+                                None if sd > 0 else -cw / 2 - pw / 2)
+                if z and abs(G.area(z)) > 2.0:
+                    pc.setdefault("codos", []).append(G.to_world(z, pc["origin"], pc["angle"]))
+
+
+def _nucleo_en_codo(pc, juntas, params):
+    """Lugar para un núcleo en un tramo sin luz junto a una unión (el codo interior de una L o una U), o None: al
+    costado del conector del pasillo de la otra ala y fuera de la esquina que ya ocupan sus viviendas."""
+    half, cw, pw = params["core_width"] / 2.0, params["corridor_width"], params["party_wall"]
+    libre = lambda x: all(x + half <= o0 or x - half >= o1 for o0, o1 in
+                          pc.get("ocupados", []) + [(j["x"] - cw / 2 - pw / 2, j["x"] + cw / 2 + pw / 2)
+                                                     for j in pc["junctions"] if j.get("llega")])
+    d = params["core_depth"]
+
+    def entra(x, sd):                                    # la caja entera del núcleo dentro de la planta
+        y0, y1 = (-cw / 2, -cw / 2 + d) if sd > 0 else (cw / 2 - d, cw / 2)
+        c = G.clip_rect(pc["loc_plate"], x - half, x + half, y0, y1)
+        return bool(c) and abs(G.area(c)) >= 0.95 * 2 * half * d
+    mejor = None
+    for sd, a, b in pc.get("oscuros", []):
+        if pc.get("single") and sd < 0:
+            continue                                     # pasillo de borde: de ese lado no hay franja de viviendas
+        for j in juntas:
+            for x in (j["x"] + cw / 2 + pw / 2 + half, j["x"] - cw / 2 - pw / 2 - half):
+                if a - 0.3 <= x - half and x + half <= b + 0.3 and libre(x) and entra(x, sd) and \
+                        (mejor is None or abs(x - j["x"]) < mejor[2]):
+                    mejor = (x, sd, abs(x - j["x"]))
+    return None if mejor is None or mejor[2] > params["egress_single"] else mejor[:2]
 
 
 def _punta(pc, e, x, side, params):
@@ -593,8 +707,9 @@ def _generate_circulation(plate, params):
             pc["corridor_local"] = G.clip_rect(pc["loc_plate"], pc["xa"], pc["xb"], -cw / 2, cw / 2)
     if not user:
         _connect(pieces, plate, params)
-    if params.get("_huecos") and not user:
-        _ring_corners(pieces, plate, params)
+    if not user:
+        _franjas_sin_luz(pieces, plate, params)
+        _codos(pieces, plate, params)
     counter = [0]
 
     def next_side():
@@ -630,9 +745,14 @@ def _generate_circulation(plate, params):
         for e, free in enumerate(pc["free"]):
             if free:
                 xe = pc["xa"] if e == 0 else pc["xb"]
-                if ring and pc["junctions"] and \
-                        min(abs(xe - j["x"]) for j in pc["junctions"]) <= params["egress_single"]:
+                cerca = [j for j in pc["junctions"] if abs(xe - j["x"]) <= params["egress_single"]]
+                if ring and cerca:
                     continue        # punta corta de un pasillo que da la vuelta al patio: se sale hacia los dos lados
+                if cerca:           # punta corta junto a un codo: se sale por la unión; el núcleo va al codo sin luz
+                    codo = _nucleo_en_codo(pc, cerca, params)
+                    if codo is not None:
+                        _add_core(pc, codo[0], codo[1], params)
+                        continue
                 x = pc["xa"] + half if e == 0 else pc["xb"] - half
                 if pc["xb"] - pc["xa"] < 2 * half:
                     x = (pc["xa"] + pc["xb"]) / 2.0
@@ -663,6 +783,10 @@ def _generate_circulation(plate, params):
             break
         pc = pieces[i]
         x = min(max(x, pc["xa"] + half), pc["xb"] - half) if pc["xb"] - pc["xa"] >= 2 * half else (pc["xa"] + pc["xb"]) / 2
+        oscuro = _nucleo_en_codo(pc, [{"x": x}], dict(params, egress_single=BOLSILLO * 2))
+        if oscuro is not None:      # de preferencia en un tramo sin luz cercano: no le quita fachada a ninguna vivienda
+            _add_core(pc, oscuro[0], oscuro[1], params)
+            continue
         _add_core(pc, x, 1 if pc.get("single") else next_side(), params)
     # R3.1: un núcleo de punta que deja una franja suelta hasta la fachada se apoya contra ella, si la evacuación
     # sigue dentro del máximo (si no, queda donde estaba)
@@ -677,4 +801,5 @@ def _generate_circulation(plate, params):
             pc["cores"][k] = pc["cores"].pop()
             if worst()[0] > max(params["egress_multi"], v):
                 pc["cores"][k] = c
+    _zonas_oscuras(pieces, params)
     return pieces

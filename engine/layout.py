@@ -11,14 +11,14 @@ from .massing import (_inward, apply_setbacks, make_blind, build_massing, _domin
                       decompose_wings, _lado_ciego, _dist_point_segment, _dist_to_boundary)  # noqa: F401
 from .circulation import (pick_frame, core_positions, side_for, _frame_for_poly, _make_piece, _avg_unit_area,
                           _choose_single, _ring_single, _single_frame, _bridge_axis, build_pieces, _link, _connect,
-                          _ring_corners, _clip_sr, build_user_pieces, _stem_vs_trunk, _split_parallel, egress_at,
+                          _franjas_sin_luz, _clip_sr, build_user_pieces, _stem_vs_trunk, _split_parallel, egress_at,
                           _add_core, _propagate_core_blocks, generate_circulation, is_between, _between_depth,
                           _generate_circulation)  # noqa: F401
 from .units import (_bisect_x, _chain_union, _is_rect, _segments, generate_unit_mix, metrics_mix, bedrooms_for,
                     unit_rooms)  # noqa: F401
 from .patios import (auto_patios, _anillo, split_blocks, make_patio_dark, _block_of, _block_of_line)  # noqa: F401
 
-VERSION = "2.8"
+VERSION = "2.9"
 
 DEFAULT_PARAMS = {
     # Masa
@@ -141,7 +141,7 @@ def generate(data):
     manual = params.get("cores_mode") == "manual"
     res["corridors"], res["cores"], res["dark_zones"] = [], [], []
     bloques_pc = []                                          # por bloque: (piezas, parámetros, planta, núcleos)
-    emax = 0.0
+    emax = area_codos = 0.0
     for bi, (pl_b, ph_b) in enumerate(plantas):
         pb = dict(params)
         mapa = None
@@ -192,6 +192,11 @@ def generate(data):
         if len(plantas) > 1 and not cpolys:
             res["warnings"].append("El bloque %d no tiene núcleo: añade uno (en modo manual cada bloque necesita el suyo)" % (bi + 1))
         res["dark_zones"] += [G.pol_to_list(d_) for pc in pieces for d_ in pc.get("dark", [])]
+        codos = [G.pol_to_list(d_) for pc in pieces for d_ in pc.get("codos", [])]
+        res["dark_zones"] += codos
+        if codos:
+            res.setdefault("dark_corners", []).extend(codos)  # cuáles de las zonas sin luz son esquinas (codos)
+        area_codos += sum(abs(G.area(d_)) for d_ in codos)
         for i, pc in enumerate(pieces):
             n = max(2, int((pc["xb"] - pc["xa"])))
             for k in range(n + 1):
@@ -201,8 +206,12 @@ def generate(data):
     res["metrics"]["wings"] = sum(len(b[0]) for b in bloques_pc)
     if res["dark_zones"]:
         dz_area = sum(abs(G.area(d_)) for d_ in res["dark_zones"])
-        res["warnings"].append("Zona central sin luz natural (%.0f m² por planta): entre medianeras solo los frentes "
-                               "iluminan; hacen falta patios de aire y luz" % dz_area)
+        if dz_area - area_codos > 1.0:
+            res["warnings"].append("Zona central sin luz natural (%.0f m² por planta): entre medianeras solo los frentes "
+                                   "iluminan; hacen falta patios de aire y luz" % (dz_area - area_codos))
+        if area_codos > 1.0:
+            res["warnings"].append("Esquinas sin luz natural (%.0f m² por planta): donde se cruzan dos alas no llega la luz "
+                                   "y no se ponen viviendas; quedan para núcleos, ductos o depósitos" % area_codos)
         res["metrics"]["dark_area"] = round(dz_area, 1)
     res["metrics"]["core_count"] = len(res["cores"])
     res["metrics"]["egress_max"] = round(emax, 1)

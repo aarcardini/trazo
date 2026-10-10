@@ -341,7 +341,8 @@ def test_patios_interiores():
     meds = [{"a": [30, 0], "b": [30, 45], "retiro": 0}, {"a": [0, 45], "b": [0, 0], "retiro": 0}]
     r = run(R(0, 0, 30, 45), medianeras=meds, patios_mode="manual", patios=[R(9, 14, 21, 31)])
     m = r["metrics"]
-    assert m["core_count"] == 2 and m["plan_score"] == 100 and not r.get("dark_zones") and not m.get("between"), m
+    assert m["core_count"] == 2 and m["plan_score"] == 100 and not m.get("between"), m
+    assert not any("Zona central" in w for w in r["warnings"]), r["warnings"]     # las esquinas sin luz sí se marcan
     medios = lambda pl: [((a[0] + b[0]) / 2, (a[1] + b[1]) / 2) for a, b in zip(pl, pl[1:] + pl[:1])]
     al_patio = [u for u in r["units"] if min(L._dist_to_boundary(p, R(9, 14, 21, 31)) for p in medios(u["poly"])) < 0.6]
     lados = {("O" if G.centroid(u["poly"])[0] < 9 else "E" if G.centroid(u["poly"])[0] > 21 else
@@ -433,3 +434,33 @@ def test_sin_restos():
 
 if __name__ == "__main__":
     test_sin_restos(); print("OK18")
+
+
+def test_codos():
+    """R3.2: en el codo de una L el núcleo va a la esquina interior, que no tiene luz, y la esquina exterior queda para
+    las viviendas; ninguna vivienda queda con estancias a oscuras y lo que no recibe luz se marca «Sin luz natural»."""
+    from engine import geometry as G, plans as P
+    oscuras = lambda r: [u["id"] for u in r["units"] if any(not c["ok"] and "sin fachada" in c["msg"] for c in u["checks"])]
+    s = json.load(open(os.path.join(os.path.dirname(__file__), "..", "samples", "L.json"), encoding="utf-8"))
+    r = run(s["footprint"])
+    m = r["metrics"]
+    assert not oscuras(r) and m["unused_area"] < 1 and m["efficiency"] >= 71.5 and m["egress_max"] <= 18, m
+    assert any(8 < c["center"][0] < 16 and 7 < c["center"][1] < 14 for c in r["cores"]), [c["center"] for c in r["cores"]]
+    # U y T: ninguna vivienda a oscuras; las esquinas sin luz se marcan y se avisan
+    for fp in ([[0, 0], [60, 0], [60, 45], [44, 45], [44, 16], [16, 16], [16, 45], [0, 45]],
+               [[0, 0], [70, 0], [70, 16], [43, 16], [43, 45], [27, 45], [27, 16], [0, 16]]):
+        r = run(fp)
+        assert r["units"] and not oscuras(r) and r["metrics"].get("dark_area", 0) > 10, r["metrics"]
+        assert any("Esquinas sin luz" in w for w in r["warnings"]), r["warnings"]
+    # un lote en trapecio con medianeras en los lados largos no se vacía: contra una medianera no se bloquea
+    fp = [[0, 0], [47.5, 20.1], [15.2, 70.1], [-18.1, 56.0]]
+    r = run(fp, h=6, medianeras=[{"a": fp[1], "b": fp[2], "retiro": 0}, {"a": fp[3], "b": fp[0], "retiro": 0}])
+    assert len(r["units"]) > 4, len(r["units"])
+    # el plano de una vivienda con parte del fondo sin luz: estancias habitables con luz y el resto, depósito
+    res = P.layout_unit([(0, 0), (12, 0), (12, 8), (0, 8)], 2, lambda p, q: min(p[0], q[0]) >= 3.0)
+    dep = [rm for rm in res["rooms"] if rm["name"] == "Depósito"]
+    assert dep and max(G.bbox(d["poly"])[2] for d in dep) <= 3.05, [(rm["name"], G.bbox(rm["poly"])) for rm in res["rooms"]]
+    assert not [c for c in res["checks"] if not c["ok"] and "sin fachada" in c["msg"]], res["checks"]
+
+if __name__ == "__main__":
+    test_codos(); print("OK19")

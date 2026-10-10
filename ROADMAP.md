@@ -33,7 +33,7 @@ Leyenda de esfuerzo: S = pequeño, M = mediano, L = grande (dividir antes de emp
 ## Fase 3 — Calidad de la planta
 - [x] **R3.1 (M) Sin restos pequeños.** (v2.8: el núcleo de una punta se apoya contra la fachada cuando deja una franja demasiado chica para una vivienda, si llega a la fachada y la evacuación lo permite) Los tramos menores que el ancho mínimo se suman a la unidad vecina en vez de descartarse.
   *Hecho cuando:* "Sin usar" baja en los ejemplos L y T de `samples/` sin empeorar el match score.
-- [ ] **R3.2 (M) Codos más eficientes.** Unidad de esquina en el codo interior (en L) en lugar de hueco.
+- [x] **R3.2 (M) Codos más eficientes.** (v2.9: sin viviendas a oscuras en codos; el núcleo de la punta corta va a la esquina interior sin luz; la esquina exterior es de las viviendas del ala que llega; lo que queda sin luz se marca) Unidad de esquina en el codo interior (en L) en lugar de hueco.
 - [ ] **R3.3 (L) Cruces en X** entre polilíneas sin solapes.
 - [ ] **R3.4 (L) Plantas no ortogonales en automático** (por ejemplo, alas a 45° o trapecios): eje por ala.
 - [ ] **R3.5 (S) Núcleos con tamaño propio** y rotación 0/90°, editables por núcleo.
