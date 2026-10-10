@@ -408,7 +408,7 @@ def layout_unit(poly, nb, is_facade=None, vivienda=None):
             if ta and r["area"] < 0.9 * ta and not (ma and r["area"] < ma):
                 below.append("%s %.1f de %.0f m²" % (r["name"], r["area"], ta))
         elif w + 1e-6 < MIN_W.get(r["kind"], 0):
-            checks.append({"ok": False, "msg": "%s: ancho %.1f m < mínimo %.1f m" % (r["name"], w, MIN_W[r["kind"]])})
+            checks.append({"ok": False, "msg": "%s: ancho %.2f m < mínimo %.2f m" % (r["name"], w, MIN_W[r["kind"]])})
     for w in warnings:
         if isinstance(w, tuple):
             checks.append({"ok": True, "info": True, "msg": w[1]})

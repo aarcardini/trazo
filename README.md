@@ -137,6 +137,9 @@ Si algo falla en Rhino, ejecuta el script y elige **Diagnostico**. Si no se resu
 - **Mix**: tipos con m² objetivo y %, ancho mínimo, muro medianero; métricas Match Score, Fit y Unidades únicas.
 - **Planos**: distribución día/noche con pasillo interno, puertas y grafo de conexiones verificado.
 
+## Novedades v2.19.1
+- **Corrección: aviso de ancho mínimo.** Con un decimal, una vivienda de 4,98 m avisaba «Unidad con ancho 5.0 m < mínimo 5.0 m», que parecía un error. Ahora muestra dos decimales («4.98 m < mínimo 5.00 m»), igual que el ancho de las estancias en la ficha de la vivienda.
+
 ## Novedades v2.19
 - **Variantes (R4.5):** «Guardar como variante» guarda la solución actual y «Comparar» las muestra en una tabla (unidades, NSA, eficiencia, match, circulación, sin usar, núcleos, evacuación y calidad de planos), con lo mejor de cada columna en verde. Desde la tabla se abre, renombra o borra cada variante, y se copia la tabla para una planilla. Las variantes van en el archivo del proyecto.
 

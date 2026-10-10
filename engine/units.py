@@ -172,7 +172,7 @@ def generate_unit_mix(circ, params, state=None):
                 units.append({"type": m["name"], "target": m["area"], "area": a_, "width": w,
                               "side": side, "x0": xs0, "x1": xe, "poly_local": poly})
                 if w < params["min_unit_width"]:
-                    warnings.append("Unidad con ancho %.1f m < mínimo %.1f m" % (w, params["min_unit_width"]))
+                    warnings.append("Unidad con ancho %.2f m < mínimo %.2f m" % (w, params["min_unit_width"]))   # con 1 decimal, 4.98 < 5 se leía «5.0 < 5.0»
             x = x1
     # puertas, evacuación y profundidad
     for i, u in enumerate(units):

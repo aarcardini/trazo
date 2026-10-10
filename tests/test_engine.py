@@ -858,3 +858,18 @@ def test_variantes():
 
 if __name__ == "__main__":
     test_variantes(); print("OK29")
+
+
+def test_aviso_ancho():
+    """Corrección (v2.19.1): el aviso de ancho mínimo muestra dos decimales. Con uno, una vivienda de 4,98 m avisaba
+    «Unidad con ancho 5.0 m < mínimo 5.0 m», que parecía un error; ahora dice «4.98 m < mínimo 5.00 m»."""
+    import re
+    s = json.load(open(os.path.join(os.path.dirname(__file__), "..", "samples", "L.json"), encoding="utf-8"))
+    r = run(s["footprint"], s["height"], loading="single")
+    avisos = [re.search(r"Unidad con ancho (\d+\.\d\d) m < mínimo (\d+\.\d\d) m", w) for w in r["warnings"] if "Unidad con ancho" in w]
+    assert avisos and all(a and float(a.group(1)) < float(a.group(2)) for a in avisos), r["warnings"]
+    angostas = [u for u in r["units"] if u["width"] < 5.0]
+    assert angostas and "%.2f" % min(u["width"] for u in angostas) in " ".join(r["warnings"])
+
+if __name__ == "__main__":
+    test_aviso_ancho(); print("OK30")
