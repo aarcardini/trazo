@@ -19,7 +19,7 @@ from .units import (_bisect_x, _chain_union, _is_rect, _segments, generate_unit_
                     unit_rooms, sin_solapes, editar_unidades, vecinas)  # noqa: F401
 from .patios import (auto_patios, _anillo, split_blocks, make_patio_dark, _block_of, _block_of_line)  # noqa: F401
 
-VERSION = "2.22"
+VERSION = "2.23"
 
 DEFAULT_PARAMS = {
     # Masa
@@ -323,6 +323,8 @@ def generate(data):
                 "door": [round(v, 3) for v in G.to_world([u["door_local"]], pc["origin"], pc["angle"])[0]]}
         if u.get("editada"):
             item["editada"] = True
+        if any(m.get("accesible") and m.get("name") == u["type"] for m in params["unit_mix"]):
+            item["accesible"] = True                        # tipo del mix marcado «accesible» (F5)
         if stage == "plans":
             pl = unit_rooms(u, u["_pb"], pc, u["_plate"])
             Wp = lambda pt, pc=pc: [round(v, 3) for v in G.to_world([pt], pc["origin"], pc["angle"])[0]]

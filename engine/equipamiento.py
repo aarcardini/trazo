@@ -19,7 +19,7 @@ NOMBRES = {"inodoro": "Inodoro", "bide": "Bidé", "lavatorio": "Lavatorio", "duc
            "mesada": "Mesada", "bacha_cocina": "Bacha", "cocina_horno": "Cocina y horno", "lavarropas": "Lavarropas",
            "pileta_lavar": "Pileta", "cama_doble": "Cama doble", "cama_individual": "Cama individual",
            "mesita": "Mesa de luz", "placard": "Placard", "mesa": "Mesa", "silla": "Silla", "sofa": "Sofá",
-           "butaca": "Butaca", "rack_tv": "Rack de TV"}
+           "butaca": "Butaca", "rack_tv": "Rack de TV", "ducha_nivel": "Ducha a nivel", "giro": "Círculo de giro"}
 MUEBLES = ("dormitorio", "estar", "comedor")
 _memo = {}
 
@@ -146,6 +146,9 @@ def _dibujo(kind, w, d):
         return [_elipse(w / 2, d / 2, w * 0.3, d * 0.32)]
     if kind == "ducha":
         return [[(0.0, 0.0), (w, d)], [(w, 0.0), (0.0, d)], _elipse(w / 2, d / 2, 0.04, 0.04, 8)]
+    if kind == "ducha_nivel":                                                    # con asiento rebatible contra la pared
+        return [[(0.0, 0.0), (w, d)], [(w, 0.0), (0.0, d)], _elipse(w / 2, d / 2, 0.04, 0.04, 8),
+                _rect(w - 0.45, 0.02, w - 0.05, 0.40)]
     if kind == "heladera":
         return [[(0.0, d), (w, 0.0)]]
     if kind == "bacha_cocina":
@@ -189,6 +192,9 @@ def _pieza(kind, o, es, en, w, d, room):
     """El artefacto o mueble en el marco de la vivienda: contorno y dibujo. o: esquina de atrás; es, en: direcciones a lo
     largo y hacia el frente; w, d: largo y fondo."""
     m = lambda s, n: (round(o[0] + es[0] * s + en[0] * n, 4), round(o[1] + es[1] * s + en[1] * n, 4))
+    if kind == "giro":                                                          # el círculo (w es el diámetro)
+        return {"kind": kind, "name": NOMBRES[kind], "room": room, "lines": [],
+                "poly": [m(s, n) for s, n in _elipse(w / 2, d / 2, w / 2, d / 2, 32)[:-1]]}
     return {"kind": kind, "name": NOMBRES[kind], "room": room,
             "poly": [m(0.0, 0.0), m(w, 0.0), m(w, d), m(0.0, d)],
             "lines": [[m(s, n) for s, n in ln] for ln in _dibujo(kind, w, d)]}
@@ -360,11 +366,12 @@ def _tipo(rm):
     return {"bath": "bath", "laundry": "laundry", "bedroom": "dormitorio", "living": "estar", "dining": "comedor"}.get(k)
 
 
-def resolver(rm, puertas, aberturas, S, fachada=(), nb=1, mesa=True, ids=None):
+def resolver(rm, puertas, aberturas, S, fachada=(), nb=1, mesa=True, ids=None, acc=False):
     """Equipamiento de una estancia (con memoria: estancias iguales se resuelven una vez). puertas: [{p, q, a, b, ancho}];
     aberturas: {id: [(p, q[, id de la otra estancia])]}; fachada: tramos de pared con ventana [(p, q)]; nb: dormitorios
     (los asientos de la mesa); mesa: si el estar lleva la mesa del comedor; ids: estancias que se amueblan juntas (el
-    estar y el comedor). Devuelve (piezas en el marco de la estancia trasladada al origen, lo que no entra, avisos)."""
+    estar y el comedor); acc: vivienda accesible (el baño principal, para silla de ruedas). Devuelve (piezas en el marco
+    de la estancia trasladada al origen, lo que no entra, avisos)."""
     ids = tuple(ids or (rm["id"],))
     x0, v0, x1, v1 = rm["rect"]
     rel = lambda pt: (round(pt[0] - x0, 4), round(pt[1] - v0, 4))
@@ -380,12 +387,13 @@ def resolver(rm, puertas, aberturas, S, fachada=(), nb=1, mesa=True, ids=None):
     clave = (tipo, rm["id"] in ("bath1", "bed1"), round(x1 - x0, 4), round(v1 - v0, 4), pts, abre, forma,
              tuple(sorted((rel(p), rel(q)) for p, q in fachada)) if mueble else (),
              nb if tipo in ("estar", "comedor") else None, mesa if tipo == "estar" else None,
+             bool(acc) and tipo == "bath" and rm["id"] == "bath1",
              tuple(sorted((k, tuple(v) if isinstance(v, list) else v) for k, v in S.items())))
     if clave not in _memo:
         if len(_memo) > 4000:
             _memo.clear()
         r = _estancia(x1 - x0, v1 - v0, forma)
-        _memo[clave] = _equipar_estancia(tipo, clave[1], r, pts, abre, S, clave[7], nb, mesa)
+        _memo[clave] = _equipar_estancia(tipo, clave[1], r, pts, abre, S, clave[7], nb, mesa, clave[10])
     return _memo[clave]
 
 
@@ -398,12 +406,12 @@ def _contiguos(a, b):
     return abs(a[0] - b[0]) < 0.05 and abs(a[2] - b[2]) < 0.05 and (abs(a[3] - b[1]) < 0.05 or abs(b[3] - a[1]) < 0.05)
 
 
-def equipar(rooms, puertas, aberturas, S, nb, fachadas=None, chicas=()):
+def equipar(rooms, puertas, aberturas, S, nb, fachadas=None, chicas=(), acc=False):
     """Artefactos y muebles de la vivienda. rooms: [{id, kind, name, rect[, poly]}]; puertas: [{p, q, a, b, ancho}] (la
     hoja abre hacia b); aberturas: {id: [(p, q[, id de la otra estancia])]} bordes abiertos a otra estancia; fachadas:
     {id: [(p, q)]} tramos de pared con ventana; chicas: estancias ya avisadas por no llegar a su medida mínima (se equipan
-    igual, pero no se avisa además lo que no entra). El comedor y el estar contiguos se amueblan juntos. Devuelve (piezas,
-    comprobaciones)."""
+    igual, pero no se avisa además lo que no entra); acc: vivienda accesible. El comedor y el estar contiguos se amueblan
+    juntos. Devuelve (piezas, comprobaciones)."""
     fachadas = fachadas or {}
     piezas, checks = [], []
     por_id = {rm["id"]: rm for rm in rooms}
@@ -423,7 +431,7 @@ def equipar(rooms, puertas, aberturas, S, nb, fachadas=None, chicas=()):
             ids, nombre = ("living", "dining"), {"mesa": com["name"]}
         x0, v0 = sala["rect"][0], sala["rect"][1]
         hechas, faltan, info = resolver(sala, puertas, aberturas, S, [s for i in ids for s in fachadas.get(i, [])], nb,
-                                        junto or com is None, ids)
+                                        junto or com is None, ids, acc)
         for k, o, es, en, w, d in hechas:
             pz = _pieza(k, (o[0] + x0, o[1] + v0), es, en, w, d, rm["id"])
             if junto and rm is est:                       # cada mueble, en la estancia donde cae su centro
@@ -441,12 +449,18 @@ def equipar(rooms, puertas, aberturas, S, nb, fachadas=None, chicas=()):
     return piezas, checks
 
 
-def _equipar_estancia(tipo, principal, r, puertas, aberturas, S, fachada=(), nb=1, mesa=True):
+def _equipar_estancia(tipo, principal, r, puertas, aberturas, S, fachada=(), nb=1, mesa=True, acc=False):
     """Una estancia en su propio origen (para reusar el resultado en estancias iguales). Devuelve (piezas
     [(kind, esquina, dirección, frente, largo, fondo)], lo que no entra, avisos)."""
     libres, zonas = _paredes(r, aberturas, [(p, q, ancho, adentro) for p, q, ancho, adentro in puertas])
     if tipo in MUEBLES:
         return _amueblar(tipo, principal, r, libres, zonas, puertas, aberturas, S, fachada, nb, mesa)
+    if acc:
+        hechas = _bano_accesible(r, libres, zonas, [(p, q) for p, q, _, _ in puertas], S)
+        if hechas:
+            return hechas, [], []
+        acc = "el baño accesible (círculo de giro de %.2f m, inodoro con %.2f m de transferencia al costado y ducha a " \
+              "nivel)" % (S["giro"], S["transferencia"])
     puerta = _centro((min(puertas[0][0][0], puertas[0][1][0]), min(puertas[0][0][1], puertas[0][1][1]),
                       max(puertas[0][0][0], puertas[0][1][0]), max(puertas[0][0][1], puertas[0][1][1]))) \
         if puertas else _centro(r)
@@ -463,6 +477,8 @@ def _equipar_estancia(tipo, principal, r, puertas, aberturas, S, fachada=(), nb=
                 info.append("sin lugar para la ducha: queda como toilette (inodoro y lavatorio)")
         txt = ["%s (%s)" % ({"ducha": "la ducha", "inodoro": "el inodoro", "lavatorio": "el lavatorio"}[m[0]], _medida(m))
                for m in faltan]
+        if isinstance(acc, str):                      # vivienda accesible: queda el baño común y el aviso
+            txt = [acc] + txt
     elif tipo == "cocina":
         hechas, txt = _cocina(r, libres, zonas, S)
         return [(k,) + _marco(ld, t) + (w, d) for k, ld, t, w, d in hechas], txt, info
@@ -666,17 +682,17 @@ def _alcanza(r, cuerpos, accesos, usos, h=0.25, g=0.10):
     return True
 
 
-def _combinar(r, accesos, listas, anchos=(12, 5, 3), tope=30, salto=0.35):
+def _combinar(r, accesos, listas, anchos=(12, 5, 3), tope=30, salto=0.35, final=None):
     """La primera combinación, una ubicación de cada lista (ordenadas de la preferida a la peor), que entra sin pisarse y
-    desde la que se llega a todo. anchos: cuántas ubicaciones válidas se prueban en cada nivel; tope: cuántas veces se
-    comprueba el recorrido; tras una ubicación que no sirve se saltean las casi iguales (a menos de `salto` en la misma
-    pared). Devuelve las ubicaciones elegidas o None."""
+    desde la que se llega a todo (y que cumple final(elegidas), si se da). anchos: cuántas ubicaciones válidas se prueban
+    en cada nivel; tope: cuántas veces se comprueba el recorrido; tras una ubicación que no sirve se saltean las casi
+    iguales (a menos de `salto` en la misma pared). Devuelve las ubicaciones elegidas o None."""
     pruebas = [0]
 
     def rec(k, cuerpos, pasos, usos, elegidos):
         if k == len(listas):
             pruebas[0] += 1
-            return elegidos if _alcanza(r, cuerpos, accesos, usos) else None
+            return elegidos if _alcanza(r, cuerpos, accesos, usos) and (final is None or final(elegidos)) else None
         vistas, malas = 0, []
         for col in listas[k]:
             if pruebas[0] >= tope:
@@ -999,3 +1015,63 @@ def _butacas(r, libres, zonas, accesos, S, tv, puestos):
             out.append(col)
             cuerpos, pasos, usos = cuerpos + _solidos(col), pasos + col["pasos"], usos + col["uso"]
     return out
+
+
+# ---------------------------------------------------------------- vivienda accesible (F5, tercera parte)
+def _bano_accesible(r, libres, zonas, accesos, S):
+    """Baño para silla de ruedas: ducha a nivel, inodoro con su espacio de transferencia a un costado (y el otro, mejor
+    contra la pared, para la barra de apoyo), lavatorio y un círculo de giro libre (puede pisar la ducha, que está a
+    nivel del piso). Sin bidé. Devuelve las piezas o None si no entra."""
+    p, tr, R = S["paso_bano"], S["transferencia"], S["giro"] / 2
+    (dw, dd), (iw, idp), (lw, ld) = S["ducha_nivel"], S["inodoro"], S["lavatorio"]
+    puerta = _centro((min(accesos[0][0][0], accesos[0][1][0]), min(accesos[0][0][1], accesos[0][1][1]),
+                      max(accesos[0][0][0], accesos[0][1][0]), max(accesos[0][0][1], accesos[0][1][1]))) \
+        if accesos else _centro(r)
+
+    def lista(variantes, pref):
+        out = []
+        for pl, cerrado in variantes:
+            for i, ld_, t in _en_paredes(pl, libres):
+                b = pl["cuerpos"][0]
+                c = _centro(_caja(ld_, t + b[1], b[3] - b[1], b[2], b[4]))
+                v = pref(c)
+                if cerrado is not None:                # el costado sin transferencia, contra la pared (barra de apoyo)
+                    v += 0.5 * min(abs(t + cerrado), abs(ld_[3] - t - cerrado))
+                out.append((v, pl, ld_, t, 0.0))
+        return _Perezosa(out, r, zonas)
+    ducha = _plantilla([("ducha_nivel", 0.0, 0.0, dw, dd, "n+")], [], apoyo=(0.0, dw))
+    inodoros = [(_plantilla([("inodoro", 0.0, 0.0, iw, idp, "n+")], [(iw, 0.0, iw + tr, idp + p), (0.0, idp, iw, idp + p)],
+                            apoyo=(0.0, iw)), 0.0),
+                (_plantilla([("inodoro", tr, 0.0, tr + iw, idp, "n+")], [(0.0, 0.0, tr, idp + p), (tr, idp, tr + iw, idp + p)],
+                            apoyo=(tr, tr + iw)), tr + iw)]
+    lavatorio = _plantilla([("lavatorio", 0.0, 0.0, lw, ld, "n+")], [(0.0, ld, lw, ld + p)], apoyo=(0.0, lw))
+    lejos = lambda c: -_dist(c, puerta)
+    listas = [lista([(ducha, None)], lejos), lista(inodoros, lejos), lista([(lavatorio, None)], lambda c: _dist(c, puerta))]
+    giro = []
+
+    def entra_giro(elegidos):
+        """¿Hay lugar para el círculo de giro? Lo ubica lo más cerca posible del centro del baño."""
+        cuerpos = [c for col in elegidos if col["pl"] is not ducha for c in col["solidos"]]
+        f = getattr(r, "forma", None)
+        lados = [(a, b) for a, b in zip(f, f[1:] + f[:1])] if f else []
+        mejor, cx, cy = None, (r[0] + r[2]) / 2, (r[1] + r[3]) / 2
+        k = 0.05
+        for i in range(int((r[2] - r[0] - 2 * R) / k + 1e-9) + 1):
+            x = r[0] + R + i * k
+            for j in range(int((r[3] - r[1] - 2 * R) / k + 1e-9) + 1):
+                y = r[1] + R + j * k
+                if any(math.hypot(max(b[0] - x, 0.0, x - b[2]), max(b[1] - y, 0.0, y - b[3])) < R - 1e-6 for b in cuerpos):
+                    continue
+                if f and (not _en_poligono((x, y), f) or any(_dist_seg((x, y), a, b) < R - 1e-6 for a, b in lados)):
+                    continue
+                d = math.hypot(x - cx, y - cy)
+                if mejor is None or d < mejor[0]:
+                    mejor = (d, x, y)
+        if mejor:
+            giro[:] = [mejor[1:]]
+        return mejor is not None
+    cols = _combinar(r, accesos, listas, final=entra_giro)
+    if not cols or not giro:
+        return None
+    x, y = giro[0]
+    return [pz for col in cols for pz in _dibujar(col)] + [("giro", (x - R, y - R), (1, 0), (0, 1), 2 * R, 2 * R)]

@@ -17,6 +17,7 @@ from . import equipamiento as EQ
 HALL = 1.1            # ancho del pasillo interno
 DOOR = ST.DEFAULTS["equipamiento"]["puerta_interior"]     # ancho de puerta interior (configure lo toma de la web)
 ENTRY = ST.DEFAULTS["equipamiento"]["puerta_entrada"]     # puerta de la vivienda
+DOOR_ACC = ST.DEFAULTS["equipamiento"]["puerta_accesible"]    # dormitorios y baño de una vivienda accesible
 LIV_MIN = 3.4         # frente mínimo del estar
 BED_MAIN = 3.2        # frente dormitorio principal
 BED_W = 2.8           # frente dormitorio secundario
@@ -28,19 +29,20 @@ BATH_W1, BATH_W2, HALL_W, KITCH_D, LAV_W, BATH2_D = 1.7, 1.3, 1.4, 2.9, 1.2, 2.0
 V = ST.DEFAULTS["vivienda"]
 
 
-def configure(vivienda, equip=None):
-    """Ajusta las medidas de proyecto a partir de la tabla de estándares (standards.py / web)."""
-    global HALL, LIV_MIN, BED_MAIN, BED_W, BATH_W1, BATH_W2, HALL_W, KITCH_D, LAV_W, BATH2_D, V, DOOR, ENTRY
+def configure(vivienda, equip=None, accesible=False):
+    """Ajusta las medidas de proyecto a partir de la tabla de estándares (standards.py / web). accesible: el baño
+    principal toma el ancho del baño accesible."""
+    global HALL, LIV_MIN, BED_MAIN, BED_W, BATH_W1, BATH_W2, HALL_W, KITCH_D, LAV_W, BATH2_D, V, DOOR, ENTRY, DOOR_ACC
     V = vivienda
     eq = equip or ST.DEFAULTS["equipamiento"]
-    DOOR, ENTRY = eq["puerta_interior"], eq["puerta_entrada"]
+    DOOR, ENTRY, DOOR_ACC = eq["puerta_interior"], eq["puerta_entrada"], eq["puerta_accesible"]
     MIN_SHARE["puerta"] = DOOR + 0.1
     HALL = max(V["pasillo"]["min_side"], V["pasillo"]["typ_side"])
     BED_MAIN = max(V["dorm_principal"]["min_side"], V["dorm_principal"]["typ"][0])
     BED_W = max(V["dorm_secundario"]["min_side"], V["dorm_secundario"]["typ"][0])
     LIV_MIN = max(V["estar_comedor"]["min_side"], 0.95 * V["estar_comedor"]["typ"][0])
     inodoro = eq["inodoro"][1] + eq["paso_bano"]           # un baño angosto: el inodoro contra la pared larga y su paso
-    BATH_W1 = max(V["bano"]["min_side"], V["bano"]["typ"][0], inodoro)
+    BATH_W1 = max(V["bano"]["min_side"], V["bano"]["typ"][0], inodoro, eq["bano_accesible"][0] if accesible else 0.0)
     BATH_W2 = max(V["bano_aux"]["min_side"], V["bano_aux"]["typ"][0], inodoro)
     LAV_W = max(V["lavadero"]["min_side"], eq["lavarropas"][1] + eq["paso_lavadero"])
     BATH2_D = eq["inodoro"][1] + eq["paso_bano"] + eq["lavatorio"][0]   # fondo mínimo de un segundo baño (al menos toilette)
@@ -86,8 +88,9 @@ def _shared(r1, r2, tol=0.05):
     return None
 
 
-def _plan_rects(x0, v0, x1, v1, nb, warnings):
-    """Rectángulos de estancias y conexiones con puerta (las abiertas de la zona de día se deducen después)."""
+def _plan_rects(x0, v0, x1, v1, nb, warnings, acc=None):
+    """Rectángulos de estancias y conexiones con puerta (las abiertas de la zona de día se deducen después). acc: frente
+    y fondo del baño de una vivienda accesible (None si no lo es)."""
     W, D = x1 - x0, v1 - v0
     R = {}          # id -> (kind, rect, name)
     E = []          # (id_a, id_b, tipo)
@@ -100,6 +103,8 @@ def _plan_rects(x0, v0, x1, v1, nb, warnings):
         kd = min(2.4, D * 0.4)
         bw = min(2.0, W * 0.35)
         hw = min(1.4, max(1.1, W * 0.2))
+        if acc and W - acc[0] - hw >= 1.6:             # baño accesible, si la cocina sigue entrando
+            bw, kd = acc[0], max(kd, min(acc[1], D - 3.5))
         add("bath1", "bath", (x0, v0, x0 + bw, v0 + kd))
         add("kitchen", "kitchen", (x0 + bw, v0, x1 - hw, v0 + kd))
         add("hall", "hall", (x1 - hw, v0, x1, v0 + kd))
@@ -297,17 +302,18 @@ def _std_for(r, nb):
             "bath": V["bano"] if i == "bath1" else V["bano_aux"]}.get(k)
 
 
-def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None):
+def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None, accesible=False):
     """Distribuye una unidad. poly en el marco de la unidad. Devuelve dict con estancias, puertas, grafo, equipamiento y
-    comprobaciones. is_facade(p, q): opcional, dice si el segmento p-q (marco de la unidad) está sobre la fachada."""
+    comprobaciones. is_facade(p, q): opcional, dice si el segmento p-q (marco de la unidad) está sobre la fachada.
+    accesible: puertas de dormitorios y baño de DOOR_ACC, el baño abre hacia afuera y se equipa para silla de ruedas."""
     equip = equip or ST.DEFAULTS["equipamiento"]
-    configure(vivienda or ST.DEFAULTS["vivienda"], equip)
+    configure(vivienda or ST.DEFAULTS["vivienda"], equip, accesible)
     poly = G.ensure_ccw(poly)
     (x0, v0, x1, v1), annexes = _main_rect(poly)
     if is_facade is not None:
         (x0, v0, x1, v1), annexes = _main_con_luz(poly, (x0, v0, x1, v1), annexes, is_facade)
     warnings = []
-    R, E = _plan_rects(x0, v0, x1, v1, nb, warnings)
+    R, E = _plan_rects(x0, v0, x1, v1, nb, warnings, equip["bano_accesible"] if accesible else None)
     # conexiones abiertas de la zona de día: entre estancias de día que comparten borde
     day = [i for i, (k, r, n) in R.items() if k in DAY]
     have = {(a, b) for a, b, t in E} | {(b, a) for a, b, t in E}
@@ -377,32 +383,35 @@ def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None):
             continue
         seg = _shared(rooms[ids[a]]["rect"], rooms[ids[b]]["rect"])
         L = 0.0 if not seg else ((seg[1][0] - seg[0][0]) ** 2 + (seg[1][1] - seg[0][1]) ** 2) ** 0.5
-        ok = L >= MIN_SHARE[typ] - 1e-6                 # un borde de 0,8999… m es de 0,90 m
+        rb = rooms[ids[b]]
+        ancho = DOOR_ACC if accesible and (rb["kind"] == "bedroom" or b == "bath1") else DOOR
+        ok = L >= (ancho + 0.1 if typ == "puerta" else MIN_SHARE[typ]) - 1e-6     # un borde de 0,8999… m es de 0,90 m
         edges.append({"a": a, "b": b, "type": typ, "ok": ok})
         if ok and typ == "puerta":
             m = ((seg[0][0] + seg[1][0]) / 2, (seg[0][1] + seg[1][1]) / 2)
             vertical = abs(seg[0][0] - seg[1][0]) < 1e-6
-            d = DOOR / 2
+            d = ancho / 2
             hoja = lambda m: ((m[0], m[1] - d), (m[0], m[1] + d)) if vertical else ((m[0] - d, m[1]), (m[0] + d, m[1]))
-            rb = rooms[ids[b]]
-            if rb["kind"] in ("bath", "laundry", "bedroom") and L > DOOR + 0.3:   # la puerta donde entran artefactos y muebles
+            desde, hacia = (b, a) if accesible and b == "bath1" else (a, b)     # el baño accesible abre hacia afuera
+            if rb["kind"] in ("bath", "laundry", "bedroom") and L > ancho + 0.3:   # la puerta donde entran artefactos y muebles
                 k = 1 if vertical else 0                     # la puerta se corre a lo largo del borde
                 lo, hi = sorted((seg[0][k], seg[1][k]))
                 notas = {}
                 for c in (m[k], lo + d + 0.1, hi - d - 0.1):  # al medio o junto a una esquina
                     pq = hoja((m[0], c) if vertical else (c, m[1]))
-                    _, falta, info = EQ.resolver(rb, [{"p": pq[0], "q": pq[1], "a": a, "b": b, "ancho": DOOR}], {}, equip,
-                                                 fachadas.get(b, ()), nb)
+                    _, falta, info = EQ.resolver(rb, [{"p": pq[0], "q": pq[1], "a": desde, "b": hacia, "ancho": ancho}], {},
+                                                 equip, fachadas.get(b, ()), nb, acc=accesible)
                     notas[c] = 2 * len(falta) + len(info)    # un toilette (sin ducha) es peor que el baño completo
                     if not notas[c]:
                         break
                 c = min(notas, key=lambda c: (notas[c], c != m[k]))
                 m = (m[0], c) if vertical else (c, m[1])
             p, q = hoja(m)
-            # la hoja abre hacia la estancia b
-            c = G.centroid(rooms[ids[b]]["poly"])
+            # la hoja abre hacia la estancia «hacia»
+            c = G.centroid(rooms[ids[hacia]]["poly"])
             sw = ((c[0] - m[0]) > 0) if vertical else ((c[1] - m[1]) > 0)
-            doors.append({"p": p, "q": q, "into": 1 if sw else -1, "vertical": vertical, "a": a, "b": b, "ancho": DOOR})
+            doors.append({"p": p, "q": q, "into": 1 if sw else -1, "vertical": vertical, "a": desde, "b": hacia,
+                          "ancho": ancho})
     # puerta de entrada desde el pasillo común, en el hall
     if "hall" in ids:
         r = rooms[ids["hall"]]["rect"]
@@ -469,7 +478,7 @@ def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None):
             seg = _shared(rooms[ids[e["a"]]]["rect"], rooms[ids[e["b"]]]["rect"])
             for i, otra in ((e["a"], e["b"]), (e["b"], e["a"])):
                 aberturas.setdefault(i, []).append((seg[0], seg[1], otra))
-    equipo, faltan = EQ.equipar(rooms, doors, aberturas, equip, nb, fachadas, chicas)     # F5: artefactos y muebles
+    equipo, faltan = EQ.equipar(rooms, doors, aberturas, equip, nb, fachadas, chicas, accesible)  # F5: artefactos y muebles
     checks += faltan
     for w in warnings:
         if isinstance(w, tuple):
@@ -491,4 +500,4 @@ def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None):
         del r["rect"]
     return {"rooms": rooms, "doors": doors, "graph": {"nodes": nodes, "edges": edges}, "equipamiento": equipo,
             "checks": checks, "score": score, "bedrooms": nb, "facade": round(x1 - x0, 2),
-            "facade_min": round(facade_min(nb), 2)}
+            "facade_min": round(facade_min(nb), 2), "accesible": bool(accesible)}

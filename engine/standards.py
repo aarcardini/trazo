@@ -13,6 +13,8 @@ Fuentes principales (ver STANDARDS.md):
   interiores de 0,70 y mesada de 0,60 de fondo (criterio del usuario).
 - Muebles: camas, mesas de luz, placard, mesa con sillas, sofá, butaca y rack de TV con sus pasos (E. Neufert); asientos
   de la mesa según dormitorios: 4 y 2 más por cada dormitorio después del primero (criterio del usuario).
+- Vivienda accesible: puertas de 0,82 (criterio del usuario: la silla de ruedas); círculo de giro de 1,50 m, espacio de
+  transferencia de 0,80 m junto al inodoro y ducha a nivel (criterios habituales de accesibilidad: UNIT 200, ISO 21542).
 Las medidas "típicas" son criterios de proyecto (no normativos) y pueden ajustarse.
 """
 import copy
@@ -126,6 +128,12 @@ DEFAULTS = {
         "rack_tv": [1.60, 0.45],
         "distancia_tv": 1.50,            # libre entre el sofá y el rack (unos 2,2 m de los ojos a la pantalla)
         "paso_estar": 0.90,              # libre delante de las aberturas al hall, al pasillo y a la cocina
+        # vivienda accesible (F5, tercera parte): los tipos del mix marcados «accesible»
+        "puerta_accesible": 0.82,        # puertas de dormitorios y baño (silla de ruedas, criterio del usuario)
+        "giro": 1.50,                    # diámetro del círculo de giro de la silla de ruedas en el baño
+        "transferencia": 0.80,           # libre al costado del inodoro para pasar desde la silla
+        "ducha_nivel": [1.20, 0.90],     # ducha a nivel del piso (sin plato ni escalón)
+        "bano_accesible": [2.20, 2.20],  # frente y fondo con que se dibuja el baño de una vivienda accesible
     },
 }
 
