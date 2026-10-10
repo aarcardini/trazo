@@ -9,7 +9,7 @@ aside{background:var(--pan);overflow:auto;padding:14px;border-right:1px solid va
 h1{font-size:16px;margin:0 0 10px}h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin:16px 0 6px}
 label{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:4px 0}input,select,textarea{background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:4px 6px;font:inherit}
 input[type=number]{width:80px}button{background:var(--acc);color:#fff;border:0;border-radius:6px;padding:7px 10px;font:inherit;cursor:pointer;margin:2px 2px 2px 0}
-button.s{background:transparent;color:var(--ink);border:1px solid var(--line)}button.on{outline:2px solid var(--acc);background:var(--acc);color:#fff}
+button.s{background:transparent;color:var(--ink);border:1px solid var(--line)}button:disabled{opacity:.4;cursor:default}button.on{outline:2px solid var(--acc);background:var(--acc);color:#fff}
 main{position:relative;overflow:hidden}main>svg{width:100%;height:100%;display:block;touch-action:none;user-select:none}
 .tag{position:absolute;left:10px;bottom:10px;background:var(--pan);border:1px solid var(--line);border-radius:6px;padding:4px 8px;color:var(--mut);font-size:12px;max-width:70%}
 table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:3px 4px;border-bottom:1px solid var(--line);text-align:left}
@@ -42,7 +42,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:3px 4px;b
  <button class="s" onclick="run('massing')">Calcular masa</button>
  <h2 style="margin-top:12px">Medianeras y retiros</h2>
  <div class="hint">Marca en la planta los bordes del predio contra linderos (líneas rojas). Sin retiro no admiten ventanas; con retiro ≥ <span id="rmin">3</span> m pasan a ser fachada.</div>
- <button class="s" id="btnMed" onclick="setTool('medianera')">Marcar medianeras</button><button class="s" onclick="medianeras=[];renderMeds();draw();if(lastStage)run(lastStage,{keepView:true})">Quitar todas</button>
+ <button class="s" id="btnMed" onclick="setTool('medianera')">Marcar medianeras</button><button class="s" onclick="if(medianeras.length)recordar('quitar las medianeras');medianeras=[];renderMeds();draw();if(lastStage)run(lastStage,{keepView:true})">Quitar todas</button>
  <div id="medList"></div>
  <h2 style="margin-top:12px">Patios</h2>
  <div class="hint">Patios de aire y luz: separan la masa en bloques, cada uno con su núcleo. Las estancias que dan a un patio de al menos <span id="pminTxt">3</span> m de ancho tienen luz.</div>
@@ -91,6 +91,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:3px 4px;b
 <main>
  <div class="viewbar">
   <button class="s on" id="vPlan" onclick="setView('plan')">Planta 2D</button><button class="s" id="vAxo" onclick="setView('axo')">Axonometría 3D</button>
+  <button class="s" id="btnUndo" style="padding:2px 9px" onclick="deshacer()" disabled title="Deshacer (Ctrl+Z)">↶</button><button class="s" id="btnRedo" style="padding:2px 9px" onclick="rehacer()" disabled title="Rehacer (Ctrl+Shift+Z)">↷</button>
   <span class="grp" id="lvlGrp">Nivel <select id="lvl" onchange="planStory=+this.value;draw()"></select>
    <label style="margin:0;gap:4px"><input type="checkbox" id="showGraph" checked onchange="showGraph=this.checked;draw()">Conexiones</label>
    <label style="margin:0;gap:4px" title="Medidas totales por fuera de la planta y escala gráfica"><input type="checkbox" id="showDims" checked onchange="showDims=this.checked;draw()">Cotas</label>
@@ -257,7 +258,7 @@ function drawOverlay(){ const go=$('go'); go.innerHTML=''; if(!view) return; dra
  centerlines.forEach((pl,li)=>{ for(let i=0;i<pl.length-1;i++) line(pl[i],pl[i+1]);
   pl.forEach((p,vi)=>{ const c=el('circle',{cx:X(p),cy:Y(p),r:6,fill:'#fff',stroke:'#2f6fed','stroke-width':2,style:'cursor:grab'});
    c.addEventListener('pointerdown',e=>{ if(tool) return; e.stopPropagation(); drag={li,vi,moved:false}; $('svg').setPointerCapture(e.pointerId); });
-   c.addEventListener('contextmenu',e=>{ e.preventDefault(); if(pl.length>2) pl.splice(vi,1); else centerlines.splice(li,1); lineInfo(); drawOverlay(); if(lastStage) runCirc(); });
+   c.addEventListener('contextmenu',e=>{ e.preventDefault(); recordar('borrar vértice'); if(pl.length>2) pl.splice(vi,1); else centerlines.splice(li,1); lineInfo(); drawOverlay(); if(lastStage) runCirc(); });
    go.appendChild(c); }); });
  if(curLine.length){ for(let i=0;i<curLine.length-1;i++) line(curLine[i],curLine[i+1]);
   if(mouse) line(curLine[curLine.length-1],mouse,'2 3'); curLine.forEach(p=>go.appendChild(el('circle',{cx:X(p),cy:Y(p),r:4,fill:'#2f6fed'}))); }
@@ -340,7 +341,7 @@ function corePanel(){ const c=$('ctx'), k=result.cores[selCore];
   <button class="s" onclick="quitarNucleo()">Quitar</button> <button class="s" onclick="selCore=null;draw();unitPanel()">Cerrar</button>`;
  c.style.display='block'; }
 function specNucleo(){ const k=result.cores[selCore]; ensureManual(); return k.spec!=null?k.spec:selCore; }   // número del núcleo en coresManual
-function aplicarNucleo(defecto){ const k=result.cores[selCore], i=specNucleo(), o=coresManual[i]; if(o==null) return;
+function aplicarNucleo(defecto){ recordar('cambiar núcleo'); const k=result.cores[selCore], i=specNucleo(), o=coresManual[i]; if(o==null) return;
  const p=Array.isArray(o)?[o[0],o[1]]:[o.p[0],o.p[1]], giro=+$('nGiro').value, f=+$('nFrente').value, d=+$('nFondo').value, nuevo={p};
  if(giro===90) nuevo.giro=90;
  if(!defecto&&!Array.isArray(o)&&o.frente&&Math.abs(f-k.frente)<0.01) nuevo.frente=o.frente;     // lo que ya tenía propio se conserva
@@ -348,7 +349,7 @@ function aplicarNucleo(defecto){ const k=result.cores[selCore], i=specNucleo(), 
  if(!defecto&&f>0&&Math.abs(f-k.frente)>=0.01) nuevo.frente=Math.round(f*100)/100;
  if(!defecto&&d>0&&Math.abs(d-k.fondo)>=0.01) nuevo.fondo=Math.round(d*100)/100;
  coresManual[i]=(nuevo.giro||nuevo.frente||nuevo.fondo)?nuevo:p; selSpec=i; coreInfo(); runCirc(); }
-function quitarNucleo(){ const i=specNucleo(); coresManual.splice(i,1); selCore=null; coreInfo(); runCirc(); }
+function quitarNucleo(){ recordar('quitar núcleo'); const i=specNucleo(); coresManual.splice(i,1); selCore=null; coreInfo(); runCirc(); }
 
 /* ---------- patios ---------- */
 function rectAlign(p0,p1){ const th=domAngle(footprint.length?footprint:[p0,p1]), c=Math.cos(th), s=Math.sin(th), L=q=>[q[0]*c+q[1]*s,-q[0]*s+q[1]*c], W=q=>[q[0]*c-q[1]*s,q[0]*s+q[1]*c], a=L(p0), b=L(p1);
@@ -357,13 +358,13 @@ function patioDims(p){ const f=footprint.length?footprint:p, th=domAngle(f), c=M
  const r=k=>Math.max(0,Math.min(Math.max(...a.map(q=>q[k])),Math.max(...b.map(q=>q[k])))-Math.max(Math.min(...a.map(q=>q[k])),Math.min(...b.map(q=>q[k])))); return [r(0),r(1)]; }   // medidas dentro de la masa
 function finishPatio(){ if(curPatio.length<2) return; const p=rectAlign(curPatio[0],curPatio[1]); curPatio=[];   // la herramienta sigue activa: Esc para terminar
  const ar=Math.abs(p.reduce((t,q,i)=>{ const r=p[(i+1)%p.length]; return t+q[0]*r[1]-r[0]*q[1]; },0))/2;
- if(p.length>=3&&ar>=1){ ensurePatiosManual(); patios.push(p.map(q=>[Math.round(q[0]*100)/100,Math.round(q[1]*100)/100])); renderPatios(); $('tag').textContent='Patio creado'; if(lastStage) run(lastStage,{keepView:true}); else draw(); }
+ if(p.length>=3&&ar>=1){ recordar('dibujar patio'); ensurePatiosManual(); patios.push(p.map(q=>[Math.round(q[0]*100)/100,Math.round(q[1]*100)/100])); renderPatios(); $('tag').textContent='Patio creado'; if(lastStage) run(lastStage,{keepView:true}); else draw(); }
  else drawOverlay(); }
 function autoPatios(){ return (result&&result.patios_auto&&result.patios?result.patios:[]).map(p=>p.map(q=>[q[0],q[1]])); }
 function ensurePatiosManual(){ if($('patios_mode').value!=='manual'){ $('patios_mode').value='manual'; patios=autoPatios(); } }
-function patiosModeChanged(){ if($('patios_mode').value==='manual') patios=autoPatios(); renderPatios(); if(lastStage) run(lastStage,{keepView:true}); else draw(); }
-function quitarPatio(i){ ensurePatiosManual(); patios.splice(i,1); renderPatios(); if(lastStage) run(lastStage,{keepView:true}); else draw(); }
-function quitarPatios(){ ensurePatiosManual(); patios=[]; renderPatios(); if(lastStage) run(lastStage,{keepView:true}); else draw(); }
+function patiosModeChanged(){ recordar('modo de patios',{patios_mode:$('patios_mode').value==='manual'?'auto':'manual'}); if($('patios_mode').value==='manual') patios=autoPatios(); renderPatios(); if(lastStage) run(lastStage,{keepView:true}); else draw(); }
+function quitarPatio(i){ recordar('quitar patio'); ensurePatiosManual(); patios.splice(i,1); renderPatios(); if(lastStage) run(lastStage,{keepView:true}); else draw(); }
+function quitarPatios(){ recordar('quitar los patios'); ensurePatiosManual(); patios=[]; renderPatios(); if(lastStage) run(lastStage,{keepView:true}); else draw(); }
 function renderPatios(){ const man=$('patios_mode').value==='manual', list=man?patios:(result&&result.patios)||[];
  $('pminTxt').textContent=STD&&STD.predio&&STD.predio.patio_min!=null?STD.predio.patio_min:3;
  $('patioList').innerHTML=list.map((p,i)=>{ const d=patioDims(p); return `<div class="prow" style="grid-template-columns:12px 1fr auto;cursor:default"><span class="sw" style="background:#e4e6ea;border:1px dashed #8a8f99"></span><span>Patio ${i+1} · ${d[0].toFixed(1)} × ${d[1].toFixed(1)} m${man?'':' (automático)'}</span><button class="s" style="padding:0 6px" title="Quitar este patio (pasa a modo manual)" onclick="quitarPatio(${i})">×</button></div>`; }).join('');
@@ -377,21 +378,38 @@ function edgeAt(e){ if(!view) return null; const r=$('svg').getBoundingClientRec
  return best?best[1]:null; }
 function renderMeds(){ const rmin=STD&&STD.predio?STD.predio.retiro_ventanas:3; $('rmin').textContent=rmin;
  $('medList').innerHTML=medianeras.map((m,i)=>{ const L=Math.hypot(m.b[0]-m.a[0],m.b[1]-m.a[1]); const ok=(+m.retiro||0)>=rmin;
-  return `<div class="prow" style="grid-template-columns:12px 1fr auto;cursor:default"><span class="sw" style="background:${MED}"></span><span>Medianera ${i+1} · ${L.toFixed(1)} m · retiro <input type="number" min="0" step="0.5" value="${m.retiro||0}" style="width:52px" onchange="medianeras[${i}].retiro=+this.value;renderMeds();if(lastStage)run(lastStage,{keepView:true})"> m<br><span style="color:${ok?'var(--ok)':'var(--mut)'}">${ok?'con ventanas':(+m.retiro>0?'retiro insuficiente: sin ventanas':'adosado: sin ventanas')}</span></span><button class="s" style="padding:0 6px" onclick="medianeras.splice(${i},1);renderMeds();draw();if(lastStage)run(lastStage,{keepView:true})">×</button></div>`; }).join(''); }
+  return `<div class="prow" style="grid-template-columns:12px 1fr auto;cursor:default"><span class="sw" style="background:${MED}"></span><span>Medianera ${i+1} · ${L.toFixed(1)} m · retiro <input type="number" min="0" step="0.5" value="${m.retiro||0}" style="width:52px" onchange="recordar('retiro de medianera');medianeras[${i}].retiro=+this.value;renderMeds();if(lastStage)run(lastStage,{keepView:true})"> m<br><span style="color:${ok?'var(--ok)':'var(--mut)'}">${ok?'con ventanas':(+m.retiro>0?'retiro insuficiente: sin ventanas':'adosado: sin ventanas')}</span></span><button class="s" style="padding:0 6px" onclick="recordar('quitar medianera');medianeras.splice(${i},1);renderMeds();draw();if(lastStage)run(lastStage,{keepView:true})">×</button></div>`; }).join(''); }
 function drawMeds(g){ medianeras.forEach((m,i)=>{ g.appendChild(el('line',{x1:X(m.a),y1:Y(m.a),x2:X(m.b),y2:Y(m.b),stroke:MED,'stroke-width':4,'stroke-linecap':'round','pointer-events':'none'}));
   const c=[(m.a[0]+m.b[0])/2,(m.a[1]+m.b[1])/2]; g.appendChild(el('text',{x:X(c)+6,y:Y(c)-6,'font-size':11,fill:MED,'pointer-events':'none'},'Medianera'+((+m.retiro||0)>0?' · retiro '+m.retiro+' m':''))); });
  if(tool==='medianera'&&medHover!=null){ const a=footprint[medHover], b=footprint[(medHover+1)%footprint.length]; g.appendChild(el('line',{x1:X(a),y1:Y(a),x2:X(b),y2:Y(b),stroke:MED,'stroke-width':7,opacity:.35,'stroke-linecap':'round','pointer-events':'none'})); } }
+
+/* ---------- deshacer y rehacer (R4.2): polilíneas, núcleos, medianeras y patios ---------- */
+let atras=[], adelante=[];   // estados anteriores y deshechos: {f: foto del estado, txt: qué se hizo}
+function foto(){ return JSON.stringify({centerlines,coresManual,cores_mode:$('cores_mode').value,medianeras,patios,patios_mode:$('patios_mode').value}); }
+function recordar(txt,antes){ let f=foto(); if(antes) f=JSON.stringify(Object.assign(JSON.parse(f),antes));   // antes: lo que ya cambió (el modo elegido en el selector)
+ if(!atras.length||atras[atras.length-1].f!==f) atras.push({f,txt}); if(atras.length>100) atras.shift(); adelante=[]; botonesHistoria(); }
+function olvidarHistoria(){ atras=[]; adelante=[]; botonesHistoria(); }   // otra masa: lo de antes no se aplica
+function botonesHistoria(){ const u=$('btnUndo'), r=$('btnRedo'); u.disabled=!atras.length; r.disabled=!adelante.length;
+ u.title='Deshacer'+(atras.length?': '+atras[atras.length-1].txt:'')+' (Ctrl+Z)'; r.title='Rehacer'+(adelante.length?': '+adelante[adelante.length-1].txt:'')+' (Ctrl+Shift+Z)'; }
+function volverA(f){ const a=JSON.parse(foto()), s=JSON.parse(f); centerlines=s.centerlines; coresManual=s.coresManual; $('cores_mode').value=s.cores_mode; medianeras=s.medianeras; patios=s.patios; $('patios_mode').value=s.patios_mode;
+ selCore=null; curLine=[]; curPatio=[]; lineInfo(); coreInfo(); renderMeds(); renderPatios(); unitPanel();
+ const circ=JSON.stringify([a.centerlines,a.coresManual,a.cores_mode])!==JSON.stringify([s.centerlines,s.coresManual,s.cores_mode]);   // como runCirc: al menos hasta el pasillo
+ if(lastStage) return run(circ&&lastStage==='massing'?'corridor':lastStage,{keepView:true}); drawOverlay(); }
+async function deshacer(){ if(tool==='line'&&curLine.length){ curLine.pop(); drawOverlay(); return; }   // dibujando una polilínea: borra el último vértice
+ const f=foto(); while(atras.length&&atras[atras.length-1].f===f) atras.pop();   // lo que no cambió nada no cuenta
+ const e=atras.pop(); if(!e) return botonesHistoria(); adelante.push({f,txt:e.txt}); botonesHistoria(); await volverA(e.f); $('tag').textContent='Deshecho: '+e.txt; }
+async function rehacer(){ const e=adelante.pop(); if(!e) return; atras.push({f:foto(),txt:e.txt}); botonesHistoria(); await volverA(e.f); $('tag').textContent='Rehecho: '+e.txt; }
 
 /* ---------- herramientas ---------- */
 function setTool(t){ if(viewMode!=='plan') setView('plan'); if(tool==='line'&&t!=='line') finishLine(); curPatio=[]; tool=(tool===t)?null:t;
  $('btnDraw').classList.toggle('on',tool==='line'); $('btnAddCore').classList.toggle('on',tool==='addcore'); $('btnDelCore').classList.toggle('on',tool==='delcore'); $('btnMed').classList.toggle('on',tool==='medianera'); $('btnPatio').classList.toggle('on',tool==='patio'); medHover=null;
  $('svg').style.cursor=tool?'crosshair':'default';
  $('tag').textContent=tool==='line'?'Polilínea: clic para cada vértice; doble clic o Enter para terminar':tool==='addcore'?'Haz clic cerca de un pasillo para añadir un núcleo':tool==='delcore'?'Haz clic sobre un núcleo para quitarlo':tool==='medianera'?'Haz clic sobre un borde de la planta para marcarlo o desmarcarlo como medianera':tool==='patio'?'Patio: clic en dos esquinas opuestas (se alinea con el edificio). Esc para terminar':'Listo'; curLine=[]; drawOverlay(); }
-function finishLine(){ if(curLine.length>=2){ centerlines.push(curLine); } curLine=[]; if(tool==='line'){ tool=null; $('btnDraw').classList.remove('on'); $('svg').style.cursor='default'; $('tag').textContent='Línea creada'; } lineInfo(); drawOverlay(); if(centerlines.length&&lastStage) runCirc(); }
-function undoLine(){ if(curLine.length){curLine.pop();} else centerlines.pop(); lineInfo(); drawOverlay(); if(lastStage) runCirc(); }
-function clearLines(){ centerlines=[]; curLine=[]; lineInfo(); drawOverlay(); if(lastStage) runCirc(); }
+function finishLine(){ if(curLine.length>=2){ recordar('dibujar polilínea'); centerlines.push(curLine); } curLine=[]; if(tool==='line'){ tool=null; $('btnDraw').classList.remove('on'); $('svg').style.cursor='default'; $('tag').textContent='Línea creada'; } lineInfo(); drawOverlay(); if(centerlines.length&&lastStage) runCirc(); }
+function undoLine(){ if(curLine.length){curLine.pop();} else { if(centerlines.length) recordar('borrar la última polilínea'); centerlines.pop(); } lineInfo(); drawOverlay(); if(lastStage) runCirc(); }
+function clearLines(){ if(centerlines.length) recordar('volver al pasillo automático'); centerlines=[]; curLine=[]; lineInfo(); drawOverlay(); if(lastStage) runCirc(); }
 function lineInfo(){ $('lineInfo').textContent=centerlines.length?centerlines.length+' polilínea(s), '+centerlines.reduce((a,p)=>a+p.length,0)+' vértices':'Pasillo automático'; }
-function coresModeChanged(){ if($('cores_mode').value==='manual'){ coresManual=(result&&result.cores?result.cores.map(c=>c.center):[]); } coreInfo(); if(lastStage) runCirc(); }
+function coresModeChanged(){ recordar('modo de núcleos',{cores_mode:$('cores_mode').value==='manual'?'auto':'manual'}); if($('cores_mode').value==='manual'){ coresManual=(result&&result.cores?result.cores.map(c=>c.center):[]); } coreInfo(); if(lastStage) runCirc(); }
 function coreInfo(){ $('coreInfo').textContent=$('cores_mode').value==='manual'?coresManual.length+' núcleo(s) manual(es)':'Al añadir o quitar un núcleo se pasa a modo manual. Se ajusta al pasillo más cercano y se coloca en el lado donde haces clic.'; }
 function ensureManual(){ if($('cores_mode').value!=='manual'){ $('cores_mode').value='manual'; coresManual=(result&&result.cores?result.cores.map(c=>c.center):[]); } }
 
@@ -402,13 +420,14 @@ svg.addEventListener('click',e=>{ if(!view||svg._skipClick) return;
  const w=toWorld(e);
  if(tool==='line'){ if(e.detail>1) return; curLine.push(snap(w,curLine[curLine.length-1])); drawOverlay(); }
  else if(tool==='patio'){ curPatio.push(snap(w,null)); if(curPatio.length===2) finishPatio(); else drawOverlay(); }
- else if(tool==='addcore'){ ensureManual(); coresManual.push([Math.round(w[0]*10)/10,Math.round(w[1]*10)/10]); coreInfo(); runCirc(); }
+ else if(tool==='addcore'){ recordar('añadir núcleo'); ensureManual(); coresManual.push([Math.round(w[0]*10)/10,Math.round(w[1]*10)/10]); coreInfo(); runCirc(); }
  else if(tool==='medianera'){ const i=edgeAt(e); if(i==null) return; const a=footprint[i], b=footprint[(i+1)%footprint.length];
-   const k=medianeras.findIndex(m=>sameSeg(m,a,b)); if(k>=0) medianeras.splice(k,1); else medianeras.push({a:[a[0],a[1]],b:[b[0],b[1]],retiro:0});
+   const k=medianeras.findIndex(m=>sameSeg(m,a,b)); recordar(k>=0?'quitar medianera':'marcar medianera'); if(k>=0) medianeras.splice(k,1); else medianeras.push({a:[a[0],a[1]],b:[b[0],b[1]],retiro:0});
    renderMeds(); draw(); if(lastStage) run(lastStage,{keepView:true}); }
- else if(tool==='delcore'){ if(!result||!result.cores) return; ensureManual();
+ else if(tool==='delcore'){ if(!result||!result.cores) return;
    let best=null; result.cores.forEach(c=>{ const d=Math.hypot(c.center[0]-w[0],c.center[1]-w[1]); if(d<8&&(!best||d<best[0])) best=[d,c]; });
-   if(best&&best[1].spec!=null){ coresManual.splice(best[1].spec,1); selCore=null; coreInfo(); runCirc(); } } });
+   if(best){ recordar('quitar núcleo'); const i=best[1].spec!=null?best[1].spec:result.cores.indexOf(best[1]);   // en automático pasa a manual con los núcleos en el mismo orden
+    ensureManual(); coresManual.splice(i,1); selCore=null; coreInfo(); runCirc(); } } });
 svg.addEventListener('dblclick',e=>{ if(tool==='line'){ finishLine(); } });
 svg.addEventListener('wheel',e=>{ e.preventDefault(); const r=svg.getBoundingClientRect(); const mx=e.clientX-r.left, my=e.clientY-r.top;
  const f=e.deltaY<0?1.15:1/1.15; const nz=Math.max(0.5,Math.min(12,zoom*f)); const k=nz/zoom; const W=svg.clientWidth,H=svg.clientHeight;
@@ -421,9 +440,12 @@ svg.addEventListener('mousemove',e=>{ if(!view) return; const w=toWorld(e);
  if(tool==='medianera'){ const h=edgeAt(e); if(h!==medHover){ medHover=h; drawOverlay(); } return; }
  if(tool==='patio'){ mouse=snap(w,null); drawOverlay(); return; }
  if(tool==='line'||tool==='addcore') { mouse=tool==='line'?snap(w,curLine[curLine.length-1]):w; drawOverlay(); } });
-svg.addEventListener('pointermove',e=>{ if(!drag||!view) return; const pl=centerlines[drag.li]; const prev=pl[drag.vi-1]||pl[drag.vi+1]; pl[drag.vi]=snap(toWorld(e),null); drag.moved=true; drawOverlay(); });
+svg.addEventListener('pointermove',e=>{ if(!drag||!view) return; if(!drag.moved) recordar('mover vértice'); const pl=centerlines[drag.li]; const prev=pl[drag.vi-1]||pl[drag.vi+1]; pl[drag.vi]=snap(toWorld(e),null); drag.moved=true; drawOverlay(); });
 svg.addEventListener('pointerup',e=>{ if(drag){ const d=drag; drag=null; if(d.moved&&lastStage) runCirc(); } });
-window.addEventListener('keydown',e=>{ if(e.key==='Enter'&&tool==='line') finishLine(); if(e.key==='Escape'){ curLine=[]; curPatio=[]; if(tool) setTool(tool); drawOverlay(); } });
+window.addEventListener('keydown',e=>{ const t=e.target, texto=t.tagName==='TEXTAREA'||(t.tagName==='INPUT'&&!/^(checkbox|radio|button|file|range|color)$/.test(t.type));   // en un campo de texto, su propio deshacer
+ if((e.ctrlKey||e.metaKey)&&!texto){ const k=e.key.toLowerCase();
+  if(k==='z'&&!e.shiftKey){ e.preventDefault(); deshacer(); return; } if((k==='z'&&e.shiftKey)||k==='y'){ e.preventDefault(); rehacer(); return; } }
+ if(e.key==='Enter'&&tool==='line') finishLine(); if(e.key==='Escape'){ curLine=[]; curPatio=[]; if(tool) setTool(tool); drawOverlay(); } });
 
 /* ---------- programas ---------- */
 let PROGS=[{key:'Residential',label:'Residencial',color:'#f2a93b'},{key:'Retail',label:'Comercial',color:'#9b6bd6'},{key:'Office',label:'Oficinas',color:'#4f8fe6'},{key:'Circulation',label:'Circulación',color:'#8a94a6'},{key:'Parking',label:'Estacionamiento',color:'#5c6370'},{key:'Amenities',label:'Amenities',color:'#2bb38a'}];
@@ -538,7 +560,7 @@ function panels(){ const m=result.metrics||{}, mx=m.mix; drawDonut(m.programs||{
  $('units').innerHTML=(result.units?'<table><tr><th>ID</th><th>Tipo</th><th>m²</th><th>Dorm</th><th>Evac.</th><th>Plano</th></tr>'+result.units.map(u=>`<tr style="cursor:pointer" onclick="selUnit='${u.id}';if(viewMode!=='plan')setView('plan');else{draw();unitPanel();}"><td>${u.id}</td><td>${u.type}</td><td>${u.area}</td><td>${u.bedrooms??'-'}</td><td style="color:${u.egress_status&&u.egress_status!=='ok'?EVAC[u.egress_status]:'inherit'}">${u.egress} m${u.egress_status==='saco'?' ⚠':''}</td><td>${u.plan_score!=null?u.plan_score+'%':'-'}</td></tr>`).join('')+'</table>':''); }
 function panels2(){ $('donut').innerHTML='';$('progList').innerHTML=''; $('metrics').innerHTML='';$('warns').innerHTML='';$('units').innerHTML=''; }
 function selLabel(v,txt,off){ const s=$('sample'); let o=s.querySelector('option[value="'+v+'"]'); if(!o){ o=document.createElement('option'); o.value=v; s.prepend(o); } o.textContent=txt; o.disabled=!!off; s.value=v; }
-function setMass(m,fromRhino,opt){ opt=opt||{}; const o=$('sample').querySelector('option[value="__nuevo"]'); if(o) o.remove();
+function setMass(m,fromRhino,opt){ opt=opt||{}; olvidarHistoria(); const o=$('sample').querySelector('option[value="__nuevo"]'); if(o) o.remove();
  if(fromRhino){ externa=m; selLabel(m.source==='masterplan'?'__mp':'__rhino',(m.source==='masterplan'?'Lote del Masterplan: ':'Masa de Rhino: ')+(m.name||'sin nombre')); }
  if(opt.label) selLabel('__proyecto',opt.label);   // proyecto o masa abiertos desde un archivo
  nombre=m.name||''; footprint=m.footprint; selCore=null; if(m.height) $('height').value=m.height; centerlines=(m.centerlines||(m.centerline?[m.centerline]:[])).map(pl=>pl.map(p=>[p[0],p[1]])); curLine=[]; lineInfo();
@@ -546,7 +568,7 @@ function setMass(m,fromRhino,opt){ opt=opt||{}; const o=$('sample').querySelecto
  stories=m.stories?m.stories.map(x=>({program:x.program,height:x.height})):null; medianeras=(m.medianeras||[]).map(x=>({a:x.a,b:x.b,retiro:x.retiro||0})); renderMeds();
  patios=(m.patios||[]).map(p=>p.map(q=>[q[0],q[1]])); curPatio=[]; $('patios_mode').value=m.patios_mode||(patios.length?'manual':'auto'); renderStories(); result=null; lastStage=null; sel.clear(); planStory=null; zoom=1; pan=[0,0]; draw(); panels2(); if(fromRhino) $('rhinoBadge').textContent=(m.source==='masterplan'?'Lote recibido del Masterplan: ':'Masa recibida de Rhino: ')+(m.name||'sin nombre'); return run(opt.etapa||'massing'); }
 async function nuevo(){ if((footprint.length||result)&&!confirm('¿Empezar en blanco? Se borran la masa, las polilíneas, los núcleos, las medianeras y el resultado, también los guardados en el servidor. Las medidas, el mix y los colores se conservan.')) return;
- try{ await fetch('/api/reset',{method:'POST'}); }catch(e){}
+ try{ await fetch('/api/reset',{method:'POST'}); }catch(e){} olvidarHistoria();
  if(tool) setTool(tool); footprint=[]; centerlines=[]; curLine=[]; coresManual=[]; $('cores_mode').value='auto'; stories=null; medianeras=[]; result=null; lastStage=null; selUnit=null; selCore=null; sel.clear(); planStory=null; zoom=1; pan=[0,0];
  externa=null; nombre=''; abierto=null; ['__rhino','__mp','__proyecto'].forEach(v=>{ const o=$('sample').querySelector('option[value="'+v+'"]'); if(o) o.remove(); }); selLabel('__nuevo','— En blanco —',true);
  patios=[]; curPatio=[]; $('patios_mode').value='auto'; $('height').value=$('height').defaultValue; $('lvl').innerHTML=''; lineInfo(); coreInfo(); renderMeds(); renderStories(); panels2(); unitPanel();

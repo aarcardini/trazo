@@ -769,3 +769,37 @@ def test_proyectos():
 
 if __name__ == "__main__":
     test_proyectos(); print("OK26")
+
+
+def test_deshacer():
+    """R4.2: deshacer y rehacer (↶ ↷, Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z y Ctrl+Y) para polilíneas, núcleos, medianeras y
+    patios: cada lugar que los cambia guarda antes el estado; otra masa, un proyecto o «Nuevo» empiezan sin historia.
+    Corrección: «Quitar núcleo» en modo automático quita el núcleo tocado (antes pasaba a manual y no lo quitaba).
+    (El comportamiento se comprobó en navegador; esta prueba evita que un cambio nuevo quede sin deshacer.)"""
+    import re
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    for t in ('id="btnUndo"', 'id="btnRedo"', "function deshacer", "function rehacer", "function recordar", "function olvidarHistoria"):
+        assert t in html, t
+    js = html.split("<script>", 1)[1].split("</script>", 1)[0]
+    exentas = ("function volverA", "function setMass", "async function nuevo", "function ensureManual", "function ensurePatiosManual")
+    bloques = re.compile(r"\nfunction |\nasync function |addEventListener\(|onclick=\"|onchange=\"")
+    cambio = re.compile(r"\b(centerlines|coresManual|medianeras|patios)(\[[^\]]*\])*(\.retiro)?(=(?![=>])|\.(push|pop|splice)\()|\bpl\.splice\(|\bpl\[drag\.vi\]=")
+    sin, n = [], 0
+    for m in cambio.finditer(js):
+        linea = js[js.rfind("\n", 0, m.start()) + 1:m.start()]
+        if linea.startswith("let "):
+            continue                                                  # declaración inicial
+        ini = max([0] + [b.start() for b in bloques.finditer(js, 0, m.start())])
+        bloque = js[ini:m.start()].lstrip("\n")
+        n += 1
+        if not bloque.startswith(exentas) and "recordar(" not in bloque:
+            sin.append(js[m.start() - 60:m.end() + 20])
+    assert n >= 15 and not sin, (n, sin)
+    for f in ("function setMass(", "async function nuevo("):              # otra masa: la historia se olvida
+        assert "olvidarHistoria()" in js.split(f, 1)[1].split("\nfunction ", 1)[0].split("\nasync function ", 1)[0], f
+    teclas = js.split("window.addEventListener('keydown'", 1)[1].split("\n/*", 1)[0]
+    assert "e.ctrlKey||e.metaKey" in teclas and "deshacer()" in teclas and "rehacer()" in teclas and "k==='y'" in teclas
+    assert "best[1].spec!=null?best[1].spec:result.cores.indexOf(best[1])" in js     # corrección de «Quitar núcleo»
+
+if __name__ == "__main__":
+    test_deshacer(); print("OK27")
