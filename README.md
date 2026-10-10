@@ -82,6 +82,7 @@ Desde entonces basta con escribir `trazo` en Rhino.
    - Para abrir patios, dibuja curvas cerradas en la capa `Trazo::Patios`; llegan a la web en modo manual.
 3. En la web: Calcular masa → Generar pasillo y núcleos → Generar mix → Generar planos.
    - **Patios** (sección «Patios»): en modo automático, Trazo abre patios donde un predio entre medianeras es demasiado profundo para tener luz; cada bloque lleva su núcleo. Con **+ Dibujar patio** haces clic en dos esquinas opuestas (el patio se alinea con el edificio y se recorta a la masa); la × de la lista lo quita. Dibujar o quitar un patio pasa a modo manual. Las estancias que dan a un patio de al menos 3 m (editable en «Medidas y normativa → Predio») tienen luz.
+   - Un patio **dentro** de la masa (sin tocar el borde) la convierte en un anillo: alas alrededor del patio y un pasillo que da la vuelta (U cerrada o claustro). Ejemplos: «Edificio con patio central 40 × 30» y «Entre medianeras 30 × 45 con patio central (U cerrada)».
    - Para empezar de cero: botón **Nuevo (en blanco)**, junto a «Ejemplo». Borra la masa, las polilíneas, los núcleos, las medianeras y el resultado, también los guardados en el servidor; conserva las medidas, el mix y los colores. Después envía una masa desde Rhino o elige un ejemplo.
    - En la planta 2D se ven las **cotas totales** de la huella (por fuera, alineadas con el edificio) y una **escala gráfica** abajo a la derecha; se ocultan con la casilla «Cotas».
    - El selector «Ejemplo» muestra siempre qué está cargado: un ejemplo, «Masa de Rhino: …» o «— En blanco —». Si miras un ejemplo, puedes volver a tu masa de Rhino eligiéndola en el selector.
@@ -131,6 +132,72 @@ Si algo falla en Rhino, ejecuta el script y elige **Diagnostico**. Si no se resu
 - **Pasillo y núcleos**: eje (automático o dibujado), ancho de pasillo, núcleos (ancho, fondo incluyendo pasillo, cantidad), distancias de evacuación (salida única / múltiple) y núcleos extra automáticos.
 - **Mix**: tipos con m² objetivo y %, ancho mínimo, muro medianero; métricas Match Score, Fit y Unidades únicas.
 - **Planos**: distribución día/noche con pasillo interno, puertas y grafo de conexiones verificado.
+
+## Novedades v2.15
+- **Corrección: núcleos encimados.** En plantas con varias alas (por ejemplo, una T o una L con un patio), dos puntas de pasillo cercanas ponían cada una su núcleo, y quedaban encimados: en formas al azar, hasta 60 m² de núcleo pisado. Ahora el segundo núcleo se corre hasta no pisar al primero o, si no entra, el primero sirve a las dos puntas. La evacuación de las viviendas no empeora en ningún caso.
+- Si pones a mano dos núcleos que se pisan, quedan donde los pusiste y se avisa: «El núcleo N se superpone con otro: muévelo o quítalo».
+
+## Novedades v2.14
+- **Reglas de evacuación (R3.6):** cada vivienda se revisa con dos reglas, editables en el panel:
+  - **Recorrido máximo:** por defecto 30 m desde la puerta hasta el núcleo más cercano, por el pasillo.
+  - **Fondo de saco máximo:** por defecto 18 m. Es el tramo desde la puerta en el que solo se puede salir en una dirección, hasta llegar a un núcleo o a un punto desde el que se sale en dos. Un pasillo que da la vuelta a un patio da dos direcciones aunque las dos lleguen al mismo núcleo.
+- Antes, entre 18 y 30 m la vivienda quedaba «en duda» (punto gris) sin revisar si tenía dos salidas. Ahora se sabe:
+  - en los 259 casos de la comparación, 184 de esas viviendas cumplen (tienen dos direcciones) y 23 no (fondo de saco largo).
+- Las que no cumplen se ven en la planta, con la casilla **Evacuación** encendida: la puerta y el contorno de la vivienda en **naranja** (fondo de saco) o **rojo** (recorrido), y los tramos de pasillo que no cumplen resaltados con el mismo color. Además:
+  - se avisan una por una, con su distancia (por ejemplo «Fondo de saco: U06 (20 m)… agrega un núcleo o une el pasillo»);
+  - en la ficha de la vivienda aparecen el recorrido y el fondo de saco.
+- Los ejemplos de `samples/` cumplen y no cambian.
+
+## Novedades v2.13
+- **Núcleos con medidas propias y giro (R3.5):** un clic sobre un núcleo en la planta abre su ficha. Ahí cambias su **frente** (a lo largo del pasillo), su **fondo** (desde el pasillo) y su **giro**:
+  - **0°:** como siempre, la escalera sube perpendicular al pasillo.
+  - **90°:** la escalera sube a lo largo del pasillo. El núcleo queda más ancho y menos profundo (por ejemplo 7,7 × 3,6 m en lugar de 5,5 × 5,0 m), útil en alas de poco fondo.
+  - **Medidas por defecto** vuelve a las de la normativa para ese giro; **Quitar** saca el núcleo.
+  - Si eliges un fondo propio, el núcleo no se estira hasta la fachada: lo que queda detrás se suma a la vivienda vecina.
+  - Al editar un núcleo automático, los núcleos pasan a modo manual, como al añadir o quitar uno.
+- Rhino sigue mandando los núcleos como puntos (con las medidas por defecto) y dibuja al recibir los núcleos con su forma y su giro.
+
+## Novedades v2.12
+- **Plantas no ortogonales (R3.4):** una masa que no es ortogonal (una barra con un quiebre, un ala girada, el tallo oblicuo de una T, o una L, T o U con ochavas) ya no recibe un solo pasillo recto para toda la planta. Se divide en alas y cada ala tiene su propio pasillo a lo largo, que se encuentra con el de la otra en el quiebre (a inglete) o llega a él como una T. Las ochavas y los lados inclinados cortos solo recortan el ala.
+  - En «Barra con quiebre a 45°»: antes 4 viviendas, todas a oscuras, con 18 % de eficiencia («Solo el 18 % de la planta está servido»); ahora 10 viviendas con plano completo y 74,6 %.
+  - En «Esquina en L con ochava»: de 4 viviendas y 38 % a 10 viviendas y 72,6 %.
+  - En formas al azar con quiebres, T oblicuas, Y y ochavas, la superficie de viviendas con plano completo (calidad 80 o más) pasa de casi nada a unos 560-770 m² por planta, y las viviendas a oscuras, de 2,4-5 a menos de 1 por caso (las que quedan dan a una medianera).
+- Las plantas convexas (trapecio, paralelogramo, pentágono) siguen con un solo pasillo, como antes, y las formas ortogonales no cambian.
+- En un ala con un extremo inclinado, el núcleo se corre hasta donde entra entero (antes podía quedar recortado por el borde).
+- Las cotas de la planta van en la dirección del rectángulo más chico que la contiene: en una forma no ortogonal podían quedar giradas y lejos del dibujo.
+- Ejemplos nuevos: «Barra con quiebre a 45° (no ortogonal)» y «Esquina en L con ochava».
+
+## Novedades v2.11
+- **Corrección: lavadero «sin acceso».** Un lavadero de 0,90 m de ancho (justo lo que pide su puerta) a veces quedaba «sin acceso desde la entrada», según dónde estuviera la vivienda en la planta: un error de redondeo hacía que midiera 0,8999… m. Esas viviendas tenían puntaje 0 en su plano sin un problema real; en formas al azar, 1 de cada 10. En «T con 2 polilíneas», la calidad de planos pasa de 17 a 61.
+
+## Novedades v2.10
+- **Pasillos dibujados que se cruzan (R3.3):** dos polilíneas que se cruzan en X ya no ponen viviendas encimadas (en una planta en cruz, unos 500 m² de viviendas se pisaban entre sí y otros 110 m² con pasillos y núcleos). En cada cruce, la línea más larga sigue de largo y la otra se corta en dos; cada mitad se une a la primera como una T. Si una línea pasa del otro lado menos de 4,5 m (el sobrante típico al dibujar una T), ese resto se quita.
+- También sin solapes en pasillos dibujados: el codo de una polilínea cuando la planta se ensancha en la esquina, las ramas de una U muy cercanas, el bolsillo detrás de un núcleo junto a otro pasillo y dos núcleos en la misma punta. Un ramal oblicuo ya no bloquea viviendas de más en el pasillo al que llega. En 350 casos al azar con cruces, T, L y U dibujadas, la superficie encimada pasa de unos 218 000 m² (en 258 casos) a prácticamente cero (menos de 1 m² en total).
+- La evacuación pasa por las uniones de pasillos dibujados en los dos sentidos: desde el pasillo principal se puede salir por el núcleo de un ramal (en «T con 2 polilíneas», la distancia máxima a un núcleo baja de 26,3 a 16,0 m). En «L con polilínea», dos viviendas del codo se pisaban 3,6 m²: ya no (la eficiencia pasa de 72,7 % a 72,3 % porque ese tramo contaba dos veces).
+- Si algo todavía se pisa (por ejemplo, con tres líneas que se cruzan en un mismo punto), la vivienda se recorta o, si pierde más de la mitad, se quita y se avisa.
+- Ejemplo nuevo: «Cruz con 2 polilíneas que se cruzan (X)».
+
+## Novedades v2.9
+- **Codos más eficientes (R3.2):** en el codo de una L, una T o una U (y en las esquinas de un patio), las viviendas que daban a otra ala quedaban con dormitorios sin ventana: en formas L, T y U al azar, casi 1 de cada 5. Ahora:
+  - donde no llega la luz no se ponen viviendas; si el pasillo tiene una punta corta junto al codo, su núcleo va a esa esquina interior (que no necesita luz) y la esquina exterior, con dos fachadas, queda para las viviendas;
+  - la franja de viviendas del ala que llega baja hasta el pasillo de la otra cuando su fondo sigue dando a la fachada;
+  - lo que queda sin luz se ve rayado como «Sin luz natural» y se avisa («Esquinas sin luz natural»): no es superficie desperdiciada, es la que no recibe luz (para núcleos, ductos o depósitos);
+  - en el plano de cada vivienda, las estancias habitables van bajo la parte del fondo que tiene luz y el resto queda como depósito.
+- En el ejemplo «Forma en L»: ninguna vivienda a oscuras (antes 1), 0 m² sin usar, calidad de planos 94 (antes 88) y 17,4 m de evacuación máxima (antes 21,4), con 72,1 % de eficiencia (antes 71,8 %). En formas T y U la eficiencia baja (de 71 a 64 % y de 72 a 67 % en promedio) porque ya no cuenta viviendas inválidas: la superficie de viviendas **con luz** sube un 11 %.
+
+## Novedades v2.8
+- **Sin restos sueltos en las puntas (R3.1):** cuando el pasillo (por ejemplo, una polilínea dibujada) termina antes de la fachada, el núcleo de esa punta dejaba una franja de 1 a 4 m hasta el borde, demasiado chica para una vivienda, que quedaba sin usar. Ahora el núcleo se apoya contra la fachada y la vivienda del otro lado del núcleo crece en su lugar. Solo si el núcleo ya llega a la fachada (si detrás le queda un bolsillo, franja y bolsillo ya forman una vivienda) y si la evacuación sigue dentro del máximo. En el ejemplo «L con polilínea», la eficiencia pasa de 69,8 % a 72,7 %; en «T con 2 polilíneas», de 69,9 % a 70,7 %.
+
+## Novedades v2.7
+- **Corrección de geometría (R2.2):** cuando un corte separaba una figura cóncava en dos (por ejemplo, una masa con una muesca en V, o un predio en C en el Masterplan), las dos partes quedaban unidas por una línea de ancho cero: una vivienda o un pasillo de dos piezas, o una manzana doble. Ahora cada parte sale por separado: el pasillo que cruza una muesca se dibuja en dos tramos y cada manzana y cada lote son una sola figura.
+- Por dentro, el motor quedó repartido en módulos (R2.1: `massing.py`, `circulation.py`, `units.py`, `patios.py`), sin cambiar ningún resultado.
+
+## Novedades v2.6
+- **Patios rodeados de edificio (U cerrada o claustro):** un patio dibujado dentro de la masa, sin tocar el borde, ya se usa (antes avisaba y lo ignoraba). El edificio queda como un anillo alrededor del patio, dividido en alas, con un **pasillo que da la vuelta al patio**: se puede evacuar hacia los dos lados, así que no hace falta un núcleo en cada esquina (van los de «Cantidad» y los que pida la evacuación; una punta de pasillo de hasta 18 m no necesita núcleo propio).
+- Las viviendas que dan al patio tienen luz si mide al menos 3 m. En alas de poco fondo, pasillo de borde (hacia el patio o contra la medianera) para que las viviendas no queden playas. En las esquinas interiores, donde no llega la luz, no se ponen viviendas (quedan «sin usar»; las unidades de esquina llegan con la mejora de codos, R3.2).
+- En la planta el patio se ve como un hueco del edificio, con sus cotas; en la axonometría, con sus caras interiores. Ejemplos nuevos: «Edificio con patio central 40 × 30» y «Entre medianeras 30 × 45 con patio central (U cerrada)».
+- **Corrección:** con coordenadas grandes (UTM, planos georreferenciados) el centro y el área de los polígonos perdían precisión (hasta 5 m), y un patio interior podía no reconocerse.
+- Todavía no: patios interiores en masas que no son ortogonales o patios girados respecto de la masa (avisa y no lo usa), y polilíneas dibujadas en un bloque con patio interior (avisa y traza el pasillo solo).
 
 ## Novedades v2.5
 - **Recibir sin duplicar (Rhino):** si el archivo ya tiene un resultado de Trazo, Recibir dice cuántos objetos hay y en qué capas, y pregunta: **Reemplazar** (borra el anterior, también lo oculto, bloqueado o en capas apagadas, y dibuja el nuevo), **Agregar** (deja los dos) o **Cancelar** (no cambia nada). Al reemplazar, también quita las capas de los niveles que ya no existen (por ejemplo, al pasar de 10 a 5 pisos). Solo toca las capas de resultado (`Trazo::Footprint` y `Trazo::L00…`), nunca las que usas para enviar.

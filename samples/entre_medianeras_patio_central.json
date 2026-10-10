@@ -1,0 +1,4 @@
+{"name": "Entre medianeras 30 × 45 con patio central (U cerrada)", "height": 15,
+ "footprint": [[0,0],[30,0],[30,45],[0,45]],
+ "medianeras": [{"a":[30,0],"b":[30,45],"retiro":0},{"a":[0,45],"b":[0,0],"retiro":0}],
+ "patios": [[[9,14],[21,14],[21,31],[9,31]]]}

@@ -18,6 +18,7 @@ DOOR = 0.8            # ancho de puerta
 LIV_MIN = 3.4         # frente mínimo del estar
 BED_MAIN = 3.2        # frente dormitorio principal
 BED_W = 2.8           # frente dormitorio secundario
+BED_D = 3.0           # fondo mínimo de un dormitorio detrás del pasillo interno
 MIN_W = {"bedroom": 2.6, "living": 3.0, "dining": 2.4, "bath": 1.5, "hallway": 0.9, "kitchen": 1.6, "hall": 1.1,
          "laundry": 1.0, "storage": 0.8, "study": 2.2}
 DAY = ("hall", "kitchen", "dining", "living", "hallway")     # se conectan en abierto si comparten borde
@@ -51,6 +52,11 @@ def bedrooms_for(area):
     if area < 85:
         return 2
     return 3
+
+
+def fondo_min():
+    """Fondo mínimo de una vivienda: el pasillo interno y un dormitorio detrás."""
+    return BED_D + HALL
 
 
 def facade_min(nb):
@@ -149,8 +155,8 @@ def _plan_rects(x0, v0, x1, v1, nb, warnings):
         hv0, hv1 = v0, v0 + HALL
         add("hallway", "hallway", (xs, hv0, x1, hv1))
         bedD = D - HALL
-        if bedD < 3.0:
-            warnings.append("Fondo de %.1f m escaso para dormitorios (mín. %.1f m)" % (D, 3.0 + HALL))
+        if bedD < BED_D:
+            warnings.append("Fondo de %.1f m escaso para dormitorios (mín. %.1f m)" % (D, fondo_min()))
         kd = min(2.6, max(1.8, D * 0.4))
 
     # que cada dormitorio alcance su área mínima con el fondo disponible (si el frente lo permite)
@@ -234,6 +240,46 @@ def _main_rect(poly):
     return (mx0, v0, mx1, mtop), annex
 
 
+def _main_con_luz(poly, main, annexes, is_facade, paso=0.25):
+    """Si solo una parte del fondo del rectángulo principal da a la fachada (un codo, la esquina de un patio), el
+    principal se achica a esa parte y lo demás pasa a anexo: las estancias habitables quedan con luz y el resto es
+    depósito (R3.2). Si no hay luz en ningún tramo, o el tramo con luz es muy corto, no cambia nada."""
+    x0, v0, x1, v1 = main
+    n = max(1, int((x1 - x0) / paso))
+    xs = [x0 + (x1 - x0) * k / n for k in range(n + 1)]
+    luz = [is_facade((xs[k], v1), (xs[k + 1], v1)) for k in range(n)]
+    k = 0
+    while k < n:                         # tramos oscuros de menos de 1 m (junto a una medianera o un tabique): no cuentan
+        if luz[k]:
+            k += 1
+            continue
+        j = k
+        while j + 1 < n and not luz[j + 1]:
+            j += 1
+        if xs[j + 1] - xs[k] < 1.0:
+            luz[k:j + 1] = [True] * (j + 1 - k)
+        k = j + 1
+    if all(luz) or not any(luz):
+        return main, annexes
+    best, k = None, 0
+    while k < n:
+        if not luz[k]:
+            k += 1
+            continue
+        j = k
+        while j + 1 < n and luz[j + 1]:
+            j += 1
+        if best is None or xs[j + 1] - xs[k] > best[1] - best[0]:
+            best = (xs[k], xs[j + 1])
+        k = j + 1
+    lx0, lx1 = best
+    if lx1 - lx0 < LIV_MIN + BED_W:
+        return main, annexes
+    extra = [G.clip_rect(poly, x0, lx0, v0, v1) if lx0 > x0 + 0.05 else [],
+             G.clip_rect(poly, lx1, x1, v0, v1) if lx1 < x1 - 0.05 else []]
+    return (lx0, v0, lx1, v1), annexes + [p for p in extra if p and abs(G.area(p)) > 1.0]
+
+
 def _std_for(r, nb):
     k, i = r["kind"], r["id"]
     if k == "bedroom":
@@ -249,6 +295,8 @@ def layout_unit(poly, nb, is_facade=None, vivienda=None):
     configure(vivienda or ST.DEFAULTS["vivienda"])
     poly = G.ensure_ccw(poly)
     (x0, v0, x1, v1), annexes = _main_rect(poly)
+    if is_facade is not None:
+        (x0, v0, x1, v1), annexes = _main_con_luz(poly, (x0, v0, x1, v1), annexes, is_facade)
     warnings = []
     R, E = _plan_rects(x0, v0, x1, v1, nb, warnings)
     # conexiones abiertas de la zona de día: entre estancias de día que comparten borde
@@ -265,7 +313,7 @@ def layout_unit(poly, nb, is_facade=None, vivienda=None):
     # anexos (bolsillos de la unidad): estudio si tiene fachada, depósito si no
     for n_, ap in enumerate(annexes):
         r = G.bbox(ap)
-        fac = abs(r[3] - v1) < 0.05 and (r[3] - r[1]) >= 3.0
+        fac = abs(r[3] - v1) < 0.05 and (r[3] - r[1]) >= 3.0 and (is_facade is None or is_facade((r[0], v1), (r[2], v1)))
         aid = "annex%d" % (n_ + 1)
         R[aid] = ("study" if fac else "storage", r, "Estudio" if fac else "Depósito")
         best, bl = None, 0.0
@@ -293,7 +341,7 @@ def layout_unit(poly, nb, is_facade=None, vivienda=None):
             continue
         seg = _shared(rooms[ids[a]]["rect"], rooms[ids[b]]["rect"])
         L = 0.0 if not seg else ((seg[1][0] - seg[0][0]) ** 2 + (seg[1][1] - seg[0][1]) ** 2) ** 0.5
-        ok = L >= MIN_SHARE[typ]
+        ok = L >= MIN_SHARE[typ] - 1e-6                 # un borde de 0,8999… m es de 0,90 m
         edges.append({"a": a, "b": b, "type": typ, "ok": ok})
         if ok and typ == "puerta":
             m = ((seg[0][0] + seg[1][0]) / 2, (seg[0][1] + seg[1][1]) / 2)

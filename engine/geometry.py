@@ -5,12 +5,16 @@ EPS = 1e-9
 
 
 def area(poly):
-    """Área con signo (positiva si es antihoraria)."""
+    """Área con signo (positiva si es antihoraria). Se calcula desde el primer vértice: así es precisa también con
+    coordenadas grandes (UTM), donde los productos x·y pierden decimales."""
+    if not poly:
+        return 0.0
+    ox, oy = poly[0]
     s = 0.0
     n = len(poly)
     for i in range(n):
-        x1, y1 = poly[i]
-        x2, y2 = poly[(i + 1) % n]
+        x1, y1 = poly[i][0] - ox, poly[i][1] - oy
+        x2, y2 = poly[(i + 1) % n][0] - ox, poly[(i + 1) % n][1] - oy
         s += x1 * y2 - x2 * y1
     return s / 2.0
 
@@ -47,15 +51,16 @@ def centroid(poly):
         xs = [p[0] for p in poly]
         ys = [p[1] for p in poly]
         return (sum(xs) / len(xs), sum(ys) / len(ys))
+    ox, oy = poly[0]                     # desde el primer vértice: preciso con coordenadas UTM
     cx = cy = 0.0
     n = len(poly)
     for i in range(n):
-        x1, y1 = poly[i]
-        x2, y2 = poly[(i + 1) % n]
+        x1, y1 = poly[i][0] - ox, poly[i][1] - oy
+        x2, y2 = poly[(i + 1) % n][0] - ox, poly[(i + 1) % n][1] - oy
         f = x1 * y2 - x2 * y1
         cx += (x1 + x2) * f
         cy += (y1 + y2) * f
-    return (cx / (6 * a), cy / (6 * a))
+    return (ox + cx / (6 * a), oy + cy / (6 * a))
 
 
 def bbox(poly):
@@ -172,6 +177,36 @@ def line_intervals(poly, y):
             xs.append(x1 + (y - y1) * (x2 - x1) / (y2 - y1))
     xs.sort()
     return [(xs[i], xs[i + 1]) for i in range(0, len(xs) - 1, 2)]
+
+
+def line_intervals_multi(loops, y):
+    """Como line_intervals, para un polígono con huecos dado como lista de contornos (exterior y huecos)."""
+    xs = []
+    for poly in loops:
+        n = len(poly)
+        for i in range(n):
+            x1, y1 = poly[i]
+            x2, y2 = poly[(i + 1) % n]
+            if (y1 > y) != (y2 > y):
+                xs.append(x1 + (y - y1) * (x2 - x1) / (y2 - y1))
+    xs.sort()
+    return [(xs[i], xs[i + 1]) for i in range(0, len(xs) - 1, 2)]
+
+
+def seg_intersection(a, b, c, d):
+    """Cruce de los segmentos ab y cd: (t, u) con el punto a + t·(b − a) = c + u·(d − c), o None si no se cortan
+    (o son paralelos)."""
+    rx, ry = b[0] - a[0], b[1] - a[1]
+    sx, sy = d[0] - c[0], d[1] - c[1]
+    den = rx * sy - ry * sx
+    if abs(den) <= EPS * max(1.0, math.hypot(rx, ry) * math.hypot(sx, sy)):
+        return None
+    qx, qy = c[0] - a[0], c[1] - a[1]
+    t = (qx * sy - qy * sx) / den
+    u = (qx * ry - qy * rx) / den
+    if -EPS <= t <= 1 + EPS and -EPS <= u <= 1 + EPS:
+        return t, u
+    return None
 
 
 def min_area_rect_angle(poly):
@@ -324,6 +359,33 @@ def union_parts(polys):
                 break
     res.sort(key=lambda r: -area(r[0]))
     return res
+
+
+def split_parts(poly):
+    """Partes de un recorte. Cuando el corte separa una figura cóncava, Sutherland-Hodgman deja las partes unidas por
+    puentes de ancho cero; aquí salen por separado (lista, la mayor primero; [poly] si es una sola)."""
+    if not poly or len(poly) < 3:
+        return []
+    if _is_convex(poly):
+        return [poly]
+    partes = [o for o, _ in union_parts([poly])]
+    return partes if len(partes) > 1 else [poly]
+
+
+def clip_halfplane_parts(poly, nx, ny, d):
+    """Como clip_halfplane, pero si el corte separa la figura devuelve cada parte por separado."""
+    return [p for p in split_parts(clip_halfplane(poly, nx, ny, d)) if len(p) >= 3 and abs(area(p)) > 1e-6]
+
+
+def clip_rect_parts(poly, x0=None, x1=None, y0=None, y1=None):
+    """Como clip_rect, pero si el recorte separa la figura devuelve cada parte por separado."""
+    return split_parts(clip_rect(poly, x0, x1, y0, y1))
+
+
+def largest_part(poly):
+    """La mayor de las partes de un recorte (para lo que tiene que ser una sola figura: una unidad, un lote)."""
+    ps = split_parts(poly)
+    return max(ps, key=lambda p: abs(area(p))) if ps else poly
 
 
 def subtract(poly, cutters):

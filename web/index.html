@@ -57,8 +57,8 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:3px 4px;b
  <label>Nº mínimo de núcleos <input type="number" id="core_count" value="2" min="1" max="8"></label>
  <label>Añadir núcleos si no cumple <input type="checkbox" id="auto_cores" checked></label>
  <label>Lado de núcleos <select id="core_side"><option value="alternate">alternar</option><option value="left">izquierda</option><option value="right">derecha</option></select></label>
- <label>Evacuación salida única <input type="number" id="egress_single" value="18"></label>
- <label>Evacuación salidas múltiples <input type="number" id="egress_multi" value="30"></label>
+ <label title="Largo máximo desde la puerta de una vivienda hasta un núcleo o hasta un punto desde el que se puede salir en dos direcciones">Fondo de saco máx. (m) <input type="number" id="egress_single" value="18"></label>
+ <label title="Distancia máxima desde la puerta de una vivienda hasta el núcleo más cercano, por el pasillo">Recorrido máx. a un núcleo (m) <input type="number" id="egress_multi" value="30"></label>
 
  <h2 style="margin-top:12px">Líneas centrales (polilíneas)</h2>
  <div class="hint">Haz clic para cada vértice. Doble clic, Enter o «Terminar» cierran la línea. Arrastra los vértices para editarlos; clic derecho sobre un vértice lo borra. Sin líneas dibujadas, el pasillo es automático.</div>
@@ -93,6 +93,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:3px 4px;b
   <span class="grp" id="lvlGrp">Nivel <select id="lvl" onchange="planStory=+this.value;draw()"></select>
    <label style="margin:0;gap:4px"><input type="checkbox" id="showGraph" checked onchange="showGraph=this.checked;draw()">Conexiones</label>
    <label style="margin:0;gap:4px" title="Medidas totales por fuera de la planta y escala gráfica"><input type="checkbox" id="showDims" checked onchange="showDims=this.checked;draw()">Cotas</label>
+   <label style="margin:0;gap:4px" title="Tramos de pasillo y viviendas que no cumplen el fondo de saco (naranja) o el recorrido máximo (rojo)"><input type="checkbox" id="showEvac" checked onchange="showEvac=this.checked;draw()">Evacuación</label>
    <button class="s" style="padding:2px 7px" title="Encuadrar" onclick="zoom=1;pan=[0,0];draw()">⤢</button></span>
   <span class="grp" id="axoCtl" style="display:none">
    <button class="s" style="padding:2px 7px" title="Girar 45°" onclick="view3.az-=Math.PI/4;drawAxo()">⟲</button><button class="s" style="padding:2px 7px" title="Girar 45°" onclick="view3.az+=Math.PI/4;drawAxo()">⟳</button>
@@ -141,7 +142,8 @@ const UNIT_L=[0.58,0.72,0.46,0.82,0.38,0.88];
 const roomColor=(kind,prog)=>tone(progColor(prog||'Residential'),ROOM_L[kind]??0.7);
 const COL=new Proxy({},{get:(t,k)=>roomColor(k)});
 const KLABEL={bedroom:'Dormitorio',living:'Estar',dining:'Comedor',kitchen:'Cocina',bath:'Baño',hall:'Hall',hallway:'Pasillo',laundry:'Lavadero',storage:'Depósito',study:'Estudio'};
-let selUnit=null, showGraph=true, showDims=true;
+let selUnit=null, selCore=null, selSpec=null, showGraph=true, showDims=true, showEvac=true;
+const EVAC={ok:'#1a9d5b',saco:'#e8890c',fail:'#d63b3b'};   // puerta de cada vivienda: cumple, fondo de saco largo, recorrido largo
 
 /* ---------- paneles de entrada ---------- */
 function renderMix(){ $('mix').innerHTML='<div class="mixrow" style="grid-template-columns:1fr 46px 46px 40px 20px;color:var(--mut);font-size:11px"><span>Tipo</span><span>m²</span><span>%</span><span>Dorm.</span><span></span></div>'+mix.map((m,i)=>`<div class="mixrow" style="grid-template-columns:1fr 46px 46px 40px 20px"><input value="${m.name}" onchange="mix[${i}].name=this.value"><input type="number" value="${m.area}" title="m²" onchange="mix[${i}].area=+this.value"><input type="number" value="${m.percent}" title="%" onchange="mix[${i}].percent=+this.value"><input type="number" min="0" max="5" value="${m.dorms??''}" placeholder="auto" title="Dormitorios (vacío = según m²)" onchange="mix[${i}].dorms=this.value===''?null:+this.value"><button class="s" style="padding:0" onclick="mix.splice(${i},1);renderMix()">×</button></div>`).join(''); }
@@ -155,6 +157,7 @@ async function run(stage,opt){ opt=opt||{}; if(!footprint.length){ $('tag').text
  let j; try{ const r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({footprint,height:+$('height').value,stage,params:params()})}); j=await r.json(); }
  catch(e){ j={error:'no hay conexión con el servidor de Trazo: arráncalo (py server.py en Windows, python3 server.py en Mac) y recarga la página'}; }
  if(j.error){ $('tag').textContent='Error: '+j.error; $('warns').innerHTML='<div class="w">⚠ Error: '+j.error+'. Si se repite, copia este mensaje y pégalo en la sesión de Claude Code.</div>'; return;} result=j;
+ if(selSpec!=null){ const k=(j.cores||[]).findIndex(c=>c.spec===selSpec); selCore=k>=0?k:null; selSpec=null; } else if(selCore!=null&&!(j.cores||[])[selCore]) selCore=null;
  if(!stories||stories.length!==j.stories.length){stories=j.stories.map(s=>({program:s.program,height:s.height}));renderStories();}
  $('tag').textContent='Etapa: '+stage;
  if(!opt.keepView){ if(stage==='massing'&&viewMode!=='axo') setView('axo',true); else if(stage!=='massing'&&viewMode==='axo'&&!opt.stayAxo) setView('plan',true);
@@ -183,22 +186,24 @@ function draw(){ const gb=$('gb'); gb.innerHTML='';
   gb.appendChild(el('text',{x:W/2,y:H/2+14,'text-anchor':'middle','font-size':13,fill:'#667085'},'Envía una masa desde Rhino (script → Enviar) o elige un ejemplo.')); drawOverlay(); return; }
  fit(); const sw=1.2;
  gb.appendChild(el('polygon',{points:pts(footprint),fill:'none',stroke:'#667085','stroke-dasharray':'4 3'}));
- const plates=result&&result.blocks&&result.blocks.length?result.blocks.map(b=>b.plate):result?[result.plate]:[];
+ const plates=result&&result.blocks&&result.blocks.length?result.blocks.map(b=>[b.plate].concat(b.plate_holes||[])):result?[[result.plate]]:[];
+ const ring=(loops,at)=>el('path',Object.assign({d:loops.map(l=>'M'+pts(l)+'Z').join(' '),'fill-rule':'evenodd'},at));   // planta con patios interiores
  (result&&result.patios?result.patios:patios).forEach(p=>{ gb.appendChild(el('polygon',{points:pts(p),fill:'url(#hatch)',stroke:'#8a8f99','stroke-dasharray':'5 3'}));
   const c=centroidOf(p), d=patioDims(p); gb.appendChild(el('text',{x:X(c),y:Y(c)+4,'text-anchor':'middle','font-size':11,fill:'#5b616b','pointer-events':'none'},'Patio '+Math.min(d[0],d[1]).toFixed(1)+' m')); });
  if(result&&result.footprint&&medianeras.some(m=>(+m.retiro||0)>0)) gb.appendChild(el('polygon',{points:pts(result.footprint),fill:'none',stroke:'#667085','stroke-width':1.2}));
  const stCur=result&&result.stories&&planStory!=null?result.stories[planStory]:null;
- if(result&&stCur&&stCur.program!=='Residential'){ plates.forEach(pl=>gb.appendChild(el('polygon',{points:pts(pl),fill:tone(progColor(stCur.program),0.88),stroke:tone(progColor(stCur.program),0.35)})));
+ if(result&&stCur&&stCur.program!=='Residential'){ plates.forEach(pl=>gb.appendChild(ring(pl,{fill:tone(progColor(stCur.program),0.88),stroke:tone(progColor(stCur.program),0.35)})));
   const sh=progShapes(stCur.program); drawShapes2D(gb,sh); drawShapes2D(gb,coreShapes());
   const c=centroidOf(result.plate); const L=(result.program_layouts||{})[stCur.program];
   const info=!L?'sin distribución':L.kind==='parking'?L.count+' plazas':('planta libre '+L.free_area+' m² · '+L.workers+' personas · '+L.wc+' inodoros');
   gb.appendChild(el('text',{x:X(c),y:Y(c)-6,'text-anchor':'middle','font-size':14,'font-weight':600,fill:'#1b2430','pointer-events':'none'},'Nivel '+planStory+' · '+progLabel(stCur.program)));
   gb.appendChild(el('text',{x:X(c),y:Y(c)+12,'text-anchor':'middle','font-size':12,fill:'#1b2430','pointer-events':'none'},info));
- } else if(result){ plates.forEach(pl=>gb.appendChild(el('polygon',{points:pts(pl),fill:'rgba(120,130,150,.08)',stroke:'#667085'})));
+ } else if(result){ plates.forEach(pl=>gb.appendChild(ring(pl,{fill:'rgba(120,130,150,.08)',stroke:'#667085'})));
   (result.corridors||[]).forEach(c=>gb.appendChild(el('polygon',{points:pts(c),fill:circColor('corridor'),stroke:circStroke(),'stroke-width':.6})));
   (result.dark_zones||[]).forEach(d=>{ gb.appendChild(el('polygon',{points:pts(d),fill:'url(#hatch)',stroke:'#8a8f99','stroke-dasharray':'4 3'})); const c=centroidOf(d);
    gb.appendChild(el('text',{x:X(c),y:Y(c)-4,'text-anchor':'middle','font-size':12,fill:'#5b616b','pointer-events':'none'},'Sin luz natural'));
-   gb.appendChild(el('text',{x:X(c),y:Y(c)+12,'text-anchor':'middle','font-size':11,fill:'#5b616b','pointer-events':'none'},'requiere patio')); });
+   if(!(result.dark_corners||[]).some(q=>JSON.stringify(q)===JSON.stringify(d)))      // en un codo, el aviso lo explica
+    gb.appendChild(el('text',{x:X(c),y:Y(c)+12,'text-anchor':'middle','font-size':11,fill:'#5b616b','pointer-events':'none'},'requiere patio')); });
   (result.units||[]).forEach(u=>{ if(u.rooms) u.rooms.forEach(r=>gb.appendChild(el('polygon',{points:pts(r.poly),fill:roomColor(r.kind),stroke:tone(progColor('Residential'),0.30),'stroke-width':.7})));
    else gb.appendChild(el('polygon',{points:pts(u.poly),fill:unitColor(u)}));
    gb.appendChild(el('polygon',{points:pts(u.poly),fill:'none',stroke:u.id===selUnit?'#2f6fed':'#1b2430','stroke-width':u.id===selUnit?3:sw}));
@@ -206,12 +211,24 @@ function draw(){ const gb=$('gb'); gb.innerHTML='';
    const gd=el('g',{'pointer-events':'none'}); drawDoors(gd,u); if(showGraph) drawGraph(gd,u); gb.appendChild(gd);
    const cx=u.poly.reduce((a,p)=>a+p[0],0)/u.poly.length, cy=u.poly.reduce((a,p)=>a+p[1],0)/u.poly.length;
    gb.appendChild(el('text',{x:X([cx,cy]),y:Y([cx,cy]),'text-anchor':'middle','font-size':11,fill:'#1b2430','pointer-events':'none'},u.id+' · '+u.area+' m²'));
-   gb.appendChild(el('circle',{cx:X(u.door),cy:Y(u.door),r:4,fill:u.egress_status=='ok'?'#1a9d5b':u.egress_status=='multi'?'#9aa3b2':'#d63b3b'})); });
+   if(showEvac&&u.egress_status&&u.egress_status!=='ok') gb.appendChild(el('polygon',{points:pts(u.poly),fill:'none',stroke:EVAC[u.egress_status],'stroke-width':2.5,'stroke-dasharray':'7 4','pointer-events':'none'}));
+   gb.appendChild(el('circle',{cx:X(u.door),cy:Y(u.door),r:4,fill:EVAC[u.egress_status]||EVAC.ok})); });
+  if(showEvac&&result.evacuacion){ const ev=result.evacuacion;      // tramos de pasillo fuera de norma (R3.6)
+   [['saco',ev.saco,'Fondo de saco: más de '+ev.fondo_saco_max+' m con una sola salida'],['fail',ev.recorrido,'Más de '+ev.recorrido_max+' m hasta un núcleo']].forEach(([k,ls,t])=>(ls||[]).forEach(l=>{
+    const e=el('line',{x1:X(l[0]),y1:Y(l[0]),x2:X(l[1]),y2:Y(l[1]),stroke:EVAC[k],'stroke-width':6,'stroke-linecap':'round',opacity:.75}); e.appendChild(el('title',{},t)); gb.appendChild(e); })); }
   drawShapes2D(gb,coreShapes());
+  (result.cores||[]).forEach((c,i)=>{ if(i===selCore) gb.appendChild(el('polygon',{points:pts(c.poly),fill:'none',stroke:'#2f6fed','stroke-width':3,'pointer-events':'none'}));
+   const t=el('polygon',{points:pts(c.poly),fill:'transparent','data-core':i,style:'cursor:pointer'}); t.appendChild(el('title',{},'Núcleo '+(i+1)+': clic para cambiar sus medidas o girarlo')); gb.appendChild(t); });
  }
  drawDims(gb); drawOverlay(); }
 /* ---------- cotas y escala gráfica ---------- */
-function domAngle(poly){ let best=0, a=0; poly.forEach((p,i)=>{ const q=poly[(i+1)%poly.length], L=Math.hypot(q[0]-p[0],q[1]-p[1]); if(L>best){ best=L; a=Math.atan2(q[1]-p[1],q[0]-p[0]); } }); const r=Math.PI/2; return ((a%r)+r)%r; }
+function domAngle(poly){ // dirección (módulo 90°) de las cotas: entre las de los bordes, la del rectángulo más chico que contiene la planta (en una planta no ortogonal, no la de un ala girada); a igual rectángulo, la más cercana a los ejes del plano y después la del borde más largo
+ const r=Math.PI/2; let best=null;
+ poly.forEach((p,i)=>{ const q=poly[(i+1)%poly.length], L=Math.hypot(q[0]-p[0],q[1]-p[1]); if(L<1e-6) return;
+  const a=((Math.atan2(q[1]-p[1],q[0]-p[0])%r)+r)%r, c=Math.cos(a), s=Math.sin(a), xs=poly.map(t=>t[0]*c+t[1]*s), ys=poly.map(t=>-t[0]*s+t[1]*c);
+  const A=(Math.max(...xs)-Math.min(...xs))*(Math.max(...ys)-Math.min(...ys)), g=Math.min(a,r-a), tol=best?best[0]*1e-3:0;
+  if(!best||A<best[0]-tol||(A<=best[0]+tol&&(g<best[3]-1e-9||(g<=best[3]+1e-9&&L>best[1])))) best=[A,L,a,g]; });
+ return best?best[2]:0; }
 function cota(g,a,b,ea,eb){ const st={stroke:'#667085','stroke-width':1};   // línea de cota a-b; ea/eb: puntos acotados
  [[ea,a],[eb,b]].forEach(([p,q])=>g.appendChild(el('line',{x1:X(p),y1:Y(p),x2:X(q),y2:Y(q),...st,'stroke-dasharray':'2 2','pointer-events':'none'})));
  g.appendChild(el('line',{x1:X(a),y1:Y(a),x2:X(b),y2:Y(b),...st,'pointer-events':'none'}));
@@ -296,9 +313,12 @@ function drawGraph(g,u){ if(!u.graph) return; const pos={}; u.graph.nodes.forEac
  u.graph.edges.forEach(e=>{ const a=pos[e.a], b=pos[e.b]; if(!a||!b) return;
   g.appendChild(el('line',{x1:X(a),y1:Y(a),x2:X(b),y2:Y(b),stroke:!e.ok?'#d63b3b':e.type==='abierto'?'#1a9d5b':'#2f6fed','stroke-width':1.6,'stroke-dasharray':e.type==='puerta'?'4 3':'',opacity:.9,'pointer-events':'none'})); });
  u.graph.nodes.forEach(n=>{ g.appendChild(el('circle',{cx:X(n.pos),cy:Y(n.pos),r:3.5,fill:'#fff',stroke:'#1b2430','stroke-width':1,'pointer-events':'none'})); }); }
-function unitPanel(){ const c=$('ctx'); const u=result&&result.units?result.units.find(x=>x.id===selUnit):null; if(!u){ c.style.display='none'; return; }
+function unitPanel(){ const c=$('ctx'); if(selCore!=null&&result&&result.cores&&result.cores[selCore]){ corePanel(); return; }
+ const u=result&&result.units?result.units.find(x=>x.id===selUnit):null; if(!u){ c.style.display='none'; return; }
  const real=(u.checks||[]).filter(x=>!x.info), ok=real.filter(x=>x.ok).length, n=real.length;
+ const ev=result.evacuacion||{}, evok=u.egress_status==='ok';
  c.innerHTML=`<b>${u.id} · ${u.type} · ${u.area} m²</b><div class="hint">Frente ${u.facade??'-'} m (mín. ${u.facade_min??'-'} m) · fondo ${u.depth} m · ${u.bedrooms??'-'} dorm.</div>
+  <div class="${evok?'hint':'w'}">${evok?'✓':'⚠'} Evacuación: ${u.egress} m hasta el núcleo más cercano${ev.recorrido_max!=null?' (máx. '+ev.recorrido_max+' m)':''}${u.saco?' · fondo de saco '+u.saco+' m'+(ev.fondo_saco_max!=null?' (máx. '+ev.fondo_saco_max+' m)':''):' · dos salidas'}</div>
   <table>${(u.rooms||[]).map(r=>`<tr><td><span class="sw" style="background:${roomColor(r.kind)}"></span> ${r.name}</td><td style="text-align:right">${r.area} m²</td></tr>`).join('')}</table>
   <h2 style="margin:10px 0 4px">Conexiones</h2>
   <div class="hint">${(u.graph?u.graph.edges:[]).map(e=>{const na=(u.rooms.find(r=>r.id===e.a)||{}).name||e.a, nb=(u.rooms.find(r=>r.id===e.b)||{}).name||e.b; return `${e.ok?'✓':'✗'} ${na} ${e.type==='abierto'?'↔':'⇢'} ${nb} <i>(${e.type})</i>`;}).join('<br>')}</div>
@@ -306,6 +326,27 @@ function unitPanel(){ const c=$('ctx'); const u=result&&result.units?result.unit
   ${(u.checks||[]).map(x=>`<div class="${x.ok?'hint':'w'}">${x.info?'ℹ':x.ok?'✓':'⚠'} ${x.msg}</div>`).join('')}
   <button class="s" onclick="selUnit=null;draw();unitPanel()">Cerrar</button>`;
  c.style.display='block'; }
+
+/* ---------- núcleo elegido: medidas propias y giro (R3.5) ---------- */
+function corePanel(){ const c=$('ctx'), k=result.cores[selCore];
+ c.innerHTML=`<b>Núcleo ${selCore+1}</b>${k.spec==null?' <span class="hint">(automático: al cambiarlo, los núcleos pasan a modo manual)</span>':''}
+  <label>Frente (a lo largo del pasillo) <input type="number" id="nFrente" step="0.05" min="1" value="${k.frente}"></label>
+  <label>Fondo (desde el pasillo) <input type="number" id="nFondo" step="0.05" min="1" value="${k.fondo}"></label>
+  <label>Giro <select id="nGiro"><option value="0"${k.giro==90?'':' selected'}>0°</option><option value="90"${k.giro==90?' selected':''}>90°</option></select></label>
+  <div class="hint">0°: la escalera sube perpendicular al pasillo. 90°: a lo largo del pasillo; el núcleo es más ancho y menos profundo y sirve en alas de poco fondo. Si dejas frente y fondo como están, se usan las medidas de la normativa para ese giro (y el núcleo llega a la fachada si detrás no entra una vivienda).</div>
+  <button class="s" onclick="aplicarNucleo()">Aplicar</button> <button class="s" onclick="aplicarNucleo(true)">Medidas por defecto</button>
+  <button class="s" onclick="quitarNucleo()">Quitar</button> <button class="s" onclick="selCore=null;draw();unitPanel()">Cerrar</button>`;
+ c.style.display='block'; }
+function specNucleo(){ const k=result.cores[selCore]; ensureManual(); return k.spec!=null?k.spec:selCore; }   // número del núcleo en coresManual
+function aplicarNucleo(defecto){ const k=result.cores[selCore], i=specNucleo(), o=coresManual[i]; if(o==null) return;
+ const p=Array.isArray(o)?[o[0],o[1]]:[o.p[0],o.p[1]], giro=+$('nGiro').value, f=+$('nFrente').value, d=+$('nFondo').value, nuevo={p};
+ if(giro===90) nuevo.giro=90;
+ if(!defecto&&!Array.isArray(o)&&o.frente&&Math.abs(f-k.frente)<0.01) nuevo.frente=o.frente;     // lo que ya tenía propio se conserva
+ if(!defecto&&!Array.isArray(o)&&o.fondo&&Math.abs(d-k.fondo)<0.01) nuevo.fondo=o.fondo;
+ if(!defecto&&f>0&&Math.abs(f-k.frente)>=0.01) nuevo.frente=Math.round(f*100)/100;
+ if(!defecto&&d>0&&Math.abs(d-k.fondo)>=0.01) nuevo.fondo=Math.round(d*100)/100;
+ coresManual[i]=(nuevo.giro||nuevo.frente||nuevo.fondo)?nuevo:p; selSpec=i; coreInfo(); runCirc(); }
+function quitarNucleo(){ const i=specNucleo(); coresManual.splice(i,1); selCore=null; coreInfo(); runCirc(); }
 
 /* ---------- patios ---------- */
 function rectAlign(p0,p1){ const th=domAngle(footprint.length?footprint:[p0,p1]), c=Math.cos(th), s=Math.sin(th), L=q=>[q[0]*c+q[1]*s,-q[0]*s+q[1]*c], W=q=>[q[0]*c-q[1]*s,q[0]*s+q[1]*c], a=L(p0), b=L(p1);
@@ -354,7 +395,8 @@ function ensureManual(){ if($('cores_mode').value!=='manual'){ $('cores_mode').v
 
 const svg=$('svg');
 svg.addEventListener('click',e=>{ if(!view||svg._skipClick) return;
- if(!tool){ const t=e.target.closest&&e.target.closest('[data-unit]'); selUnit=t?t.getAttribute('data-unit'):null; draw(); unitPanel(); return; }
+ if(!tool){ const tc=e.target.closest&&e.target.closest('[data-core]'); if(tc){ selCore=+tc.getAttribute('data-core'); selUnit=null; draw(); unitPanel(); return; }
+  const t=e.target.closest&&e.target.closest('[data-unit]'); selUnit=t?t.getAttribute('data-unit'):null; selCore=null; draw(); unitPanel(); return; }
  const w=toWorld(e);
  if(tool==='line'){ if(e.detail>1) return; curLine.push(snap(w,curLine[curLine.length-1])); drawOverlay(); }
  else if(tool==='patio'){ curPatio.push(snap(w,null)); if(curPatio.length===2) finishPatio(); else drawOverlay(); }
@@ -364,7 +406,7 @@ svg.addEventListener('click',e=>{ if(!view||svg._skipClick) return;
    renderMeds(); draw(); if(lastStage) run(lastStage,{keepView:true}); }
  else if(tool==='delcore'){ if(!result||!result.cores) return; ensureManual();
    let best=null; result.cores.forEach(c=>{ const d=Math.hypot(c.center[0]-w[0],c.center[1]-w[1]); if(d<8&&(!best||d<best[0])) best=[d,c]; });
-   if(best&&best[1].spec!=null){ coresManual.splice(best[1].spec,1); coreInfo(); runCirc(); } } });
+   if(best&&best[1].spec!=null){ coresManual.splice(best[1].spec,1); selCore=null; coreInfo(); runCirc(); } } });
 svg.addEventListener('dblclick',e=>{ if(tool==='line'){ finishLine(); } });
 svg.addEventListener('wheel',e=>{ e.preventDefault(); const r=svg.getBoundingClientRect(); const mx=e.clientX-r.left, my=e.clientY-r.top;
  const f=e.deltaY<0?1.15:1/1.15; const nz=Math.max(0.5,Math.min(12,zoom*f)); const k=nz/zoom; const W=svg.clientWidth,H=svg.clientHeight;
@@ -426,24 +468,27 @@ function drawAxo(){ const A=$('axo'); A.innerHTML=''; if(!result||!result.storie
  const ca=Math.cos(view3.az), sa=Math.sin(view3.az), se=Math.sin(view3.el), ce=Math.cos(view3.el);
  const P=(x,y,z)=>{ const xr=x*ca-y*sa, d=x*sa+y*ca; return [xr,-(d*se+z*ce)]; };
  const zb=i=>st[i].z+i*view3.explode, zt=i=>zb(i)+st[i].height;
- // cada bloque es un volumen (los patios quedan como huecos entre ellos)
- const fs=(result.blocks&&result.blocks.length?result.blocks.map(b=>b.footprint):[result.footprint]).map(ff=>{ const f=ff.map(p=>[p[0],p[1]]); let ar=0; f.forEach((p,i)=>{const q=f[(i+1)%f.length]; ar+=p[0]*q[1]-q[0]*p[1];}); if(ar<0) f.reverse(); return f; }), f=[].concat(...fs);
+ // cada bloque es un volumen (los patios quedan como huecos entre ellos o dentro de un bloque)
+ const orient=(ff,ccw)=>{ const f=ff.map(p=>[p[0],p[1]]); let ar=0; f.forEach((p,i)=>{const q=f[(i+1)%f.length]; ar+=p[0]*q[1]-q[0]*p[1];}); if((ar<0)===ccw) f.reverse(); return f; };
+ const blks=(result.blocks&&result.blocks.length?result.blocks:[{footprint:result.footprint}]).map(b=>({f:orient(b.footprint,true),h:(b.holes||[]).map(h=>orient(h,false))}));
+ const fs=blks.map(b=>b.f), f=[].concat(...fs);
  const top=zt(st.length-1); let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;
  f.forEach(p=>[0,top].forEach(z=>{ const q=P(p[0],p[1],z); x0=Math.min(x0,q[0]);x1=Math.max(x1,q[0]);y0=Math.min(y0,q[1]);y1=Math.max(y1,q[1]); }));
  const m=50, mr=170, sc=Math.min((W-m-mr)/((x1-x0)||1),(H-2*m-40)/((y1-y0)||1)), ox=m-x0*sc+((W-m-mr)-(x1-x0)*sc)/2, oy=m+40-y0*sc+((H-2*m-40)-(y1-y0)*sc)/2;
  const S=(x,y,z)=>{ const q=P(x,y,z); return (ox+q[0]*sc).toFixed(1)+','+(oy+q[1]*sc).toFixed(1); };
  const poly=(pts,z)=>pts.map(p=>S(p[0],p[1],z)).join(' ');
- const edges=fs.flatMap(f=>f.map((a,i)=>{ const b=f[(i+1)%f.length]; let nx=b[1]-a[1], ny=-(b[0]-a[0]); const L=Math.hypot(nx,ny)||1; nx/=L; ny/=L;
+ const edges=fs.concat(...blks.map(b=>b.h)).flatMap(f=>f.map((a,i)=>{ const b=f[(i+1)%f.length]; let nx=b[1]-a[1], ny=-(b[0]-a[0]); const L=Math.hypot(nx,ny)||1; nx/=L; ny/=L;
    return {a,b,dot:-(nx*sa+ny*ca),depth:((a[0]+b[0])/2)*sa+((a[1]+b[1])/2)*ca,lit:0.5+0.5*(nx*0.6-ny*0.8),med:medianeras.some(m=>(+m.retiro||0)<(STD&&STD.predio?STD.predio.retiro_ventanas:3)&&sameSeg(m,a,b))}; })).filter(e=>e.dot>1e-6).sort((p,q)=>q.depth-p.depth);
  const anySel=sel.size>0, dark=matchMedia('(prefers-color-scheme: dark)').matches, ln=dark?'rgba(255,255,255,.35)':'rgba(0,0,0,.35)';
  medianeras.forEach(m=>A.appendChild(el('line',{x1:S(m.a[0],m.a[1],0).split(',')[0],y1:S(m.a[0],m.a[1],0).split(',')[1],x2:S(m.b[0],m.b[1],0).split(',')[0],y2:S(m.b[0],m.b[1],0).split(',')[1],stroke:MED,'stroke-width':3,'stroke-linecap':'round'})));
  // sombra en el suelo
- fs.forEach(f=>A.appendChild(el('polygon',{points:poly(f,0),fill:dark?'rgba(0,0,0,.35)':'rgba(0,0,0,.06)'})));
+ const cap=(b,z,at)=>el('path',Object.assign({d:[b.f].concat(b.h).map(l=>'M'+poly(l,z)+'Z').join(' '),'fill-rule':'evenodd'},at));
+ blks.forEach(b=>A.appendChild(cap(b,0,{fill:dark?'rgba(0,0,0,.35)':'rgba(0,0,0,.06)'})));
  st.forEach((story,i)=>{ const g=el('g',{'data-story':i,style:'cursor:pointer'}); const ghost=view3.isolate&&anySel&&!sel.has(i), isSel=sel.has(i);
   g.setAttribute('opacity',ghost?0.12:1); const col=progColor(story.program), z0=zb(i), z1=zt(i);
   edges.forEach(e=>{ g.appendChild(el('polygon',{points:[S(e.a[0],e.a[1],z0),S(e.b[0],e.b[1],z0),S(e.b[0],e.b[1],z1),S(e.a[0],e.a[1],z1)].join(' '),
      fill:view3.wire?'none':(e.med?mixRed(shade(col,0.7+0.25*e.lit)):shade(col,0.7+0.25*e.lit)),stroke:isSel?'#2f6fed':e.med?MED:ln,'stroke-width':isSel?1.8:e.med?1:0.6})); });
-  fs.forEach(f=>g.appendChild(el('polygon',{points:poly(f,z1),fill:view3.wire?'none':shade(col,1.06),stroke:isSel?'#2f6fed':ln,'stroke-width':isSel?2.2:0.8})));
+  blks.forEach(b=>g.appendChild(cap(b,z1,{fill:view3.wire?'none':shade(col,1.06),stroke:isSel?'#2f6fed':ln,'stroke-width':isSel?2.2:0.8})));
   const showPlan=view3.plans&&!ghost&&(view3.explode>0||i===st.length-1||(view3.isolate&&isSel));
   if(showPlan&&story.program==='Residential'&&result.units){
    (result.corridors||[]).forEach(c=>g.appendChild(el('polygon',{points:poly(c,z1),fill:circColor('corridor')})));
@@ -486,20 +531,20 @@ function applyCtx(){ if(!stories) return; let pv=$('cxProg').value; const hv=$('
 function panels(){ const m=result.metrics||{}, mx=m.mix; drawDonut(m.programs||{});
  $('progList').innerHTML+=Object.entries(m.programs||{}).map(([k,v])=>v.stalls!=null?`<div class="hint">${progLabel(k)}: ${v.stalls} plazas en total</div>`:v.workers!=null?`<div class="hint">${progLabel(k)}: ${v.free_area} m² de planta libre, ${v.workers} personas</div>`:'').join(''); let h=`<div class="k"><span>Área por planta</span><b>${m.plate_area} m²</b></div><div class="k"><span>Plantas</span><b>${m.stories}</b></div><div class="k"><span>GFA</span><b>${m.gfa} m²</b></div>`+(m.blocks?`<div class="k"><span>Bloques</span><b>${m.blocks}</b></div><div class="k"><span>Patios</span><b>${m.patio_area} m²</b></div>`:'');
  if(m.core_count!=null) h+=`<div class="k"><span>Núcleos</span><b>${m.core_count}</b></div><div class="k"><span>Circulación</span><b>${m.circulation_pct??'-'}%</b></div>${m.core?`<div class="k"><span>Núcleo (frente × fondo)</span><b>${m.core.width} × ${m.core.depth} m</b></div><div class="k"><span>Ascensores</span><b>${m.core.elevators}</b></div><div class="k"><span>Escalera</span><b>${m.core.stair_type}</b></div><div class="k"><span>Contrahuellas por piso</span><b>${m.core.risers} × ${(m.core.riser_h*100).toFixed(1)} cm</b></div>`:''}<div class="k"><span>Tramos de pasillo</span><b>${m.wings}</b></div><div class="k"><span>Máx. distancia a núcleo</span><b>${m.egress_max} m</b></div>`;
- if(mx) h+=`<div class="k"><span>Sin usar</span><b>${m.unused_area??'-'} m²</b></div>${m.dark_area?`<div class="k"><span>Sin luz (requiere patio)</span><b>${m.dark_area} m²</b></div>`:''}<div class="k"><span>Unidades/planta</span><b>${mx.count}</b></div><div class="k"><span>Unidades totales</span><b>${m.units_total}</b></div><div class="k"><span>Match score</span><b>${mx.match_score}%</b></div><div class="k"><span>Fit medio</span><b>±${mx.fit_m2} m²</b></div><div class="k"><span>Unidades únicas</span><b>${mx.unique_units}</b></div><div class="k"><span>NSA total</span><b>${m.nsa_total} m²</b></div><div class="k"><span>Eficiencia</span><b>${m.efficiency_total}%</b></div>`+(m.plan_score!=null?`<div class="k"><span>Calidad de planos</span><b>${m.plan_score}%</b></div>`:'')+Object.entries(mx.by_type).map(([k,v])=>`<div class="k"><span>${k}</span><b>${v.count} × ${v.avg_area} m²</b></div>`).join('');
+ if(mx) h+=`<div class="k"><span>Sin usar</span><b>${m.unused_area??'-'} m²</b></div>${m.dark_area?`<div class="k"><span>Sin luz natural</span><b>${m.dark_area} m²</b></div>`:''}<div class="k"><span>Unidades/planta</span><b>${mx.count}</b></div><div class="k"><span>Unidades totales</span><b>${m.units_total}</b></div><div class="k"><span>Match score</span><b>${mx.match_score}%</b></div><div class="k"><span>Fit medio</span><b>±${mx.fit_m2} m²</b></div><div class="k"><span>Unidades únicas</span><b>${mx.unique_units}</b></div><div class="k"><span>NSA total</span><b>${m.nsa_total} m²</b></div><div class="k"><span>Eficiencia</span><b>${m.efficiency_total}%</b></div>`+(m.plan_score!=null?`<div class="k"><span>Calidad de planos</span><b>${m.plan_score}%</b></div>`:'')+Object.entries(mx.by_type).map(([k,v])=>`<div class="k"><span>${k}</span><b>${v.count} × ${v.avg_area} m²</b></div>`).join('');
  $('metrics').innerHTML=h; $('warns').innerHTML=(result.warnings||[]).slice(0,12).map(w=>`<div class="w">⚠ ${w}</div>`).join('')||'<div style="color:var(--mut)">Sin avisos</div>';
- $('units').innerHTML=(result.units?'<table><tr><th>ID</th><th>Tipo</th><th>m²</th><th>Dorm</th><th>Evac.</th><th>Plano</th></tr>'+result.units.map(u=>`<tr style="cursor:pointer" onclick="selUnit='${u.id}';if(viewMode!=='plan')setView('plan');else{draw();unitPanel();}"><td>${u.id}</td><td>${u.type}</td><td>${u.area}</td><td>${u.bedrooms??'-'}</td><td>${u.egress} m</td><td>${u.plan_score!=null?u.plan_score+'%':'-'}</td></tr>`).join('')+'</table>':''); }
+ $('units').innerHTML=(result.units?'<table><tr><th>ID</th><th>Tipo</th><th>m²</th><th>Dorm</th><th>Evac.</th><th>Plano</th></tr>'+result.units.map(u=>`<tr style="cursor:pointer" onclick="selUnit='${u.id}';if(viewMode!=='plan')setView('plan');else{draw();unitPanel();}"><td>${u.id}</td><td>${u.type}</td><td>${u.area}</td><td>${u.bedrooms??'-'}</td><td style="color:${u.egress_status&&u.egress_status!=='ok'?EVAC[u.egress_status]:'inherit'}">${u.egress} m${u.egress_status==='saco'?' ⚠':''}</td><td>${u.plan_score!=null?u.plan_score+'%':'-'}</td></tr>`).join('')+'</table>':''); }
 function panels2(){ $('donut').innerHTML='';$('progList').innerHTML=''; $('metrics').innerHTML='';$('warns').innerHTML='';$('units').innerHTML=''; }
 function selLabel(v,txt,off){ const s=$('sample'); let o=s.querySelector('option[value="'+v+'"]'); if(!o){ o=document.createElement('option'); o.value=v; s.prepend(o); } o.textContent=txt; o.disabled=!!off; s.value=v; }
 function setMass(m,fromRhino){ const o=$('sample').querySelector('option[value="__nuevo"]'); if(o) o.remove();
  if(fromRhino){ externa=m; selLabel(m.source==='masterplan'?'__mp':'__rhino',(m.source==='masterplan'?'Lote del Masterplan: ':'Masa de Rhino: ')+(m.name||'sin nombre')); }
- footprint=m.footprint; if(m.height) $('height').value=m.height; centerlines=(m.centerlines||(m.centerline?[m.centerline]:[])).map(pl=>pl.map(p=>[p[0],p[1]])); curLine=[]; lineInfo();
- if(m.cores&&m.cores.length){ $('cores_mode').value='manual'; coresManual=m.cores.map(p=>[p[0],p[1]]); } else { $('cores_mode').value='auto'; coresManual=[]; } coreInfo();
+ footprint=m.footprint; selCore=null; if(m.height) $('height').value=m.height; centerlines=(m.centerlines||(m.centerline?[m.centerline]:[])).map(pl=>pl.map(p=>[p[0],p[1]])); curLine=[]; lineInfo();
+ if(m.cores&&m.cores.length){ $('cores_mode').value='manual'; coresManual=m.cores.map(p=>Array.isArray(p)?[p[0],p[1]]:Object.assign({},p,{p:[p.p[0],p.p[1]]})); } else { $('cores_mode').value='auto'; coresManual=[]; } coreInfo();
  stories=m.stories?m.stories.map(x=>({program:x.program,height:x.height})):null; medianeras=(m.medianeras||[]).map(x=>({a:x.a,b:x.b,retiro:x.retiro||0})); renderMeds();
  patios=(m.patios||[]).map(p=>p.map(q=>[q[0],q[1]])); curPatio=[]; $('patios_mode').value=patios.length?'manual':'auto'; renderStories(); result=null; lastStage=null; sel.clear(); planStory=null; zoom=1; pan=[0,0]; draw(); panels2(); if(fromRhino) $('rhinoBadge').textContent=(m.source==='masterplan'?'Lote recibido del Masterplan: ':'Masa recibida de Rhino: ')+(m.name||'sin nombre'); run('massing'); }
 async function nuevo(){ if((footprint.length||result)&&!confirm('¿Empezar en blanco? Se borran la masa, las polilíneas, los núcleos, las medianeras y el resultado, también los guardados en el servidor. Las medidas, el mix y los colores se conservan.')) return;
  try{ await fetch('/api/reset',{method:'POST'}); }catch(e){}
- if(tool) setTool(tool); footprint=[]; centerlines=[]; curLine=[]; coresManual=[]; $('cores_mode').value='auto'; stories=null; medianeras=[]; result=null; lastStage=null; selUnit=null; sel.clear(); planStory=null; zoom=1; pan=[0,0];
+ if(tool) setTool(tool); footprint=[]; centerlines=[]; curLine=[]; coresManual=[]; $('cores_mode').value='auto'; stories=null; medianeras=[]; result=null; lastStage=null; selUnit=null; selCore=null; sel.clear(); planStory=null; zoom=1; pan=[0,0];
  externa=null; ['__rhino','__mp'].forEach(v=>{ const o=$('sample').querySelector('option[value="'+v+'"]'); if(o) o.remove(); }); selLabel('__nuevo','— En blanco —',true);
  patios=[]; curPatio=[]; $('patios_mode').value='auto'; $('height').value=$('height').defaultValue; $('lvl').innerHTML=''; lineInfo(); coreInfo(); renderMeds(); renderStories(); panels2(); unitPanel();
  $('rhinoBadge').textContent='Esperando masa de Rhino… (o usa un ejemplo)'; setView('plan'); $('tag').textContent='En blanco'; }

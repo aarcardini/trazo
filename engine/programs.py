@@ -7,10 +7,11 @@ from . import standards as ST
 
 
 # ---------------------------------------------------------------- núcleo
-def core_parts(box, side, cw, S, floor_h, n_elev):
+def core_parts(box, side, cw, S, floor_h, n_elev, giro=0):
     """Piezas del núcleo en el marco local de la pieza.
     box = (x0, y0, x1, y1) del núcleo (incluye el tramo de pasillo); side = lado del pasillo (+1 / -1).
-    v = profundidad desde el borde del pasillo; u = a lo largo del pasillo desde x0."""
+    v = profundidad desde el borde del pasillo; u = a lo largo del pasillo desde x0.
+    giro 0: la escalera sube perpendicular al pasillo; giro 90: a lo largo del pasillo (R3.5)."""
     x0, y0, x1, y1 = box
     Dc = (y1 - cw / 2) if side > 0 else (-cw / 2 - y0)
     Wc = x1 - x0
@@ -31,8 +32,12 @@ def core_parts(box, side, cw, S, floor_h, n_elev):
     parts = []
     sw, sl, risers = ST.stair_box(S, floor_h)
     m, n, ojo, h = S["muro"], S["escalera_ancho"], S["ojo"], S["huella"]
-    sl_eff = min(sl, Dc)
-    p = P(0, 0, sw, sl_eff)
+    gira = giro == 90
+    sl_eff = min(sl, Wc if gira else Dc)
+    # escalera en coordenadas (a = a lo largo de los tramos, b = a través): con giro 90, a = u; si no, a = v
+    Pe = (lambda a0, b0, a1, b1: P(a0, b0, a1, b1)) if gira else (lambda a0, b0, a1, b1: P(b0, a0, b1, a1))
+    Le = (lambda a0, b0, a1, b1: L(a0, b0, a1, b1)) if gira else (lambda a0, b0, a1, b1: L(b0, a0, b1, a1))
+    p = Pe(0, 0, sl_eff, sw)
     if p:
         lines = []
         per = int(math.ceil(risers / 2.0))
@@ -40,30 +45,32 @@ def core_parts(box, side, cw, S, floor_h, n_elev):
         k = 0
         v = va
         while v <= vb + 1e-6 and k <= per:
-            lines.append(L(m, v, m + n, v))                     # tramo 1
-            lines.append(L(m + n + ojo, v, m + 2 * n + ojo, v))  # tramo 2
+            lines.append(Le(v, m, v, m + n))                     # tramo 1
+            lines.append(Le(v, m + n + ojo, v, m + 2 * n + ojo))  # tramo 2
             v += h
             k += 1
-        lines.append(L(m + n + ojo / 2, va, m + n + ojo / 2, vb))   # ojo de la escalera
+        lines.append(Le(va, m + n + ojo / 2, vb, m + n + ojo / 2))   # ojo de la escalera
         parts.append({"kind": "stair", "name": "Escalera (%d contrahuellas, ancho %.2f m)" % (risers, n),
                       "poly": p, "lines": lines})
-        if sl > Dc + 0.05:
-            parts[-1]["name"] += " — el núcleo es poco profundo para la escalera"
+        if sl > (Wc if gira else Dc) + 0.05:
+            parts[-1]["name"] += " — el núcleo es angosto para la escalera" if gira else \
+                " — el núcleo es poco profundo para la escalera"
     ew, ed = S["ascensor_ducto"]
     cwid, cdep = S["ascensor_cabina"]
-    u = sw
+    u0 = sl_eff if gira else sw                          # los ascensores van al lado de la escalera
+    u = u0
     if n_elev:
-        pal = P(sw, 0, sw + n_elev * (ew + m), S["palier"])
+        pal = P(u0, 0, u0 + n_elev * (ew + m), S["palier"])
         if pal:
             parts.append({"kind": "landing", "name": "Palier de ascensores", "poly": pal, "lines": []})
         for i in range(n_elev):
-            ue = sw + i * (ew + m)
+            ue = u0 + i * (ew + m)
             sp = P(ue, S["palier"], ue + ew, S["palier"] + ed)
             if sp:
                 cu0, cv0 = ue + (ew - cwid) / 2, S["palier"] + (ed - cdep) / 2
                 parts.append({"kind": "elevator", "name": "Ascensor %d (cabina %.2f x %.2f)" % (i + 1, cwid, cdep),
                               "poly": sp, "lines": [L(cu0, cv0, cu0 + cwid, cv0 + cdep), L(cu0 + cwid, cv0, cu0, cv0 + cdep)]})
-        u = sw + n_elev * (ew + m)
+        u = u0 + n_elev * (ew + m)
         dp = P(u, 0, u + S["ducto_instalaciones"], Dc)
         if dp:
             parts.append({"kind": "duct", "name": "Ducto de instalaciones", "poly": dp, "lines": []})
@@ -73,7 +80,7 @@ def core_parts(box, side, cw, S, floor_h, n_elev):
         if rp:
             parts.append({"kind": "service", "name": "Depósito / instalaciones", "poly": rp, "lines": []})
     if n_elev:
-        rp = P(sw, S["palier"] + ed, sw + n_elev * (ew + m), Dc)
+        rp = P(u0, S["palier"] + ed, u0 + n_elev * (ew + m), Dc)
         if rp and abs(G.area(rp)) > 1.0:
             parts.append({"kind": "service", "name": "Sala de máquinas / depósito", "poly": rp, "lines": []})
     return parts

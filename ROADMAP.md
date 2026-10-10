@@ -21,23 +21,23 @@ Leyenda de esfuerzo: S = pequeño, M = mediano, L = grande (dividir antes de emp
 - [x] **R1.1 (M) Diagnóstico en Rhino.** Mensajes claros en la consola de Rhino para cada fallo (servidor apagado, objeto no válido, sin base plana, unidades). Comando de prueba que muestre versión de Rhino, unidades y estado del servidor.
   *Hecho cuando:* el usuario ejecuta Enviar/Recibir en Mac y Windows sin errores, o con un mensaje que explica qué hacer.
 - [ ] **R1.2 (S) Modo archivo de respaldo.** Si la conexión HTTP falla, el script guarda/lee un JSON en una carpeta conocida, y la web permite cargarlo/descargarlo.
-- [~] **R1.3 (M) Masas con varios volúmenes y huecos.** (v2.4: patios que separan la masa en bloques, automáticos y manuales, también desde Rhino con la capa `Trazo::Patios`; faltan varias masas a la vez y patios rodeados de edificio) Aceptar varias masas a la vez y huellas con patios (huecos interiores).
+- [~] **R1.3 (M) Masas con varios volúmenes y huecos.** (v2.4: patios que separan la masa en bloques, automáticos y manuales, también desde Rhino con la capa `Trazo::Patios`; v2.6: patios rodeados de edificio —U cerrada o claustro— en masas ortogonales, con el pasillo alrededor del patio; falta: varias masas a la vez, con alturas distintas por bloque) Aceptar varias masas a la vez y huellas con patios (huecos interiores).
   *Hecho cuando:* una masa en U cerrada (con patio) genera unidades alrededor del patio.
 - [x] **R1.4 (S) Recibir sin duplicar.** (v2.5: pregunta Reemplazar / Agregar / Cancelar; reemplaza también lo oculto o bloqueado y quita los niveles que sobran; los patios recibidos van en `Trazo::Lnn::Patios`) Al recibir de nuevo, borrar o reemplazar las capas `Trazo::L..` anteriores (preguntando antes).
 
 ## Fase 2 — Ordenar el motor (sin cambiar resultados)
-- [ ] **R2.1 (L) Dividir `layout.py`** en `massing.py`, `circulation.py` (piezas, uniones, núcleos), `units.py` (segmentos y mix), `plans.py` (estancias), con `layout.generate` como fachada.
+- [x] **R2.1 (L) Dividir `layout.py`** (hecho: `massing.py`, `circulation.py`, `units.py` y `patios.py`; los planos de cada unidad ya estaban en `plans.py`; resultados idénticos byte a byte) en `massing.py`, `circulation.py` (piezas, uniones, núcleos), `units.py` (segmentos y mix), `plans.py` (estancias), con `layout.generate` como fachada.
   *Hecho cuando:* las pruebas de regresión de R0.3 pasan sin cambios. Dividir en 2-3 PRs si hace falta.
-- [ ] **R2.2 (M) Geometría robusta.** Recorte de polígonos que devuelva varias partes cuando el corte separa la figura (reemplaza los puentes de ancho cero de Sutherland-Hodgman).
+- [x] **R2.2 (M) Geometría robusta.** (v2.7: `clip_rect_parts`, `clip_halfplane_parts`, `largest_part`; viviendas, pasillos, manzanas y lotes ya no salen unidos por puentes) Recorte de polígonos que devuelva varias partes cuando el corte separa la figura (reemplaza los puentes de ancho cero de Sutherland-Hodgman).
 
 ## Fase 3 — Calidad de la planta
-- [ ] **R3.1 (M) Sin restos pequeños.** Los tramos menores que el ancho mínimo se suman a la unidad vecina en vez de descartarse.
+- [x] **R3.1 (M) Sin restos pequeños.** (v2.8: el núcleo de una punta se apoya contra la fachada cuando deja una franja demasiado chica para una vivienda, si llega a la fachada y la evacuación lo permite) Los tramos menores que el ancho mínimo se suman a la unidad vecina en vez de descartarse.
   *Hecho cuando:* "Sin usar" baja en los ejemplos L y T de `samples/` sin empeorar el match score.
-- [ ] **R3.2 (M) Codos más eficientes.** Unidad de esquina en el codo interior (en L) en lugar de hueco.
-- [ ] **R3.3 (L) Cruces en X** entre polilíneas sin solapes.
-- [ ] **R3.4 (L) Plantas no ortogonales en automático** (por ejemplo, alas a 45° o trapecios): eje por ala.
-- [ ] **R3.5 (S) Núcleos con tamaño propio** y rotación 0/90°, editables por núcleo.
-- [ ] **R3.6 (M) Reglas de evacuación configurables** (fondo de saco, recorrido máximo) con aviso por unidad y resaltado en el plano.
+- [x] **R3.2 (M) Codos más eficientes.** (v2.9: sin viviendas a oscuras en codos; el núcleo de la punta corta va a la esquina interior sin luz; la esquina exterior es de las viviendas del ala que llega; lo que queda sin luz se marca) Unidad de esquina en el codo interior (en L) en lugar de hueco.
+- [x] **R3.3 (L) Cruces en X** (v2.10: la línea más corta se corta en el cruce y cada mitad se une a la otra como una T; tampoco hay solapes en codos de plantas anchas, ramas de una U, bolsillos de núcleos ni puntas con dos núcleos; la evacuación pasa por las uniones dibujadas en los dos sentidos) entre polilíneas sin solapes.
+- [x] **R3.4 (L) Plantas no ortogonales en automático** (v2.12: los brazos con otra dirección se separan por una cuerda y cada parte se divide en alas en su propio marco; quiebres a inglete, T oblicuas, Y y ochavas; las convexas siguen con un solo pasillo) (por ejemplo, alas a 45° o trapecios): eje por ala.
+- [x] **R3.5 (S) Núcleos con tamaño propio** (v2.13: clic en un núcleo en la planta: frente, fondo y giro; con giro 90° la escalera sube a lo largo del pasillo) y rotación 0/90°, editables por núcleo.
+- [x] **R3.6 (M) Reglas de evacuación configurables** (v2.14: fondo de saco medido hasta un punto con dos direcciones de salida; estado y aviso por vivienda; tramos de pasillo y viviendas resaltados con la casilla «Evacuación») (fondo de saco, recorrido máximo) con aviso por unidad y resaltado en el plano.
 
 ## Fase 4 — Edición en la web
 - [ ] **R4.1 (M) Guardar y abrir proyectos** (JSON con masa, líneas, núcleos, mix y parámetros).

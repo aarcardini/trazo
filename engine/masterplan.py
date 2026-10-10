@@ -63,8 +63,7 @@ def _split(pieces, sg, warnings):
             out.append(pc)
             continue
         for nx, ny, dd in ((n[0], n[1], d + h), (-n[0], -n[1], -d + h)):
-            p = G.clip_halfplane(pc, nx, ny, dd)
-            if len(p) >= 3:
+            for p in G.clip_halfplane_parts(pc, nx, ny, dd):     # en un predio cóncavo, una calle puede dejar varias
                 p = G.clean(p)
                 if len(p) >= 3 and abs(G.area(p)) > 1.0:
                     out.append(G.ensure_ccw(p))
@@ -139,7 +138,7 @@ def _chamfer(poly, segs, frontage_edges, c):
         cx, cy = G.centroid(poly)
         if nx * (cx - p1[0]) + ny * (cy - p1[1]) < 0:
             nx, ny = -nx, -ny
-        out = G.clip_halfplane(out, nx, ny, nx * p1[0] + ny * p1[1])
+        out = G.largest_part(G.clip_halfplane(out, nx, ny, nx * p1[0] + ny * p1[1]))
     return G.ensure_ccw(G.clean(out))
 
 
@@ -209,9 +208,8 @@ def _lots_for_block(block, segs, frontage_edges, S, mix, state):
     tot = sum(m["percent"] for m in mix) or 1.0
     avg_w = sum(m["percent"] / tot * m["frente"] for m in mix)
     lots = []
-    for ra, rb, face in rows:
-        row = G.clip_rect(loc, None, None, ra, rb)
-        if not row:
+    for ra, rb, face, row in [(ra, rb, f, r) for ra, rb, f in rows for r in G.clip_rect_parts(loc, None, None, ra, rb)]:
+        if not row:                                         # manzana cóncava: cada parte de la fila por separado
             continue
         rx0, _, rx1, _ = G.bbox(row)
         Lr = rx1 - rx0
@@ -252,7 +250,7 @@ def _lots_for_block(block, segs, frontage_edges, S, mix, state):
             del cuts[max(i, j)]
         for i, t in enumerate(types):
             x, xe = cuts[i], cuts[i + 1]
-            lp = G.clip_rect(row, x, xe)
+            lp = G.largest_part(G.clip_rect(row, x, xe))
             if lp and abs(G.area(lp)) > 5:
                 corner = (i == 0 and end_left) or (i == len(types) - 1 and end_right)
                 lots.append({"type": t, "local": lp, "ang": ang, "x0": x, "x1": xe, "ya": ra, "yb": rb,
@@ -276,7 +274,7 @@ def _building(lot, S):
         return None, []
     area_lot = abs(G.area(lot["local"]))
     cap = S["fos"] / 100.0 * area_lot
-    fp = G.clip_rect(lot["local"], lx0, lx1, fy0, fy1)
+    fp = G.largest_part(G.clip_rect(lot["local"], lx0, lx1, fy0, fy1))
     if not fp:
         return None, []
     if abs(G.area(fp)) > cap:
@@ -285,7 +283,7 @@ def _building(lot, S):
             fy1 = fy0 + need
         else:
             fy0 = fy1 - need
-        fp = G.clip_rect(lot["local"], lx0, lx1, fy0, fy1)
+        fp = G.largest_part(G.clip_rect(lot["local"], lx0, lx1, fy0, fy1))
     meds = []
     if rl <= 0.01:
         if lot["corner_side"] != "left":
