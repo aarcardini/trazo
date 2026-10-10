@@ -783,7 +783,7 @@ def test_deshacer():
     js = html.split("<script>", 1)[1].split("</script>", 1)[0]
     exentas = ("function volverA", "function setMass", "async function nuevo", "function ensureManual", "function ensurePatiosManual")
     bloques = re.compile(r"\nfunction |\nasync function |addEventListener\(|onclick=\"|onchange=\"")
-    cambio = re.compile(r"\b(centerlines|coresManual|medianeras|patios|ediciones)(\[[^\]]*\])*(\.retiro)?(=(?![=>])|\.(push|pop|splice)\()|\bpl\.splice\(|\bpl\[drag\.vi\]=")
+    cambio = re.compile(r"\b(centerlines|coresManual|medianeras|patios|ediciones|interiores)(\[[^\]]*\])*(\.retiro)?(=(?![=>])|\.(push|pop|splice)\()|\bpl\.splice\(|\bpl\[drag\.vi\]=")
     sin, n = [], 0
     for m in cambio.finditer(js):
         linea = js[js.rfind("\n", 0, m.start()) + 1:m.start()]
@@ -1208,3 +1208,119 @@ def test_accesible():
 
 if __name__ == "__main__":
     test_accesible(); print("OK34")
+
+def test_editar_interior():
+    """R5.7: editar la vivienda por dentro. Un tabique interior se arrastra: las estancias que se apoyan en él se agrandan
+    o se achican (cada una conserva al menos 0,60 m). Una puerta se corre a lo largo de su pared, cambia de ancho o abre
+    hacia el otro lado; se la reconoce por las dos estancias que une, así sigue valiendo si después se mueve un tabique.
+    Los cambios van en params.room_edits con puntos de mundo, en orden, y se aplican en la vivienda donde caen; lo que
+    no se puede aplicar se avisa. La web arrastra los tabiques y las puertas de la vivienda elegida."""
+    import math
+    from engine import plans as P
+    rect = lambda w, d: [(0.0, 0.0), (w, 0.0), (w, d), (0.0, d)]
+    caja = lambda pl: (min(p[0] for p in pl), min(p[1] for p in pl), max(p[0] for p in pl), max(p[1] for p in pl))
+    mitad = lambda a, b: ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
+    cajas = lambda res: {r["id"]: caja(r["poly"]) for r in res["rooms"]}
+    plano = lambda *ed: P.layout_unit(rect(9.5, 8.0), 2, ediciones=list(enumerate(ed)))
+    base = plano()
+    B = cajas(base)
+    assert base["paredes"] and base["ediciones"] == []
+    # un tabique vertical: las estancias de un lado crecen 0,30 m, las del otro se achican 0,30 m y las demás no cambian
+    a, b = next((a, b) for a, b in base["paredes"] if abs(a[0] - b[0]) < 1e-6)
+    c, lo, hi = a[0], min(a[1], b[1]), max(a[1], b[1])
+    junto = lambda k: {i for i, r in B.items() if abs(r[k] - c) < 1e-6 and r[3] > lo + 0.01 and r[1] < hi - 0.01}
+    izq, der = junto(2), junto(0)
+    assert izq and der and min(B[i][2] - B[i][0] for i in der) > 1.0, (izq, der)
+    m = mitad(a, b)
+    res = plano({"op": "pared", "p": m, "a": (m[0] + 0.3, m[1])})
+    R = cajas(res)
+    assert res["ediciones"] == [0] and set(R) == set(B)
+    for i in B:
+        dx0, dx1 = (0.3 if i in der else 0.0), (0.3 if i in izq else 0.0)
+        assert abs(R[i][0] - B[i][0] - dx0) < 1e-6 and abs(R[i][2] - B[i][2] - dx1) < 1e-6 and R[i][1::2] == B[i][1::2], i
+    assert abs(sum(r["area"] for r in res["rooms"]) - sum(r["area"] for r in base["rooms"])) < 1e-6
+    # hasta el final: la estancia más angosta de ese lado queda con 0,60 m; lejos de un tabique no cambia nada
+    R = cajas(plano({"op": "pared", "p": m, "a": (m[0] + 100, m[1])}))
+    assert abs(min(R[i][2] - R[i][0] for i in der) - 0.6) < 1e-6
+    # el tabique sigue por las estancias que se apoyan en él, aunque entre ellas quede un hueco
+    Rh = {"A": ("bedroom", (0.0, 0.0, 3.0, 5.0), "A"), "B": ("bath", (3.0, 0.0, 5.0, 3.0), "B"), "C": ("bath", (3.0, 4.0, 5.0, 5.0), "C")}
+    assert P._mover_pared(Rh, {"p": (3.0, 1.5), "a": (3.5, 1.5)})
+    assert [Rh[i][1] for i in "ABC"] == [(0.0, 0.0, 3.5, 5.0), (3.5, 0.0, 5.0, 3.0), (3.5, 4.0, 5.0, 5.0)], Rh
+    lejos = plano({"op": "pared", "p": (-5.0, -5.0), "a": (-4.0, -5.0)})
+    assert lejos["ediciones"] == [] and cajas(lejos) == B
+    # la puerta del dormitorio 2: se corre (sin pasarse del borde), cambia de ancho y abre hacia el otro lado
+    puerta = lambda res, x: next(d for d in res["doors"] if x in (d["a"], d["b"]))
+    largo = lambda d: math.hypot(d["q"][0] - d["p"][0], d["q"][1] - d["p"][1])
+    d0 = puerta(base, "bed2")
+    otra = d0["a"]
+    k = 1 if d0["vertical"] else 0
+    e0, e1 = sorted(x[k] for x in P._shared(B[otra], B["bed2"]))
+    m0 = mitad(d0["p"], d0["q"])
+    hacia = lambda t: (m0[0], t) if k else (t, m0[1])
+    t = e0 + 0.35 + 0.05 + 0.2
+    d1 = puerta(plano({"op": "puerta", "p": m0, "a": hacia(t)}), "bed2")
+    assert abs(mitad(d1["p"], d1["q"])[k] - t) < 1e-6 and abs(largo(d1) - largo(d0)) < 1e-6
+    d1 = puerta(plano({"op": "puerta", "p": m0, "a": hacia(e1 + 5)}), "bed2")
+    assert abs(max(d1["p"][k], d1["q"][k]) - (e1 - 0.05)) < 1e-6           # contra el final del borde
+    d2 = puerta(plano({"op": "puerta", "p": m0, "ancho": 0.9}), "bed2")
+    assert abs(largo(d2) - 0.9) < 1e-6 and abs(mitad(d2["p"], d2["q"])[k] - m0[k]) < 1e-6
+    d3 = puerta(plano({"op": "puerta", "p": m0, "abre": True}), "bed2")
+    assert (d3["a"], d3["b"], d3["into"]) == ("bed2", otra, -d0["into"]), d3
+    # por sus estancias, aunque el punto ya no caiga sobre ella; la de entrada se corre por el hall y no se invierte
+    d4 = puerta(plano({"op": "puerta", "p": (-50.0, -50.0), "entre": ["bed2", otra], "ancho": 0.9}), "bed2")
+    assert abs(largo(d4) - 0.9) < 1e-6
+    en = next(d for d in base["doors"] if d.get("entry"))
+    me = mitad(en["p"], en["q"])
+    r = plano({"op": "puerta", "p": me, "a": (me[0] + 3.0, me[1]), "abre": True})
+    en2 = next(d for d in r["doors"] if d.get("entry"))
+    h = B["hall"]
+    assert en2["a"] == "exterior" and en2["p"][1] == en2["q"][1] == en["p"][1] and r["ediciones"] == [0]
+    assert abs(mitad(en2["p"], en2["q"])[0] - max(h[0] + largo(en) / 2 + 0.05, min(h[2] - largo(en) / 2 - 0.05, me[0] + 3.0))) < 1e-6
+    # en orden: la puerta corrida y después el tabique que achica el dormitorio 2; la puerta sigue corrida
+    lado = next((a, b) for a, b in base["paredes"] if abs(a[0] - b[0]) < 1e-6 and abs(a[0] - B["bed2"][0]) < 1e-6)
+    ml = mitad(*lado)
+    r = plano({"op": "puerta", "p": m0, "entre": ["bed2", otra], "a": hacia(t)}, {"op": "pared", "p": ml, "a": (ml[0] + 0.5, ml[1])})
+    d5 = puerta(r, "bed2")
+    assert r["ediciones"] == [0, 1] and abs(mitad(d5["p"], d5["q"])[k] - max(t, B["bed2"][0] + 0.5 + 0.4)) < 1e-6
+    # vivienda con un anexo (bolsillo al fondo): todos los tabiques que se ofrecen se pueden mover; el borde del anexo, no
+    L = [(0.0, 0.0), (9.5, 0.0), (9.5, 8.0), (4.0, 8.0), (4.0, 10.0), (0.0, 10.0)]
+    r = P.layout_unit(L, 2)
+    assert any(x["id"].startswith("annex") for x in r["rooms"]) and r["paredes"]
+    for a, b in r["paredes"]:
+        mm, ver = mitad(a, b), abs(a[0] - b[0]) < 1e-6
+        mov = [P.layout_unit(L, 2, ediciones=[(0, {"op": "pared", "p": mm, "a": (mm[0] + s, mm[1]) if ver else (mm[0], mm[1] + s)})])
+               ["ediciones"] for s in (0.2, -0.2)]
+        assert [0] in mov, (a, b)
+    # en el edificio, con puntos de mundo: solo cambia la vivienda donde cae el cambio
+    barra = [[0, 0], [60, 0], [60, 16], [0, 16]]
+    base = run(barra)
+    u = base["units"][2]
+    assert all(abs(math.hypot(*w["dir"]) - 1) < 1e-6 for w in u["paredes"])
+    w = u["paredes"][0]
+    mw = list(mitad(*w["seg"]))
+    r = run(barra, room_edits=[{"op": "pared", "p": mw, "a": [mw[0] + 0.3 * w["dir"][0], mw[1] + 0.3 * w["dir"][1]]}])
+    U = {x["id"]: x for x in r["units"]}
+    assert U[u["id"]].get("editada_dentro") and not any("dentro de las viviendas" in x for x in r["warnings"])
+    antes, ahora = {x["id"]: x["area"] for x in u["rooms"]}, {x["id"]: x["area"] for x in U[u["id"]]["rooms"]}
+    assert max(abs(ahora[i] - antes[i]) for i in antes) > 0.3 * 0.9 and abs(sum(ahora.values()) - sum(antes.values())) < 0.3
+    otras = lambda r: all(x["rooms"] == y["rooms"] and x["doors"] == y["doors"] and not y.get("editada_dentro")
+                          for x, y in zip(base["units"], r["units"]) if x["id"] != u["id"])
+    assert otras(r)
+    dw = next(d for d in u["doors"] if not d.get("entry"))
+    md = list(mitad(dw["p"], dw["q"]))
+    r = run(barra, room_edits=[{"op": "puerta", "p": md, "entre": [dw["a"], dw["b"]], "ancho": 0.9}])
+    dn = next(d for d in r["units"][2]["doors"] if {d["a"], d["b"]} == {dw["a"], dw["b"]})
+    assert abs(largo(dn) - 0.9) < 0.01 and otras(r) and not any("dentro de las viviendas" in x for x in r["warnings"])
+    r = run(barra, room_edits=[{"op": "pared", "p": [500, 500], "a": [501, 500]}])
+    assert any(x.startswith("1 cambio(s) dentro de las viviendas no se pudieron aplicar") for x in r["warnings"]), r["warnings"]
+    # web: tabiques interiores y puertas que se arrastran, la ficha con las puertas, descartar, proyecto y deshacer
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    js = html.split("<script>", 1)[1]
+    for s_ in ("room_edits:interiores.length?interiores:null", "'data-pared':k", "'data-puerta':k", "function puertasPanel",
+               "function editarInterior", "function descartarInteriores", "entre:[d.a,d.b]", "op.entre=[d.a,d.b]",
+               "interiores=(m.room_edits||[])", "room_edits:P.room_edits", "dragIn={u:selUnit"):
+        assert s_ in js, s_
+    assert "interiores" in js.split("function foto(){", 1)[1].split("\n", 1)[0]
+
+if __name__ == "__main__":
+    test_editar_interior(); print("OK35")

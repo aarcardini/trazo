@@ -55,7 +55,7 @@ Hecho en v1.5: zonas día/noche, pasillo interno, puertas, grafo de conexiones (
 - [ ] **R5.4 (M) Biblioteca de plantas tipo** en JSON (estancias en proporciones relativas) con estiramiento al tamaño de la unidad y muros bloqueados, como la "adaptive plan library" de Finch.
 - [ ] **R5.5 (S) Ventanas** en fachada por estancia habitable, exportables a Rhino.
 - [~] **R5.6 (L) Mobiliario básico** (v2.21: baños, cocina y lavadero con sus artefactos, paso libre y puertas de 0,70; v2.22: dormitorios, estar y comedor con camas, mesas de luz, placard, sofá, rack, butacas y mesa según dormitorios, y comprobación de que se llega a todo; también en Rhino y DXF; v2.23: vivienda accesible por tipo del mix, con puertas de 0,82 y baño con círculo de giro, transferencia y ducha a nivel; falta: círculos de giro en cocina y dormitorios) por estancia (bloques 2D) y comprobación de que cabe (círculo de giro, paso libre).
-- [ ] **R5.7 (M) Editar la unidad a mano:** mover tabiques y puertas en la ficha de la unidad; las comprobaciones se recalculan.
+- [x] **R5.7 (M) Editar la unidad a mano:** mover tabiques y puertas en la ficha de la unidad; las comprobaciones se recalculan. (v2.24: tabiques interiores y puertas que se arrastran en la planta, ancho y sentido de cada puerta en la ficha; se deshace, se guarda con el proyecto y se descarta por vivienda.)
 
 ## Fase 6 — Varias plantas
 - [ ] **R6.1 (M) Plantas distintas por nivel** (por ejemplo, PB comercial y tipo residencial) con su propio mix.

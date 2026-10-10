@@ -3,6 +3,8 @@
 Inspirado en el flujo público de Finch 101 (Massing Studio, Generate Corridors and Core,
 Generate Unit Mix around Corridor, Unit Plans). Es una implementación propia y simplificada.
 """
+import math
+
 from . import geometry as G
 from . import standards as ST
 from . import programs as PR
@@ -19,7 +21,7 @@ from .units import (_bisect_x, _chain_union, _is_rect, _segments, generate_unit_
                     unit_rooms, sin_solapes, editar_unidades, vecinas)  # noqa: F401
 from .patios import (auto_patios, _anillo, split_blocks, make_patio_dark, _block_of, _block_of_line)  # noqa: F401
 
-VERSION = "2.23"
+VERSION = "2.24"
 
 DEFAULT_PARAMS = {
     # Masa
@@ -53,6 +55,7 @@ DEFAULT_PARAMS = {
     "patios_mode": "auto",      # auto (patios en predios entre medianeras demasiado profundos) | manual
     "patios": None,             # patios manuales: [[[x,y],...],...] en coordenadas de mundo
     "unit_edits": None,         # R4.4: [{"op": "tabique"|"fusionar"|"dividir", "p": [x,y], "a": [x,y]}] en orden (units.editar_unidades)
+    "room_edits": None,         # R5.7: [{"op": "pared", "p", "a"} | {"op": "puerta", "p", "entre"?, "a"?, "ancho"?, "abre"?}] en orden (plans)
 }
 
 
@@ -313,6 +316,8 @@ def generate(data):
     served = sum(u["area"] for u in units)
     res["metrics"]["efficiency"] = round(served / gfa_plate * 100, 1) if gfa_plate else 0
     res["units"] = []
+    interiores = list(enumerate(params.get("room_edits") or []))     # R5.7: cambios dentro de las viviendas
+    hechos_dentro = set()
     for u in units:
         pc = u["_pc"]
         eg, sc = u["egress"], u["saco"]
@@ -326,7 +331,8 @@ def generate(data):
         if any(m.get("accesible") and m.get("name") == u["type"] for m in params["unit_mix"]):
             item["accesible"] = True                        # tipo del mix marcado «accesible» (F5)
         if stage == "plans":
-            pl = unit_rooms(u, u["_pb"], pc, u["_plate"])
+            pl = unit_rooms(u, u["_pb"], pc, u["_plate"], [(k, e) for k, e in interiores if k not in hechos_dentro])
+            hechos_dentro.update(pl["ediciones"])
             Wp = lambda pt, pc=pc: [round(v, 3) for v in G.to_world([pt], pc["origin"], pc["angle"])[0]]
             item["bedrooms"] = pl["bedrooms"]
             item["rooms"] = [{"id": r["id"], "name": r["name"], "kind": r["kind"], "area": round(r["area"], 1),
@@ -339,8 +345,19 @@ def generate(data):
                                      "lines": [W(pc, ln) for ln in q["lines"]]} for q in pl["equipamiento"]]
             item["checks"] = pl["checks"]
             item["plan_score"] = pl["score"]
+            item["paredes"] = []                            # tabiques interiores (se arrastran en la web, R5.7)
+            for a, b in pl["paredes"]:
+                a, b = Wp(a), Wp(b)
+                L = math.hypot(b[0] - a[0], b[1] - a[1]) or 1.0
+                item["paredes"].append({"seg": [a, b], "dir": [round(-(b[1] - a[1]) / L, 6), round((b[0] - a[0]) / L, 6)]})
+            if pl["ediciones"]:
+                item["editada_dentro"] = True
             item["facade"], item["facade_min"] = pl["facade"], pl["facade_min"]
         res["units"].append(item)
+    faltan = len(interiores) - len(hechos_dentro) if stage == "plans" else 0
+    if faltan > 0:
+        res["warnings"].append("%d cambio(s) dentro de las viviendas no se pudieron aplicar: la planta cambió desde que los "
+                               "hiciste. Descártalos (en la ficha de la vivienda) o deshazlos (Ctrl+Z)" % faltan)
     res["tabiques"] = []                                    # tabiques entre vecinas de una franja: se arrastran en la web (R4.4)
     for a, b in vecinas(units, params):
         pc, x = a["_pc"], a["x1"] + params["party_wall"] / 2
