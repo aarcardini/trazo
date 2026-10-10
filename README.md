@@ -133,6 +133,17 @@ Si algo falla en Rhino, ejecuta el script y elige **Diagnostico**. Si no se resu
 - **Mix**: tipos con m² objetivo y %, ancho mínimo, muro medianero; métricas Match Score, Fit y Unidades únicas.
 - **Planos**: distribución día/noche con pasillo interno, puertas y grafo de conexiones verificado.
 
+## Novedades v2.14
+- **Reglas de evacuación (R3.6):** cada vivienda se revisa con dos reglas, editables en el panel:
+  - **Recorrido máximo:** por defecto 30 m desde la puerta hasta el núcleo más cercano, por el pasillo.
+  - **Fondo de saco máximo:** por defecto 18 m. Es el tramo desde la puerta en el que solo se puede salir en una dirección, hasta llegar a un núcleo o a un punto desde el que se sale en dos. Un pasillo que da la vuelta a un patio da dos direcciones aunque las dos lleguen al mismo núcleo.
+- Antes, entre 18 y 30 m la vivienda quedaba «en duda» (punto gris) sin revisar si tenía dos salidas. Ahora se sabe:
+  - en los 259 casos de la comparación, 184 de esas viviendas cumplen (tienen dos direcciones) y 23 no (fondo de saco largo).
+- Las que no cumplen se ven en la planta, con la casilla **Evacuación** encendida: la puerta y el contorno de la vivienda en **naranja** (fondo de saco) o **rojo** (recorrido), y los tramos de pasillo que no cumplen resaltados con el mismo color. Además:
+  - se avisan una por una, con su distancia (por ejemplo «Fondo de saco: U06 (20 m)… agrega un núcleo o une el pasillo»);
+  - en la ficha de la vivienda aparecen el recorrido y el fondo de saco.
+- Los ejemplos de `samples/` cumplen y no cambian.
+
 ## Novedades v2.13
 - **Núcleos con medidas propias y giro (R3.5):** un clic sobre un núcleo en la planta abre su ficha. Ahí cambias su **frente** (a lo largo del pasillo), su **fondo** (desde el pasillo) y su **giro**:
   - **0°:** como siempre, la escalera sube perpendicular al pasillo.

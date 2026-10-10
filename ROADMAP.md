@@ -37,7 +37,7 @@ Leyenda de esfuerzo: S = pequeño, M = mediano, L = grande (dividir antes de emp
 - [x] **R3.3 (L) Cruces en X** (v2.10: la línea más corta se corta en el cruce y cada mitad se une a la otra como una T; tampoco hay solapes en codos de plantas anchas, ramas de una U, bolsillos de núcleos ni puntas con dos núcleos; la evacuación pasa por las uniones dibujadas en los dos sentidos) entre polilíneas sin solapes.
 - [x] **R3.4 (L) Plantas no ortogonales en automático** (v2.12: los brazos con otra dirección se separan por una cuerda y cada parte se divide en alas en su propio marco; quiebres a inglete, T oblicuas, Y y ochavas; las convexas siguen con un solo pasillo) (por ejemplo, alas a 45° o trapecios): eje por ala.
 - [x] **R3.5 (S) Núcleos con tamaño propio** (v2.13: clic en un núcleo en la planta: frente, fondo y giro; con giro 90° la escalera sube a lo largo del pasillo) y rotación 0/90°, editables por núcleo.
-- [ ] **R3.6 (M) Reglas de evacuación configurables** (fondo de saco, recorrido máximo) con aviso por unidad y resaltado en el plano.
+- [x] **R3.6 (M) Reglas de evacuación configurables** (v2.14: fondo de saco medido hasta un punto con dos direcciones de salida; estado y aviso por vivienda; tramos de pasillo y viviendas resaltados con la casilla «Evacuación») (fondo de saco, recorrido máximo) con aviso por unidad y resaltado en el plano.
 
 ## Fase 4 — Edición en la web
 - [ ] **R4.1 (M) Guardar y abrir proyectos** (JSON con masa, líneas, núcleos, mix y parámetros).

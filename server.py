@@ -17,6 +17,7 @@ import engine.programs as _programs
 import engine.masterplan as _masterplan
 import engine.massing as _massing
 import engine.circulation as _circulation
+import engine.evacuacion as _evacuacion
 import engine.units as _units
 import engine.patios as _patios
 import engine.dxf as _dxf
@@ -39,7 +40,7 @@ def engine():
         importlib.reload(_plans)
         importlib.reload(_programs)
         importlib.reload(_masterplan)
-        for m in (_massing, _circulation, _units, _patios, _layout):      # en orden: cada uno usa los anteriores
+        for m in (_massing, _circulation, _evacuacion, _units, _patios, _layout):   # en orden: cada uno usa los anteriores
             importlib.reload(m)
         importlib.reload(_dxf)
         _loaded[0] = st

@@ -35,6 +35,7 @@ Reglas de distribución que aplica el motor: dormitorios y estar con fachada; do
 | Altura máxima por tramo | 3,70 m | IT 19 |
 | Tipo de escalera (vivienda) | común ≤ 12 m; protegida (EP) 12–30 m; presurizada (PFP) > 30 m | IT 19, Anexo C, tabla 3 (grupo A) |
 | Recorrido máximo de evacuación (vivienda, pisos altos) | 40 m (una salida) / 45 m (más de una), sin detección | IT 19, Anexo B, tabla 2 |
+| Criterio de proyecto en Trazo (editable) | fondo de saco ≤ 18 m (tramo con una sola dirección de salida); recorrido ≤ 30 m hasta el núcleo más cercano | Más exigente que IT 19; ajustar en «Fondo de saco máx.» y «Recorrido máx. a un núcleo» |
 | Ducto de ascensor accesible | 1,75 × 1,95 m (accesibilidad básica 1,70 × 1,75) | Intendencia de Montevideo, ductos y cabinas |
 | Cabina accesible | 1,10 × 1,40 m, puerta 0,80 m | Ídem |
 | Ascensor obligatorio | acceso a más de 9 m de altura | MVOT, estándares de desempeño (cl. 58) |

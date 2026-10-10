@@ -658,3 +658,52 @@ def test_nucleos_editables():
 
 if __name__ == "__main__":
     test_nucleos_editables(); print("OK23")
+
+
+def test_evacuacion():
+    """R3.6: desde la puerta de cada vivienda se mide el recorrido hasta el núcleo más cercano y el fondo de saco (el
+    tramo con una sola salida hasta un núcleo o hasta un punto desde el que se puede salir en dos direcciones). Las
+    viviendas que no cumplen se avisan una por una y la planta resalta los tramos de pasillo fuera de norma."""
+    from engine import layout as LY, circulation as C
+    barra = [[0, 0], [90, 0], [90, 18], [0, 18]]
+    r = run(barra)                                       # dos núcleos en las puntas: todo con dos salidas
+    assert all(u["egress_status"] == "ok" for u in r["units"]) and not r["evacuacion"]["saco"], r["evacuacion"]
+    assert all(u["saco"] == 0 for u in r["units"] if 10 < u["door"][0] < 80)
+    # un solo núcleo en una punta: fondo de saco en todo el pasillo; lejos del núcleo, recorrido largo
+    r = run(barra, cores_mode="manual", cores=[[8, 9]])
+    est = {u["id"]: (u["egress_status"], u["egress"], u["saco"]) for u in r["units"]}
+    assert all(s == eg for _, eg, s in est.values()), est                     # una sola salida: todo es fondo de saco
+    assert all(st == ("ok" if eg <= 18 else "saco" if eg <= 30 else "fail") for st, eg, _ in est.values()), est
+    assert r["evacuacion"]["saco"] and r["evacuacion"]["recorrido"], r["evacuacion"]
+    assert any(w.startswith("Evacuación:") for w in r["warnings"]) and any(w.startswith("Fondo de saco:") for w in r["warnings"])
+    # anillo alrededor de un patio con un solo núcleo: se sale en dos direcciones (no es fondo de saco)
+    s = json.load(open(os.path.join(os.path.dirname(__file__), "..", "samples", "patio_central.json"), encoding="utf-8"))
+    nucleo = run(s["footprint"], patios_mode="manual", patios=s["patios"])["cores"][0]["center"]
+    r = run(s["footprint"], patios_mode="manual", patios=s["patios"], cores_mode="manual", cores=[nucleo])
+    sacos = [u["saco"] for u in r["units"]]                # sobre el anillo, 0; en las puntas, hasta la esquina del anillo
+    assert sum(1 for x in sacos if x == 0) >= 4 and max(sacos) < 10, sacos
+    assert all(u["egress_status"] == ("fail" if u["egress"] > 30 else "ok") for u in r["units"]), r["units"]
+    # T con núcleos solo en el pasillo principal: el ramal es un fondo de saco hasta el empalme
+    s = json.load(open(os.path.join(os.path.dirname(__file__), "..", "samples", "T_dos_lineas.json"), encoding="utf-8"))
+    r = run(s["footprint"], centerlines=s["centerlines"], cores_mode="manual", cores=[[3, 10], [57, 10]])
+    ramal = [u for u in r["units"] if u["door"][1] > 20]
+    tronco = [u for u in r["units"] if u["door"][1] < 20]
+    assert ramal and all(abs(u["saco"] - (u["door"][1] - 10)) < 1.5 for u in ramal), [(u["id"], u["door"], u["saco"]) for u in ramal]
+    assert tronco and all(u["saco"] == 0 for u in tronco), [(u["id"], u["saco"]) for u in tronco]
+    # el recorrido es el mismo que el de egress_at (la evacuación del pasillo que ya usaba el motor)
+    params = LY.merge_params({"centerlines": s["centerlines"], "cores_mode": "manual", "cores": [[3, 10], [57, 10]]})
+    params.update(core_width=r["metrics"]["core"]["width"], core_depth=r["metrics"]["core"]["depth"] + params["corridor_width"])
+    pieces = C.generate_circulation([tuple(p) for p in r["blocks"][0]["plate"]], params)
+    from engine import evacuacion as EV
+    red = EV.analizar(pieces)
+    for i, pc in enumerate(pieces):
+        for t in (0.1, 0.5, 0.9):
+            x = pc["xa"] + (pc["xb"] - pc["xa"]) * t
+            assert abs(EV.recorrido(red, i, x) - C.egress_at(pieces, i, x)) < 1e-6, (i, x)
+    # web: casilla «Evacuación», colores por estado y nombres de las reglas
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    for t in ('id="showEvac"', "const EVAC=", "result.evacuacion", "Fondo de saco máx.", "Recorrido máx. a un núcleo"):
+        assert t in html, t
+
+if __name__ == "__main__":
+    test_evacuacion(); print("OK24")

@@ -6,6 +6,7 @@ Generate Unit Mix around Corridor, Unit Plans). Es una implementación propia y 
 from . import geometry as G
 from . import standards as ST
 from . import programs as PR
+from . import evacuacion as EV
 # el motor está repartido en módulos; layout reexporta sus funciones (las usan las pruebas y el servidor)
 from .massing import (_inward, apply_setbacks, make_blind, build_massing, _dominant_angle, _is_rectilinear, _slabs,
                       decompose_wings, _lado_ciego, _dist_point_segment, _dist_to_boundary)  # noqa: F401
@@ -18,7 +19,7 @@ from .units import (_bisect_x, _chain_union, _is_rect, _segments, generate_unit_
                     unit_rooms, sin_solapes)  # noqa: F401
 from .patios import (auto_patios, _anillo, split_blocks, make_patio_dark, _block_of, _block_of_line)  # noqa: F401
 
-VERSION = "2.13"
+VERSION = "2.14"
 
 DEFAULT_PARAMS = {
     # Masa
@@ -36,8 +37,8 @@ DEFAULT_PARAMS = {
     "core_count": 2,
     "auto_cores": True,
     "core_side": "alternate",   # alternate | left | right
-    "egress_single": 18.0,
-    "egress_multi": 30.0,
+    "egress_single": 18.0,      # fondo de saco máximo: con una sola dirección de salida (R3.6)
+    "egress_multi": 30.0,       # recorrido máximo desde la puerta hasta el núcleo más cercano
     # Mix
     "unit_mix": [{"name": "2 dorm", "area": 75, "percent": 50, "dorms": 2},
                  {"name": "3 dorm", "area": 95, "percent": 50, "dorms": 3}],
@@ -205,6 +206,12 @@ def generate(data):
             n = max(2, int((pc["xb"] - pc["xa"])))
             for k in range(n + 1):
                 emax = max(emax, egress_at(pieces, i, pc["xa"] + (pc["xb"] - pc["xa"]) * k / n))
+        # evacuación (R3.6): tramos del pasillo con un fondo de saco o un recorrido más largos que lo permitido
+        pb["_evac"] = EV.analizar(pieces)
+        ev = res.setdefault("evacuacion", {"saco": [], "recorrido": [], "fondo_saco_max": params["egress_single"],
+                                           "recorrido_max": params["egress_multi"]})
+        ev["saco"] += EV.tramos(pieces, pb["_evac"], params["egress_single"], "saco")
+        ev["recorrido"] += EV.tramos(pieces, pb["_evac"], params["egress_multi"], "recorrido")
         pb["_neta"] = neta((pl_b, ph_b))
         bloques_pc.append((pieces, pb, pl_b, cpolys))
     res["metrics"]["wings"] = sum(len(b[0]) for b in bloques_pc)
@@ -272,15 +279,26 @@ def generate(data):
             del_bloque += us
         del_bloque, warns = sin_solapes(del_bloque, pieces, cpolys, pb)
         res["warnings"] += warns
-        for u in del_bloque:
-            pc = u["_pc"]
-            u["egress"] = egress_at(pieces, u["_i"], (u["x0"] + u["x1"]) / 2.0) + pc.get("egress_extra", {}).get(u["side"], 0.0)
+        for u in del_bloque:                               # desde la puerta: hasta el núcleo y hasta tener dos salidas
+            pc, xd = u["_pc"], (u["x0"] + u["x1"]) / 2.0
+            extra = pc.get("egress_extra", {}).get(u["side"], 0.0)
+            u["egress"] = min(1e9, EV.recorrido(pb["_evac"], u["_i"], xd) + extra)
+            u["saco"] = min(1e9, EV.saco(pb["_evac"], u["_i"], xd) + extra)
         units += del_bloque
     for i, u in enumerate(units):
         u["id"] = "U%02d" % (i + 1)
         if u["target"] and abs(u["area"] - u["target"]) > 0.35 * u["target"]:
             res["warnings"].append("%s mide %.0f m² y el objetivo de «%s» es %.0f m²: la geometría no permite ajustarlo" %
                                    (u["id"], u["area"], u["type"], u["target"]))
+    lejos = ["%s (%.0f m)" % (u["id"], u["egress"]) for u in units if u["egress"] > params["egress_multi"]]
+    sacos = ["%s (%.0f m)" % (u["id"], u["saco"]) for u in units
+             if u["egress"] <= params["egress_multi"] and u["saco"] > params["egress_single"]]
+    if lejos:
+        res["warnings"].append("Evacuación: %s a más de %.0f m de un núcleo (recorrido máximo): agrega un núcleo o acorta "
+                               "el pasillo" % (", ".join(lejos[:10]), params["egress_multi"]))
+    if sacos:
+        res["warnings"].append("Fondo de saco: %s con una sola salida por más de %.0f m: agrega un núcleo o une el pasillo "
+                               "para poder salir en dos direcciones" % (", ".join(sacos[:10]), params["egress_single"]))
     mm = metrics_mix(units, params)
     res["metrics"].update({"mix": mm})
     served = sum(u["area"] for u in units)
@@ -288,11 +306,11 @@ def generate(data):
     res["units"] = []
     for u in units:
         pc = u["_pc"]
-        eg = u["egress"]
-        status = "ok" if eg <= params["egress_single"] else ("multi" if eg <= params["egress_multi"] else "fail")
+        eg, sc = u["egress"], u["saco"]
+        status = "fail" if eg > params["egress_multi"] else ("saco" if sc > params["egress_single"] else "ok")
         item = {"id": u["id"], "type": u["type"], "area": round(u["area"], 1), "target": u["target"],
                 "width": round(u["width"], 2), "depth": round(u["depth"], 2), "egress": round(eg, 1),
-                "egress_status": status, "poly": W(pc, u["poly_local"]),
+                "saco": round(sc, 1), "egress_status": status, "poly": W(pc, u["poly_local"]),
                 "door": [round(v, 3) for v in G.to_world([u["door_local"]], pc["origin"], pc["angle"])[0]]}
         if stage == "plans":
             pl = unit_rooms(u, u["_pb"], pc, u["_plate"])
