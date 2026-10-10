@@ -126,6 +126,10 @@ Si algo falla en Rhino, ejecuta el script y elige **Diagnostico**. Si no se resu
 - **Mix**: tipos con m² objetivo y %, ancho mínimo, muro medianero; métricas Match Score, Fit y Unidades únicas.
 - **Planos**: distribución día/noche con pasillo interno, puertas y grafo de conexiones verificado.
 
+## Novedades v2.2.1
+- **Corrección:** con una masa recién recibida (de Rhino o de un ejemplo), cambiar «Núcleos → Modo» a automático, pulsar «Auto» en las polilíneas o editar polilíneas y núcleos volvía a calcular solo la masa y dejaba la axonometría sin pasillo. Ahora calcula el pasillo y los núcleos y muestra la planta.
+- Si el motor da un error o el servidor está apagado, el mensaje aparece en «Avisos» (antes solo en la etiqueta de abajo).
+
 ## Novedades v2.2
 - **Nuevo (en blanco):** botón en el modo Edificio para empezar un proyecto de cero. Deja la planta vacía con el aviso «Envía una masa desde Rhino o elige un ejemplo» y borra también la masa y el resultado guardados en el servidor: al recargar la página no vuelve la masa vieja y «Recibir» en Rhino no trae un resultado anterior.
 - El selector «Ejemplo» muestra qué está cargado: al llegar una masa de Rhino dice «Masa de Rhino: nombre» (antes seguía mostrando el ejemplo anterior) y se puede volver a ella después de mirar un ejemplo.

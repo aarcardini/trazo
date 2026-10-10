@@ -236,3 +236,16 @@ def test_nuevo_en_blanco():
 
 if __name__ == "__main__":
     test_nuevo_en_blanco(); print("OK11")
+
+
+def test_web_circulacion_no_vuelve_a_masa():
+    """Web: cambiar el modo de núcleos, «Auto» o editar polilíneas y núcleos calcula al menos el pasillo (runCirc).
+    Antes, con la masa recién recibida de Rhino, volvía a calcular solo la masa y quedaba la axonometría sin pasillo.
+    (La comprobación completa se hizo en navegador; esta prueba evita que vuelva el patrón que causaba el error.)"""
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    assert "run(lastStage)" not in html, "los cambios de pasillo y núcleos deben usar runCirc()"
+    for f in ("function finishLine", "function undoLine", "function clearLines", "function coresModeChanged"):
+        assert "runCirc()" in html.split(f, 1)[1].split("\nfunction ", 1)[0], f
+
+if __name__ == "__main__":
+    test_web_circulacion_no_vuelve_a_masa(); print("OK12")
