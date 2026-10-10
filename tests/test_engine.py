@@ -653,7 +653,7 @@ def test_nucleos_editables():
     # web: clic en un núcleo abre su ficha; la masa recibida conserva los núcleos con medidas propias
     html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
     for s in ("'data-core'", "function corePanel", "function aplicarNucleo", 'id="nGiro"', "closest('[data-core]')",
-              "coresManual=m.cores.map(p=>Array.isArray(p)?[p[0],p[1]]:"):
+              "coresManual=(m.cores||[]).map(p=>Array.isArray(p)?[p[0],p[1]]:"):
         assert s in html, s
 
 if __name__ == "__main__":
@@ -728,3 +728,44 @@ def test_nucleos_sin_pisarse():
 
 if __name__ == "__main__":
     test_nucleos_sin_pisarse(); print("OK25")
+
+
+def test_proyectos():
+    """R4.1: «Guardar proyecto» guarda el pedido que la web le hace al motor (/api/generate) más nombre, versión y
+    fecha, con solo las medidas cambiadas: el motor lo lee tal cual y da la misma planta. «Abrir proyecto» devuelve cada
+    parámetro simple a su control (mismo id) y los demás (líneas, núcleos, mix, medidas…) uno por uno."""
+    import copy, re
+    from engine import layout as LY, standards as ST
+    s = json.load(open(os.path.join(os.path.dirname(__file__), "..", "samples", "L_polilinea.json"), encoding="utf-8"))
+    std = copy.deepcopy(ST.DEFAULTS)            # la web manda todas las medidas: las de /api/standards con las cambiadas
+    std["nucleo"]["escalera_ancho"] = 1.4       # una medida cambiada: escalera más ancha
+    params = {"corridor_width": 1.8, "core_count": 2, "centerlines": s["centerlines"], "cores_mode": "manual",
+              "cores": [{"p": [8, 25], "giro": 90}, [40, 7]], "standards": std,
+              "unit_mix": [{"name": "1 dorm", "area": 50, "percent": 40, "dorms": 1}, {"name": "2 dorm", "area": 75, "percent": 60, "dorms": 2}]}
+    web = {"footprint": s["footprint"], "height": s["height"], "stage": "plans", "params": params}
+    proyecto = dict(copy.deepcopy(web), trazo="proyecto", formato=1, version_motor=LY.VERSION,
+                    guardado="2026-10-10T12:00:00.000Z", name="Prueba")
+    proyecto["params"]["standards"] = {"nucleo": {"escalera_ancho": 1.4}}     # el archivo guarda solo lo cambiado
+    a = generate(copy.deepcopy(web))
+    b = generate(json.loads(json.dumps(proyecto)))
+    assert a["units"] and json.dumps(a, sort_keys=True) == json.dumps(b, sort_keys=True)
+    c = generate(dict(copy.deepcopy(web), params=dict(params, standards=None)))
+    assert json.dumps(a["cores"], sort_keys=True) != json.dumps(c["cores"], sort_keys=True)   # la medida cambiada cuenta
+    # web: botones, archivo y que cada parámetro que se guarda se pueda restaurar
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    for t in ('id="archivoProyecto"', "function guardarProyecto", "function abrirProyecto", "trazo:'proyecto'", "showSaveFilePicker"):
+        assert t in html, t
+    cuerpo = lambda f: html.split(f, 1)[1].split("\nfunction ", 1)[0].split("\nasync function ", 1)[0]
+    assert "params()" in cuerpo("function proyecto(){") and "medidasCambiadas()" in cuerpo("function proyecto(){")
+    abrir = cuerpo("function abrirProyecto(")
+    obj = cuerpo("function params(){").split("return ", 1)[1]
+    claves = re.findall(r"[{,](\w+):", obj)
+    assert len(claves) > 20 and "core_auto" in claves, claves
+    for k in claves:      # un parámetro nuevo se lee de un control con su mismo id o tiene su línea en abrirProyecto
+        if re.search(r"[{,]%s:(g\('%s'\)|\$\('%s'\))" % (k, k, k), obj):
+            assert re.search(r'<(input|select)[^>]*\bid="%s"' % k, html), k
+        else:
+            assert re.search(r"\bP\.%s\b" % k, abrir), k
+
+if __name__ == "__main__":
+    test_proyectos(); print("OK26")

@@ -40,7 +40,7 @@ Leyenda de esfuerzo: S = pequeño, M = mediano, L = grande (dividir antes de emp
 - [x] **R3.6 (M) Reglas de evacuación configurables** (v2.14: fondo de saco medido hasta un punto con dos direcciones de salida; estado y aviso por vivienda; tramos de pasillo y viviendas resaltados con la casilla «Evacuación») (fondo de saco, recorrido máximo) con aviso por unidad y resaltado en el plano.
 
 ## Fase 4 — Edición en la web
-- [ ] **R4.1 (M) Guardar y abrir proyectos** (JSON con masa, líneas, núcleos, mix y parámetros).
+- [x] **R4.1 (M) Guardar y abrir proyectos** (v2.16: «Guardar proyecto» y «Abrir proyecto…» en la web; el archivo `.trazo.json` es el pedido al motor más nombre, versión y fecha, con solo las medidas cambiadas; también abre masas sueltas) (JSON con masa, líneas, núcleos, mix y parámetros).
 - [ ] **R4.2 (S) Deshacer/rehacer** para líneas y núcleos.
 - [ ] **R4.3 (M) Arrastrar núcleos** con el ratón (como los vértices).
 - [ ] **R4.4 (L) Editar unidades:** mover el tabique entre dos unidades vecinas, fusionar y dividir; métricas se actualizan.
