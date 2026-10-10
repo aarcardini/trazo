@@ -249,3 +249,15 @@ def test_web_circulacion_no_vuelve_a_masa():
 
 if __name__ == "__main__":
     test_web_circulacion_no_vuelve_a_masa(); print("OK12")
+
+
+def test_web_cotas_y_escala():
+    """Web: la planta dibuja las cotas totales y la escala gráfica, y la casilla «Cotas» las muestra u oculta.
+    (El dibujo se comprobó en navegador; esta prueba evita que se pierda la llamada o la casilla.)"""
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    assert 'id="showDims"' in html and "function drawDims" in html and "function cota(" in html
+    cuerpo = html.split("function draw(){", 1)[1].split("\nfunction ", 1)[0]
+    assert "drawDims(gb)" in cuerpo, "draw() debe dibujar las cotas"
+
+if __name__ == "__main__":
+    test_web_cotas_y_escala(); print("OK13")

@@ -87,6 +87,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:3px 4px;b
   <button class="s on" id="vPlan" onclick="setView('plan')">Planta 2D</button><button class="s" id="vAxo" onclick="setView('axo')">Axonometría 3D</button>
   <span class="grp" id="lvlGrp">Nivel <select id="lvl" onchange="planStory=+this.value;draw()"></select>
    <label style="margin:0;gap:4px"><input type="checkbox" id="showGraph" checked onchange="showGraph=this.checked;draw()">Conexiones</label>
+   <label style="margin:0;gap:4px" title="Medidas totales por fuera de la planta y escala gráfica"><input type="checkbox" id="showDims" checked onchange="showDims=this.checked;draw()">Cotas</label>
    <button class="s" style="padding:2px 7px" title="Encuadrar" onclick="zoom=1;pan=[0,0];draw()">⤢</button></span>
   <span class="grp" id="axoCtl" style="display:none">
    <button class="s" style="padding:2px 7px" title="Girar 45°" onclick="view3.az-=Math.PI/4;drawAxo()">⟲</button><button class="s" style="padding:2px 7px" title="Girar 45°" onclick="view3.az+=Math.PI/4;drawAxo()">⟳</button>
@@ -135,7 +136,7 @@ const UNIT_L=[0.58,0.72,0.46,0.82,0.38,0.88];
 const roomColor=(kind,prog)=>tone(progColor(prog||'Residential'),ROOM_L[kind]??0.7);
 const COL=new Proxy({},{get:(t,k)=>roomColor(k)});
 const KLABEL={bedroom:'Dormitorio',living:'Estar',dining:'Comedor',kitchen:'Cocina',bath:'Baño',hall:'Hall',hallway:'Pasillo',laundry:'Lavadero',storage:'Depósito',study:'Estudio'};
-let selUnit=null, showGraph=true;
+let selUnit=null, showGraph=true, showDims=true;
 
 /* ---------- paneles de entrada ---------- */
 function renderMix(){ $('mix').innerHTML='<div class="mixrow" style="grid-template-columns:1fr 46px 46px 40px 20px;color:var(--mut);font-size:11px"><span>Tipo</span><span>m²</span><span>%</span><span>Dorm.</span><span></span></div>'+mix.map((m,i)=>`<div class="mixrow" style="grid-template-columns:1fr 46px 46px 40px 20px"><input value="${m.name}" onchange="mix[${i}].name=this.value"><input type="number" value="${m.area}" title="m²" onchange="mix[${i}].area=+this.value"><input type="number" value="${m.percent}" title="%" onchange="mix[${i}].percent=+this.value"><input type="number" min="0" max="5" value="${m.dorms??''}" placeholder="auto" title="Dormitorios (vacío = según m²)" onchange="mix[${i}].dorms=this.value===''?null:+this.value"><button class="s" style="padding:0" onclick="mix.splice(${i},1);renderMix()">×</button></div>`).join(''); }
@@ -200,7 +201,24 @@ function draw(){ const gb=$('gb'); gb.innerHTML='';
    gb.appendChild(el('circle',{cx:X(u.door),cy:Y(u.door),r:4,fill:u.egress_status=='ok'?'#1a9d5b':u.egress_status=='multi'?'#9aa3b2':'#d63b3b'})); });
   drawShapes2D(gb,coreShapes());
  }
- drawOverlay(); }
+ drawDims(gb); drawOverlay(); }
+/* ---------- cotas y escala gráfica ---------- */
+function domAngle(poly){ let best=0, a=0; poly.forEach((p,i)=>{ const q=poly[(i+1)%poly.length], L=Math.hypot(q[0]-p[0],q[1]-p[1]); if(L>best){ best=L; a=Math.atan2(q[1]-p[1],q[0]-p[0]); } }); const r=Math.PI/2; return ((a%r)+r)%r; }
+function cota(g,a,b,ea,eb){ const st={stroke:'#667085','stroke-width':1};   // línea de cota a-b; ea/eb: puntos acotados
+ [[ea,a],[eb,b]].forEach(([p,q])=>g.appendChild(el('line',{x1:X(p),y1:Y(p),x2:X(q),y2:Y(q),...st,'stroke-dasharray':'2 2','pointer-events':'none'})));
+ g.appendChild(el('line',{x1:X(a),y1:Y(a),x2:X(b),y2:Y(b),...st,'pointer-events':'none'}));
+ [a,b].forEach(p=>g.appendChild(el('line',{x1:X(p)-4,y1:Y(p)+4,x2:X(p)+4,y2:Y(p)-4,...st,'stroke-width':1.5,'pointer-events':'none'})));
+ const m=[(a[0]+b[0])/2,(a[1]+b[1])/2]; let r=Math.atan2(Y(b)-Y(a),X(b)-X(a))*180/Math.PI; if(r>90||r<-90) r+=180;
+ g.appendChild(el('text',{x:X(m),y:Y(m)-5,'text-anchor':'middle','font-size':11,fill:'#344054',stroke:'#fff','stroke-width':3,'paint-order':'stroke','pointer-events':'none',transform:'rotate('+r.toFixed(1)+' '+X(m)+' '+Y(m)+')'},Math.hypot(b[0]-a[0],b[1]-a[1]).toFixed(2)+' m')); }
+function drawDims(g){ if(!showDims||!view||!footprint.length) return;
+ const th=domAngle(footprint), c=Math.cos(th), s=Math.sin(th), L=p=>[p[0]*c+p[1]*s,-p[0]*s+p[1]*c], W=q=>[q[0]*c-q[1]*s,q[0]*s+q[1]*c];
+ const lc=footprint.map(L), xs=lc.map(p=>p[0]), ys=lc.map(p=>p[1]), x0=Math.min(...xs), x1=Math.max(...xs), y0=Math.min(...ys), y1=Math.max(...ys), o=28/view.s;
+ cota(g,W([x0,y0-o]),W([x1,y0-o]),W([x0,y0]),W([x1,y0])); cota(g,W([x0-o,y1]),W([x0-o,y0]),W([x0,y1]),W([x0,y0]));
+ // escala gráfica: la mayor longitud «redonda» que entra en ~150 px
+ const Wd=$('svg').clientWidth||800, Hd=$('svg').clientHeight||600; let m=1; [1,2,5,10,20,50,100,200,500,1000].forEach(v=>{ if(v*view.s<=150) m=v; });
+ const px=m*view.s, x=Wd-px-24, y=Hd-22;
+ [0,1].forEach(i=>g.appendChild(el('rect',{x:x+i*px/2,y:y-5,width:px/2,height:5,fill:i?'#fff':'#344054',stroke:'#344054','stroke-width':1,'pointer-events':'none'})));
+ [[0,'0'],[px/2,String(m/2)],[px,m+' m']].forEach(([dx,t])=>g.appendChild(el('text',{x:x+dx,y:y-9,'text-anchor':'middle','font-size':10,fill:'#344054','pointer-events':'none'},t))); }
 function drawOverlay(){ const go=$('go'); go.innerHTML=''; if(!view) return; drawMeds(go);
  const line=(a,b,dash)=>go.appendChild(el('line',{x1:X(a),y1:Y(a),x2:X(b),y2:Y(b),stroke:'#2f6fed','stroke-width':2,'stroke-dasharray':dash||'6 3'}));
  centerlines.forEach((pl,li)=>{ for(let i=0;i<pl.length-1;i++) line(pl[i],pl[i+1]);
