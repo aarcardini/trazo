@@ -345,6 +345,33 @@ def union_parts(polys):
     return res
 
 
+def split_parts(poly):
+    """Partes de un recorte. Cuando el corte separa una figura cóncava, Sutherland-Hodgman deja las partes unidas por
+    puentes de ancho cero; aquí salen por separado (lista, la mayor primero; [poly] si es una sola)."""
+    if not poly or len(poly) < 3:
+        return []
+    if _is_convex(poly):
+        return [poly]
+    partes = [o for o, _ in union_parts([poly])]
+    return partes if len(partes) > 1 else [poly]
+
+
+def clip_halfplane_parts(poly, nx, ny, d):
+    """Como clip_halfplane, pero si el corte separa la figura devuelve cada parte por separado."""
+    return [p for p in split_parts(clip_halfplane(poly, nx, ny, d)) if len(p) >= 3 and abs(area(p)) > 1e-6]
+
+
+def clip_rect_parts(poly, x0=None, x1=None, y0=None, y1=None):
+    """Como clip_rect, pero si el recorte separa la figura devuelve cada parte por separado."""
+    return split_parts(clip_rect(poly, x0, x1, y0, y1))
+
+
+def largest_part(poly):
+    """La mayor de las partes de un recorte (para lo que tiene que ser una sola figura: una unidad, un lote)."""
+    ps = split_parts(poly)
+    return max(ps, key=lambda p: abs(area(p))) if ps else poly
+
+
 def subtract(poly, cutters):
     """poly menos los polígonos de cutters. Devuelve (partes de poly [(exterior, [huecos])],
     [partes de cada cutter dentro de poly]). Cada cutter se resta en piezas convexas por semiplanos."""

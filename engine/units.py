@@ -80,9 +80,8 @@ def _segments(loc, circ, params):
         if cur < xb:
             ivs.append((cur, xb))
         used = set()
-        for a, b in ivs:
-            region = G.clip_rect(loc, a, b, y0, y1)
-            if not region or abs(G.area(region)) <= 4:
+        for a, b, region in [(a, b, r) for a, b in ivs for r in G.clip_rect_parts(loc, a, b, y0, y1)]:
+            if not region or abs(G.area(region)) <= 4:       # un corte que separa la planta da varias franjas
                 continue
             if _is_rect(region):
                 r = G.bbox(region)
@@ -163,7 +162,7 @@ def generate_unit_mix(circ, params, state=None):
             x1 = xmax if last else (_bisect_x(region, x, None, None, m["area"] * k, xmax) or xmax)
             xe = x1 - (0 if last else pw / 2)
             xs0 = x + (pw / 2 if idx > 0 else 0)
-            poly = G.clip_rect(region, xs0, xe)
+            poly = G.largest_part(G.clip_rect(region, xs0, xe))      # una unidad es una sola figura
             if poly:
                 a_ = abs(G.area(poly))
                 w = xe - xs0

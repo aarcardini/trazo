@@ -21,7 +21,7 @@ def apply_setbacks(fp, meds):
         c = G.centroid(fp)
         if nx * (c[0] - a[0]) + ny * (c[1] - a[1]) < 0:      # la normal debe apuntar hacia el edificio
             nx, ny = -nx, -ny
-        cut = G.clip_halfplane(fp, nx, ny, nx * a[0] + ny * a[1] + r)
+        cut = G.largest_part(G.clip_halfplane(fp, nx, ny, nx * a[0] + ny * a[1] + r))
         if len(cut) >= 3 and abs(G.area(cut)) > 1.0:
             fp = G.ensure_ccw(G.clean(cut))
     return fp

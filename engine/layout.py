@@ -18,7 +18,7 @@ from .units import (_bisect_x, _chain_union, _is_rect, _segments, generate_unit_
                     unit_rooms)  # noqa: F401
 from .patios import (auto_patios, _anillo, split_blocks, make_patio_dark, _block_of, _block_of_line)  # noqa: F401
 
-VERSION = "2.6"
+VERSION = "2.7"
 
 DEFAULT_PARAMS = {
     # Masa
@@ -170,8 +170,8 @@ def generate(data):
                             "angle": round(p0["angle"], 6), "xa": p0["xa"], "xb": p0["xb"]}
         cpolys = []
         for pc in pieces:
-            if pc["corridor_local"]:
-                res["corridors"].append(W(pc, pc["corridor_local"]))
+            for parte in G.split_parts(pc["corridor_local"]):   # un pasillo que cruza una muesca: varias partes
+                res["corridors"].append(W(pc, parte))
             for ext in pc["corridor_ext"]:
                 res["corridors"].append(G.pol_to_list(ext))
             for c in pc["cores"]:
@@ -184,7 +184,7 @@ def generate(data):
                     spec = c.get("spec")
                     if mapa is not None and spec is not None:
                         spec = mapa[spec]
-                    res["cores"].append({"poly": W(pc, c["poly_local"]), "x": round(c["x"], 3), "side": c["side"],
+                    res["cores"].append({"poly": W(pc, G.largest_part(c["poly_local"])), "x": round(c["x"], 3), "side": c["side"],
                                          "center": [round(cen[0], 3), round(cen[1], 3)], "spec": spec,
                                          "parts": [{"kind": p_["kind"], "name": p_["name"], "poly": W(pc, p_["poly"]),
                                                     "lines": [W(pc, ln) for ln in p_["lines"]]} for p_ in parts]})

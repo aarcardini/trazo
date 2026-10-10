@@ -28,7 +28,7 @@ Leyenda de esfuerzo: S = pequeño, M = mediano, L = grande (dividir antes de emp
 ## Fase 2 — Ordenar el motor (sin cambiar resultados)
 - [x] **R2.1 (L) Dividir `layout.py`** (hecho: `massing.py`, `circulation.py`, `units.py` y `patios.py`; los planos de cada unidad ya estaban en `plans.py`; resultados idénticos byte a byte) en `massing.py`, `circulation.py` (piezas, uniones, núcleos), `units.py` (segmentos y mix), `plans.py` (estancias), con `layout.generate` como fachada.
   *Hecho cuando:* las pruebas de regresión de R0.3 pasan sin cambios. Dividir en 2-3 PRs si hace falta.
-- [ ] **R2.2 (M) Geometría robusta.** Recorte de polígonos que devuelva varias partes cuando el corte separa la figura (reemplaza los puentes de ancho cero de Sutherland-Hodgman).
+- [x] **R2.2 (M) Geometría robusta.** (v2.7: `clip_rect_parts`, `clip_halfplane_parts`, `largest_part`; viviendas, pasillos, manzanas y lotes ya no salen unidos por puentes) Recorte de polígonos que devuelva varias partes cuando el corte separa la figura (reemplaza los puentes de ancho cero de Sutherland-Hodgman).
 
 ## Fase 3 — Calidad de la planta
 - [ ] **R3.1 (M) Sin restos pequeños.** Los tramos menores que el ancho mínimo se suman a la unidad vecina en vez de descartarse.

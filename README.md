@@ -133,6 +133,10 @@ Si algo falla en Rhino, ejecuta el script y elige **Diagnostico**. Si no se resu
 - **Mix**: tipos con m² objetivo y %, ancho mínimo, muro medianero; métricas Match Score, Fit y Unidades únicas.
 - **Planos**: distribución día/noche con pasillo interno, puertas y grafo de conexiones verificado.
 
+## Novedades v2.7
+- **Corrección de geometría (R2.2):** cuando un corte separaba una figura cóncava en dos (por ejemplo, una masa con una muesca en V, o un predio en C en el Masterplan), las dos partes quedaban unidas por una línea de ancho cero: una vivienda o un pasillo de dos piezas, o una manzana doble. Ahora cada parte sale por separado: el pasillo que cruza una muesca se dibuja en dos tramos y cada manzana y cada lote son una sola figura.
+- Por dentro, el motor quedó repartido en módulos (R2.1: `massing.py`, `circulation.py`, `units.py`, `patios.py`), sin cambiar ningún resultado.
+
 ## Novedades v2.6
 - **Patios rodeados de edificio (U cerrada o claustro):** un patio dibujado dentro de la masa, sin tocar el borde, ya se usa (antes avisaba y lo ignoraba). El edificio queda como un anillo alrededor del patio, dividido en alas, con un **pasillo que da la vuelta al patio**: se puede evacuar hacia los dos lados, así que no hace falta un núcleo en cada esquina (van los de «Cantidad» y los que pida la evacuación; una punta de pasillo de hasta 18 m no necesita núcleo propio).
 - Las viviendas que dan al patio tienen luz si mide al menos 3 m. En alas de poco fondo, pasillo de borde (hacia el patio o contra la medianera) para que las viviendas no queden playas. En las esquinas interiores, donde no llega la luz, no se ponen viviendas (quedan «sin usar»; las unidades de esquina llegan con la mejora de codos, R3.2).

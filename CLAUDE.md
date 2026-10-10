@@ -12,7 +12,7 @@ Tiene dos modos en el mismo repositorio: **Edificio** (`/`, planta tipo) y **Mas
 ## Arquitectura
 | Ruta | Qué hace |
 |---|---|
-| `engine/geometry.py` | Geometría 2D pura: área y centroide (desde el primer vértice: precisos con coordenadas UTM), recortes (Sutherland-Hodgman), marcos locales, offsets; `subtract` (resta de polígonos que devuelve varias partes) y `union_parts`; `line_intervals_multi` (polígonos con huecos). |
+| `engine/geometry.py` | Geometría 2D pura: área y centroide (desde el primer vértice: precisos con coordenadas UTM), recortes (Sutherland-Hodgman; `clip_rect_parts`/`clip_halfplane_parts`/`largest_part` separan las partes cuando el corte divide una figura cóncava), marcos locales, offsets; `subtract` (resta de polígonos que devuelve varias partes) y `union_parts`; `line_intervals_multi` (polígonos con huecos). |
 | `engine/layout.py` | Fachada del motor: `generate(data)` es la entrada única (orquesta las etapas). Contiene `VERSION`, `DEFAULT_PARAMS` y `merge_params`, y reexporta las funciones de los módulos de abajo (`layout.split_blocks`, etc.). |
 | `engine/massing.py` | Masa: retiros y medianeras (`apply_setbacks`, `make_blind`), `build_massing` (planta y niveles), descomposición en alas (`decompose_wings`, también con patios interiores) y distancias a bordes. |
 | `engine/circulation.py` | Pasillo y núcleos: piezas automáticas (`build_pieces`, alas puente en anillos) y de polilíneas (`build_user_pieces`), uniones (`_link`, `_connect`), núcleos (`_add_core`), evacuación (`egress_at`) y el caso entre medianeras (`is_between`). Entrada: `generate_circulation`. |
@@ -96,7 +96,7 @@ python -c "import ast;ast.parse(open('rhino/trazo_rhino.py').read())"   # sintax
 En GitHub, `.github/workflows/pruebas.yml` ejecuta las pruebas y valida el script de Rhino (sintaxis y primera línea `#! python 3`) en cada PR, con Python 3.9 y el más reciente, en Linux y Windows. El check «Pruebas» debe quedar verde antes de pedir que se acepte el PR.
 
 ## Problemas conocidos (contexto, no tareas)
-- `clip_halfplane`/`clip_rect` son Sutherland-Hodgman: en polígonos cóncavos pueden dejar puentes de ancho cero si el corte separa la figura en dos partes.
+- `clip_halfplane`/`clip_rect` siguen siendo Sutherland-Hodgman: en polígonos cóncavos dejan puentes de ancho cero si el corte separa la figura. Donde el resultado tiene que ser una figura (tramos de viviendas, unidades, pasillos, núcleos, retiros, manzanas, lotes) se usan `clip_rect_parts`, `clip_halfplane_parts` o `largest_part` (R2.2); úsalos también en código nuevo.
 - Cruces en X entre polilíneas no se resuelven (solapes cerca del cruce).
 - En codos queda ~5 % de planta sin usar; tramos menores que el ancho mínimo se descartan.
 - Masterplan: calles curvas, cruces en ángulo muy agudo y quiebres de calle a mitad de manzana no se resuelven todavía; no hay salida a Rhino/DXF del masterplan.
