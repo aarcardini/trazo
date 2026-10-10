@@ -33,7 +33,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:3px 4px;b
   <button class="s" onclick="resetStd()">Restaurar valores</button><div class="hint">Mínimos: ordenanzas de higiene de la vivienda (Uruguay), Bomberos IT 19, IM ductos de ascensor, Dec. 406/988. Detalle y fuentes en STANDARDS.md.</div></details>
  <h2>1 · Masa</h2>
  <label>Ejemplo <select id="sample"></select></label>
- <button class="s" onclick="nuevo()" title="Borra la masa, las polilíneas, los núcleos, las medianeras y el resultado; conserva medidas, mix y colores">Nuevo (en blanco)</button>
+ <button class="s" onclick="nuevo()" title="Borra la masa, las polilíneas, los núcleos, las medianeras, las variantes y el resultado; conserva medidas, mix y colores">Nuevo (en blanco)</button>
  <div><button class="s" onclick="$('archivoProyecto').click()" title="Abre un proyecto guardado (.trazo.json) o una masa suelta (.json)">Abrir proyecto…</button><button class="s" onclick="guardarProyecto()" title="Guarda en un archivo la masa, las polilíneas, los núcleos, las medianeras, los patios, el mix, los parámetros y las medidas que cambiaste">Guardar proyecto</button><input type="file" id="archivoProyecto" accept=".json,application/json" style="display:none" onchange="leerProyecto(this)"></div>
  <label>Altura total (m) <input type="number" id="height" value="15" step="0.5"></label>
  <label>Altura de planta (m) <input type="number" id="floor_height" value="3" step="0.1"></label>
@@ -85,6 +85,9 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:3px 4px;b
  <button onclick="run('mix')">Generar mix</button>
  <h2>4 · Planos de unidad</h2>
  <button onclick="run('plans')">Generar planos</button>
+ <h2>Variantes</h2>
+ <div class="hint">Guarda la solución actual para compararla con otras (unidades, eficiencia, match, circulación…) y volver a la que elijas. Se guardan con el proyecto.</div>
+ <button class="s" onclick="guardarVariante()">Guardar como variante</button><button class="s" id="btnVar" onclick="verVariantes()">Comparar (0)</button>
  <h2>Exportar</h2>
  <button class="s" onclick="dl('json')" title="El resultado calculado (para leerlo con otros programas); para retomar el trabajo usa «Guardar proyecto»">Resultado (JSON)</button><button class="s" onclick="dl('dxf')">DXF (Rhino)</button>
 </aside>
@@ -106,6 +109,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:3px 4px;b
   </span>
  </div>
  <div class="ctx" id="ctx" style="display:none"></div>
+ <div class="ctx" id="varPanel" style="display:none;left:10px;width:auto;top:auto;bottom:40px;max-height:60%;overflow:auto"></div>
  <div class="tag" id="tag">Listo</div>
  <svg id="svg"><defs><pattern id="hatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="8" height="8" fill="rgba(120,120,130,.12)"/><line x1="0" y1="0" x2="0" y2="8" stroke="#8a8f99" stroke-width="1.2"/></pattern></defs><g id="gb"></g><g id="go"></g></svg>
  <svg id="axo" style="display:none"></svg>
@@ -166,7 +170,7 @@ async function run(stage,opt){ opt=opt||{}; if(!footprint.length){ $('tag').text
  if(!opt.keepView){ if(stage==='massing'&&viewMode!=='axo') setView('axo',true); else if(stage!=='massing'&&viewMode==='axo'&&!opt.stayAxo) setView('plan',true);
    if(stage!=='massing'){ const st=j.stories[planStory]; if(!st||st.program!=='Residential'){ const r=j.stories.find(x=>x.program==='Residential'); if(r) planStory=r.index; } } }
  if(j.metrics&&j.metrics.core&&$('core_auto').checked){ $('core_width').value=j.metrics.core.width; $('core_depth').value=(j.metrics.core.depth+(+$('corridor_width').value)).toFixed(2); }
- fillLevels(); renderPatios(); render(); panels(); ctxPanel(); }
+ fillLevels(); renderPatios(); render(); panels(); ctxPanel(); if($('varPanel').style.display==='block') verVariantes(true); }
 function render(){ if(viewMode==='axo') drawAxo(); else draw(); }
 function runCirc(){ return run(lastStage&&lastStage!=='massing'?lastStage:'corridor'); }   // pasillo o núcleos cambiados: al menos hasta el pasillo
 
@@ -578,10 +582,10 @@ function setMass(m,fromRhino,opt){ opt=opt||{}; olvidarHistoria(); const o=$('sa
  coresManual=(m.cores||[]).map(p=>Array.isArray(p)?[p[0],p[1]]:Object.assign({},p,{p:[p.p[0],p.p[1]]})); $('cores_mode').value=m.cores_mode||(coresManual.length?'manual':'auto'); coreInfo();
  stories=m.stories?m.stories.map(x=>({program:x.program,height:x.height})):null; medianeras=(m.medianeras||[]).map(x=>({a:x.a,b:x.b,retiro:x.retiro||0})); renderMeds();
  patios=(m.patios||[]).map(p=>p.map(q=>[q[0],q[1]])); curPatio=[]; $('patios_mode').value=m.patios_mode||(patios.length?'manual':'auto'); renderStories(); result=null; lastStage=null; sel.clear(); planStory=null; zoom=1; pan=[0,0]; draw(); panels2(); if(fromRhino) $('rhinoBadge').textContent=(m.source==='masterplan'?'Lote recibido del Masterplan: ':'Masa recibida de Rhino: ')+(m.name||'sin nombre'); return run(opt.etapa||'massing'); }
-async function nuevo(){ if((footprint.length||result)&&!confirm('¿Empezar en blanco? Se borran la masa, las polilíneas, los núcleos, las medianeras y el resultado, también los guardados en el servidor. Las medidas, el mix y los colores se conservan.')) return;
+async function nuevo(){ if((footprint.length||result)&&!confirm('¿Empezar en blanco? Se borran la masa, las polilíneas, los núcleos, las medianeras, las variantes y el resultado, también los guardados en el servidor. Las medidas, el mix y los colores se conservan.')) return;
  try{ await fetch('/api/reset',{method:'POST'}); }catch(e){} olvidarHistoria();
  if(tool) setTool(tool); footprint=[]; centerlines=[]; curLine=[]; coresManual=[]; $('cores_mode').value='auto'; stories=null; medianeras=[]; result=null; lastStage=null; selUnit=null; selCore=null; sel.clear(); planStory=null; zoom=1; pan=[0,0];
- externa=null; nombre=''; abierto=null; ['__rhino','__mp','__proyecto'].forEach(v=>{ const o=$('sample').querySelector('option[value="'+v+'"]'); if(o) o.remove(); }); selLabel('__nuevo','— En blanco —',true);
+ externa=null; nombre=''; abierto=null; variantes=[]; verVariantes(false); ['__rhino','__mp','__proyecto'].forEach(v=>{ const o=$('sample').querySelector('option[value="'+v+'"]'); if(o) o.remove(); }); selLabel('__nuevo','— En blanco —',true);
  patios=[]; curPatio=[]; $('patios_mode').value='auto'; $('height').value=$('height').defaultValue; $('lvl').innerHTML=''; lineInfo(); coreInfo(); renderMeds(); renderStories(); panels2(); unitPanel();
  $('rhinoBadge').textContent='Esperando masa de Rhino… (o usa un ejemplo)'; setView('plan'); $('tag').textContent='En blanco'; }
 /* ---------- proyectos (R4.1): el archivo es el pedido al motor (/api/generate) más nombre, versión y fecha ---------- */
@@ -589,32 +593,58 @@ const ETAPAS=['massing','corridor','mix','plans'];
 function medidasCambiadas(){ if(!STD||!STD_DEF) return null; const d={};   // solo lo que difiere de los valores por defecto
  for(const g in STD) for(const k in STD[g]) if(STD_DEF[g]&&JSON.stringify(STD[g][k])!==JSON.stringify(STD_DEF[g][k])) (d[g]=d[g]||{})[k]=STD[g][k];
  return Object.keys(d).length?d:null; }
+function archivoProyecto(){ const p=proyecto(); if(variantes.length) p.variantes=variantes; return p; }   // el archivo lleva también las variantes (R4.5)
 function proyecto(){ return {trazo:'proyecto',formato:1,version_motor:VER,guardado:new Date().toISOString(),name:nombre||'Proyecto',footprint,height:+$('height').value,stage:lastStage||'massing',params:Object.assign(params(),{standards:medidasCambiadas()})}; }
 async function guardarProyecto(){ if(!footprint.length){ alert('Trazo está en blanco: no hay nada que guardar. Elige un ejemplo o envía una masa desde Rhino.'); return; }
  const archivo=n=>n.replace(/[\\/:*?"<>|]+/g,'-').trim()+'.trazo.json', listo=(p,n)=>{ abierto={p,archivo:n}; selLabel('__proyecto','Proyecto: '+p.name); $('tag').textContent='Proyecto guardado: '+n; };
  if(window.showSaveFilePicker){ try{   // Chrome y Edge: se elige carpeta y nombre (por ejemplo, junto al archivo de Rhino)
    const h=await showSaveFilePicker({suggestedName:archivo(nombre||'Proyecto'),types:[{description:'Proyecto de Trazo',accept:{'application/json':['.json']}}]});
-   nombre=h.name.replace(/(\.trazo)?\.json$/i,''); const p=proyecto(), w=await h.createWritable(); await w.write(JSON.stringify(p,null,1)); await w.close(); return listo(p,h.name); }
+   nombre=h.name.replace(/(\.trazo)?\.json$/i,''); const p=archivoProyecto(), w=await h.createWritable(); await w.write(JSON.stringify(p,null,1)); await w.close(); return listo(p,h.name); }
   catch(e){ if(e.name==='AbortError') return; } }   // cancelado; si el navegador no deja elegir carpeta, se descarga
  const n=prompt('Nombre del proyecto (el archivo se guarda en la carpeta de descargas):',nombre||'Proyecto'); if(n===null) return; nombre=n.trim()||'Proyecto';
- const p=proyecto(), a=document.createElement('a'); a.download=archivo(nombre); a.href=URL.createObjectURL(new Blob([JSON.stringify(p,null,1)],{type:'application/json'})); a.click(); listo(p,a.download); }
+ const p=archivoProyecto(), a=document.createElement('a'); a.download=archivo(nombre); a.href=URL.createObjectURL(new Blob([JSON.stringify(p,null,1)],{type:'application/json'})); a.click(); listo(p,a.download); }
 async function leerProyecto(inp){ const f=inp.files[0]; inp.value=''; if(!f) return; let p=null; try{ p=JSON.parse(await f.text()); }catch(e){} abrirProyecto(p,f.name); }
-function abrirProyecto(p,archivo){ const no=t=>{ alert('Trazo: «'+archivo+'» '+t); };
+function abrirProyecto(p,archivo,opt){ opt=opt||{}; const no=t=>{ alert('Trazo: «'+archivo+'» '+t); };
  if(!p||typeof p!=='object') return no('no se puede leer: no es un archivo de Trazo. Elige un proyecto guardado con «Guardar proyecto» (.trazo.json).');
  if(p.trazo!=='proyecto'&&(p.units||p.metrics)) return no('es un resultado exportado con «Resultado (JSON)», no un proyecto, y no se puede volver a abrir. Para retomar un trabajo, guárdalo con «Guardar proyecto».');
  if(!Array.isArray(p.footprint)||p.footprint.length<3) return no('no es un proyecto de Trazo ni una masa: le falta la huella del edificio. Elige un archivo guardado con «Guardar proyecto».');
- if(tool) setTool(tool); abierto={p,archivo};
+ if(tool) setTool(tool); abierto={p,archivo,opt};
  try{ if(p.trazo!=='proyecto') return setMass(p,false,{label:'Archivo: '+(p.name||archivo)});   // masa suelta (un ejemplo, una masa de Rhino): conserva los parámetros
   const P=p.params||{};
+  if(!opt.variante){ variantes=Array.isArray(p.variantes)?p.variantes.filter(v=>v&&v.proyecto&&v.metricas):[]; verVariantes($('varPanel').style.display==='block'); }   // las variantes del proyecto
   for(const [k,v] of Object.entries(P)){ const e=$(k); if(e&&/^(INPUT|SELECT)$/.test(e.tagName)&&v!=null&&typeof v!=='object'){ if(e.type==='checkbox') e.checked=!!v; else e.value=v; } }   // cada parámetro simple vuelve a su control (mismo id)
   $('core_width').disabled=$('core_depth').disabled=$('core_auto').checked;
   if(Array.isArray(P.unit_mix)&&P.unit_mix.length){ mix=P.unit_mix.map(m=>Object.assign({},m)); renderMix(); legend(); }
   if(STD_DEF){ STD=JSON.parse(JSON.stringify(STD_DEF)); const d=P.standards||{}; for(const g in d) for(const k in d[g]) if(STD[g]&&k in STD[g]) STD[g][k]=d[g][k]; saveStd(); renderStd(); }   // las medidas del proyecto (guarda solo las cambiadas)
   const otra=p.version_motor&&VER&&p.version_motor!==VER;
-  return setMass({name:p.name,footprint:p.footprint,height:p.height,centerlines:P.centerlines,cores:P.cores,cores_mode:P.cores_mode,stories:P.stories,medianeras:P.medianeras,patios:P.patios,patios_mode:P.patios_mode},false,{label:'Proyecto: '+(p.name||archivo),etapa:ETAPAS.includes(p.stage)?p.stage:'massing'})
+  return setMass({name:p.name,footprint:p.footprint,height:p.height,centerlines:P.centerlines,cores:P.cores,cores_mode:P.cores_mode,stories:P.stories,medianeras:P.medianeras,patios:P.patios,patios_mode:P.patios_mode},false,{label:(opt.variante?'Variante: '+archivo:'Proyecto: '+(p.name||archivo)),etapa:ETAPAS.includes(p.stage)?p.stage:'massing'})
    .then(()=>{ if(otra) $('tag').textContent+=' · guardado con Trazo v'+p.version_motor+' (ahora v'+VER+'): el resultado puede variar'; }); }
  catch(e){ no('está incompleto o dañado ('+e.message+'). Prueba con otra copia del proyecto.'); } }
+/* ---------- variantes (R4.5): soluciones guardadas para compararlas ---------- */
+let variantes=[];   // {nombre, guardada, proyecto (como «Guardar proyecto»), metricas}
+const VCOL=[['unidades','Unid./planta',1],['total','Unid. totales',1],['nsa','NSA (m²)',1],['eficiencia','Eficiencia %',1],['match','Match %',1],['circulacion','Circulación %',-1],['sin_usar','Sin usar (m²)',-1],['nucleos','Núcleos',0],['evac','Evac. ✗',-1],['planos','Planos %',1]];   // 1: más es mejor; -1: menos es mejor
+function resumen(r){ const m=(r&&r.metrics)||{}, mx=m.mix||{}, us=(r&&r.units)||null;
+ return {unidades:mx.count??null,total:m.units_total??null,nsa:m.nsa_total??null,eficiencia:m.efficiency_total??null,match:mx.match_score??null,circulacion:m.circulation_pct??null,sin_usar:m.unused_area??null,nucleos:m.core_count??null,evac:us?us.filter(u=>u.egress_status&&u.egress_status!=='ok').length:null,planos:m.plan_score??null}; }
+function guardarVariante(){ if(!result||!footprint.length){ alert('Trazo: genera primero una solución (por ejemplo, «Generar planos») para guardarla como variante.'); return; }
+ const letra=n=>n<26?String.fromCharCode(65+n):String(n+1); let k=variantes.length; while(variantes.some(v=>v.nombre==='Variante '+letra(k))) k++;
+ variantes.push({nombre:'Variante '+letra(k),guardada:new Date().toISOString(),proyecto:proyecto(),metricas:resumen(result)}); verVariantes(true); $('tag').textContent='Guardada: Variante '+letra(k); }
+const esc=t=>String(t).replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');
+function verVariantes(ver){ const p=$('varPanel'); $('btnVar').textContent='Comparar ('+variantes.length+')'; if(ver===false||(ver==null&&p.style.display==='block')){ p.style.display='none'; return; }
+ const filas=variantes.map((v,i)=>({v,i,m:v.metricas})).concat(result?[{m:resumen(result),actual:true}]:[]), mejor={};
+ VCOL.forEach(([k,,s])=>{ const xs=filas.map(f=>f.m[k]).filter(x=>x!=null); if(s&&xs.length>1) mejor[k]=s>0?Math.max(...xs):Math.min(...xs); });   // lo mejor de cada columna
+ const celda=(m,k)=>m[k]==null?'–':m[k]===mejor[k]?`<b style="color:var(--ok)">${m[k]}</b>`:m[k];
+ const nombreV=f=>f.actual?'Actual (sin guardar)':`<span style="cursor:pointer;text-decoration:underline dotted" title="Guardada el ${esc(new Date(f.v.guardada).toLocaleString())} con Trazo v${esc(f.v.proyecto.version_motor||'?')} · clic para cambiar el nombre" onclick="renombrarVariante(${f.i})">${esc(f.v.nombre)}</span>`;
+ p.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>Variantes</b><span><button class="s" onclick="copiarVariantes()">Copiar tabla</button><button class="s" onclick="verVariantes(false)">Cerrar</button></span></div>`
+  +(variantes.length?'':'<div class="hint">Todavía no hay variantes: genera una solución y pulsa «Guardar como variante».</div>')
+  +`<table><tr><th>Variante</th>${VCOL.map(c=>`<th>${c[1]}</th>`).join('')}<th></th></tr>`+filas.map(f=>`<tr${f.actual?' style="color:var(--mut)"':''}><td>${nombreV(f)}</td>${VCOL.map(([k])=>`<td>${celda(f.m,k)}</td>`).join('')}<td style="white-space:nowrap">${f.actual?'':`<button class="s" style="padding:1px 6px" onclick="abrirVariante(${f.i})">Abrir</button><button class="s" style="padding:1px 6px" title="Borrar la variante" onclick="borrarVariante(${f.i})">×</button>`}</td></tr>`).join('')+'</table>'
+  +'<div class="hint">En verde, lo mejor de cada columna. «Evac. ✗»: viviendas que no cumplen la evacuación. «–»: la solución no llegó a esa etapa.</div>';
+ p.style.display='block'; }
+function abrirVariante(i){ const v=variantes[i]; if(v) abrirProyecto(v.proyecto,v.nombre,{variante:true}); }
+function borrarVariante(i){ variantes.splice(i,1); verVariantes(true); }
+function renombrarVariante(i){ const n=prompt('Nombre de la variante:',variantes[i].nombre); if(n&&n.trim()){ variantes[i].nombre=n.trim(); verVariantes(true); } }
+async function copiarVariantes(){ const t=[['Variante',...VCOL.map(c=>c[1])],...variantes.map(v=>[v.nombre,...VCOL.map(([k])=>v.metricas[k]??'')])].map(f=>f.join('\t')).join('\n');
+ try{ await navigator.clipboard.writeText(t); $('tag').textContent='Tabla copiada: pégala en una planilla'; }catch(e){ alert('Trazo: el navegador no dejó copiar la tabla. Selecciónala con el ratón y cópiala.'); } }
 async function dl(kind){ if(!result){alert('Genera primero un resultado');return;} let blob,name; if(kind=='json'){blob=new Blob([JSON.stringify(result,null,1)],{type:'application/json'});name='trazo.json';} else {const t=await (await fetch('/api/dxf')).text(); blob=new Blob([t],{type:'text/plain'});name='trazo.dxf';} const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); }
 async function poll(){ try{ const j=await (await fetch('/api/mass')).json(); if(j.version!==massVer&&j.mass){ massVer=j.version; setMass(j.mass,true); } }catch(e){} setTimeout(poll,1500); }
-(async()=>{ fetch('/api/version').then(r=>r.json()).then(j=>{ VER=j.version; $('ver').textContent='v'+j.version; }); renderMix(); legend(); await loadStd(); renderStories(); samples=await (await fetch('/api/samples')).json(); const s=$('sample'); s.innerHTML=Object.entries(samples).map(([k,v])=>`<option value="${k}">${v.name}</option>`).join(''); s.onchange=()=>{ if(samples[s.value]) setMass(samples[s.value]); else if(externa&&(s.value==='__rhino'||s.value==='__mp')) setMass(externa,true); else if(s.value==='__proyecto'&&abierto) abrirProyecto(abierto.p,abierto.archivo); }; let fromMp=null; if(new URLSearchParams(location.search).has('desde')){ try{ const j=await (await fetch('/api/mass')).json(); if(j.mass){ massVer=j.version; fromMp=j.mass; } }catch(e){} } if(fromMp){ s.insertAdjacentHTML('afterbegin','<option value="__mp">Lote del Masterplan</option>'); s.value='__mp'; setMass(fromMp,true); } else setMass(samples[s.value]||{footprint}); window.addEventListener('resize',render); poll(); })();
+(async()=>{ fetch('/api/version').then(r=>r.json()).then(j=>{ VER=j.version; $('ver').textContent='v'+j.version; }); renderMix(); legend(); await loadStd(); renderStories(); samples=await (await fetch('/api/samples')).json(); const s=$('sample'); s.innerHTML=Object.entries(samples).map(([k,v])=>`<option value="${k}">${v.name}</option>`).join(''); s.onchange=()=>{ if(samples[s.value]) setMass(samples[s.value]); else if(externa&&(s.value==='__rhino'||s.value==='__mp')) setMass(externa,true); else if(s.value==='__proyecto'&&abierto) abrirProyecto(abierto.p,abierto.archivo,abierto.opt); }; let fromMp=null; if(new URLSearchParams(location.search).has('desde')){ try{ const j=await (await fetch('/api/mass')).json(); if(j.mass){ massVer=j.version; fromMp=j.mass; } }catch(e){} } if(fromMp){ s.insertAdjacentHTML('afterbegin','<option value="__mp">Lote del Masterplan</option>'); s.value='__mp'; setMass(fromMp,true); } else setMass(samples[s.value]||{footprint}); window.addEventListener('resize',render); poll(); })();
 </script></body></html>

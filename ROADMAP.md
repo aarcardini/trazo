@@ -44,7 +44,7 @@ Leyenda de esfuerzo: S = pequeño, M = mediano, L = grande (dividir antes de emp
 - [x] **R4.2 (S) Deshacer/rehacer** (v2.17: botones ↶ ↷ y Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z o Ctrl+Y; también medianeras y patios) para líneas y núcleos.
 - [x] **R4.3 (M) Arrastrar núcleos** (v2.18: vista previa punteada; al soltar pasa a manual, el motor lo ajusta al pasillo del lado donde quedó; se deshace con Ctrl+Z) con el ratón (como los vértices).
 - [ ] **R4.4 (L) Editar unidades:** mover el tabique entre dos unidades vecinas, fusionar y dividir; métricas se actualizan.
-- [ ] **R4.5 (M) Variantes:** guardar varias soluciones y compararlas en una tabla (unidades, eficiencia, match, circulación).
+- [x] **R4.5 (M) Variantes:** (v2.19: «Guardar como variante» y «Comparar»; tabla con lo mejor de cada columna en verde, abrir, renombrar, borrar y copiar a una planilla; se guardan con el proyecto) guardar varias soluciones y compararlas en una tabla (unidades, eficiencia, match, circulación).
 
 ## Fase 5 — Planos de unidad y conexiones internas
 Hecho en v1.5: zonas día/noche, pasillo interno, puertas, grafo de conexiones (abierto/puerta) y comprobaciones por unidad.

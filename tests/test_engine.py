@@ -830,3 +830,31 @@ def test_arrastrar_nucleos():
 
 if __name__ == "__main__":
     test_arrastrar_nucleos(); print("OK28")
+
+
+def test_variantes():
+    """R4.5: «Guardar como variante» guarda la solución actual (como un proyecto) con sus métricas, y la tabla las
+    compara (unidades, NSA, eficiencia, match, circulación, sin usar, núcleos, evacuación, planos). Las métricas que lee
+    la web existen en el resultado del motor; las variantes van en el archivo del proyecto y «Nuevo» las borra."""
+    import re
+    s = json.load(open(os.path.join(os.path.dirname(__file__), "..", "samples", "L.json"), encoding="utf-8"))
+    r = run(s["footprint"], s["height"])
+    m = r["metrics"]
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    js = html.split("<script>", 1)[1]
+    cuerpo = lambda f: js.split(f, 1)[1].split("\nfunction ", 1)[0].split("\nasync function ", 1)[0].split("\nconst ", 1)[0]
+    res = cuerpo("function resumen(")
+    claves, de_mix = set(re.findall(r"\bm\.(\w+)", res)) - {"mix"}, set(re.findall(r"\bmx\.(\w+)", res))
+    assert len(claves) >= 6 and len(de_mix) >= 2, (claves, de_mix)
+    for k in claves:
+        assert m.get(k) is not None, k                  # la tabla no queda con «–» por una métrica que no existe
+    for k in de_mix:
+        assert m["mix"].get(k) is not None, k
+    assert r["units"] and all("egress_status" in u for u in r["units"]) and "egress_status" in res
+    assert "p.variantes=variantes" in cuerpo("function archivoProyecto(")       # se guardan con el proyecto
+    assert "variantes=Array.isArray(p.variantes)" in cuerpo("function abrirProyecto(")
+    assert "variantes=[]" in cuerpo("async function nuevo(")
+    assert "{variante:true}" in cuerpo("function abrirVariante(")             # abrir una variante no cambia la lista
+
+if __name__ == "__main__":
+    test_variantes(); print("OK29")
