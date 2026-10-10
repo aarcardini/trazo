@@ -178,3 +178,17 @@ def test_regresion():
 
 if __name__ == "__main__":
     test_regresion(); print("OK8")
+
+
+def test_masterplan_samples_manzana():
+    """Cada ejemplo del Masterplan trae su manzana (la propia o la estándar): al cambiar de ejemplo no se arrastra la anterior."""
+    import server
+    from engine import standards as ST
+    s = server.mp_samples()
+    std = list(ST.DEFAULTS["masterplan"]["manzana"])
+    assert s["barrio_jardin"]["masterplan"]["manzana"] == [75, 95], s["barrio_jardin"]
+    assert s["predio_rectangular"]["masterplan"]["manzana"] == std, s["predio_rectangular"]
+    assert s["predio_irregular"]["masterplan"]["manzana"] == std, s["predio_irregular"]
+
+if __name__ == "__main__":
+    test_masterplan_samples_manzana(); print("OK9")
