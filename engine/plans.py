@@ -343,6 +343,33 @@ def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None):
         if p and abs(G.area(p)) > 1.0:
             ids[i] = len(rooms)
             rooms.append({"id": i, "name": name, "kind": kind, "poly": p, "area": abs(G.area(p)), "rect": rect})
+
+    def ventanas(rect):
+        """Tramos de las paredes de la estancia sobre la fachada (con ventana): ahí no van el placard ni el rack de TV."""
+        rx0, rv0, rx1, rv1 = rect
+        out = []
+        for p, q, borde in (((rx0, rv1), (rx1, rv1), abs(rv1 - v1) < 0.05), ((rx0, rv0), (rx0, rv1), abs(rx0 - x0) < 0.05),
+                            ((rx1, rv0), (rx1, rv1), abs(rx1 - x1) < 0.05)):
+            if not borde or (is_facade is None and p[1] != q[1]):
+                continue
+            if is_facade is None:
+                out.append((p, q))
+                continue
+            n = max(1, int(round(((q[0] - p[0]) ** 2 + (q[1] - p[1]) ** 2) ** 0.5)))    # de a 1 m
+            pt = lambda k: (p[0] + (q[0] - p[0]) * k / n, p[1] + (q[1] - p[1]) * k / n)
+            tramos, tramo = [], None
+            for k in range(n):
+                if is_facade(pt(k), pt(k + 1)):
+                    tramo = (tramo[0] if tramo else pt(k), pt(k + 1))
+                elif tramo:
+                    tramos.append(tramo)
+                    tramo = None
+            if tramo:
+                tramos.append(tramo)
+            corto = lambda t: p[1] != q[1] and abs(t[1][1] - t[0][1]) < 1.0    # junto a la esquina de la fachada: no es ventana
+            out += [t for t in tramos if not corto(t)]
+        return out
+    fachadas = {r["id"]: ventanas(r["rect"]) for r in rooms if r["kind"] in ("bedroom", "living", "dining")}
     # conexiones y puertas
     doors, edges = [], []
     for a, b, typ in E:
@@ -358,17 +385,18 @@ def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None):
             d = DOOR / 2
             hoja = lambda m: ((m[0], m[1] - d), (m[0], m[1] + d)) if vertical else ((m[0] - d, m[1]), (m[0] + d, m[1]))
             rb = rooms[ids[b]]
-            if rb["kind"] in ("bath", "laundry") and L > DOOR + 0.3:   # baño o lavadero: la puerta donde entran los artefactos
+            if rb["kind"] in ("bath", "laundry", "bedroom") and L > DOOR + 0.3:   # la puerta donde entran artefactos y muebles
                 k = 1 if vertical else 0                     # la puerta se corre a lo largo del borde
                 lo, hi = sorted((seg[0][k], seg[1][k]))
-                opciones = [m[k], lo + d + 0.1, hi - d - 0.1]
-
-                def faltan(c):
-                    mm = (m[0], c) if vertical else (c, m[1])
-                    pq = hoja(mm)
-                    _, falta, info = EQ.resolver(rb, [{"p": pq[0], "q": pq[1], "a": a, "b": b, "ancho": DOOR}], {}, equip)
-                    return 2 * len(falta) + len(info)        # un toilette (sin ducha) es peor que el baño completo
-                c = min(opciones, key=lambda c: (faltan(c), c != m[k]))
+                notas = {}
+                for c in (m[k], lo + d + 0.1, hi - d - 0.1):  # al medio o junto a una esquina
+                    pq = hoja((m[0], c) if vertical else (c, m[1]))
+                    _, falta, info = EQ.resolver(rb, [{"p": pq[0], "q": pq[1], "a": a, "b": b, "ancho": DOOR}], {}, equip,
+                                                 fachadas.get(b, ()), nb)
+                    notas[c] = 2 * len(falta) + len(info)    # un toilette (sin ducha) es peor que el baño completo
+                    if not notas[c]:
+                        break
+                c = min(notas, key=lambda c: (notas[c], c != m[k]))
                 m = (m[0], c) if vertical else (c, m[1])
             p, q = hoja(m)
             # la hoja abre hacia la estancia b
@@ -404,7 +432,7 @@ def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None):
     unreached = [rooms[ids[i]]["name"] for i in ids if i not in seen]
     checks.append({"ok": not unreached, "msg": "Todas las estancias se alcanzan desde la entrada" if not unreached
                    else "Sin acceso desde la entrada: " + ", ".join(unreached)})
-    below = []
+    below, chicas = [], set()                          # chicas: ya avisadas por su medida (no se suma lo que no entra)
     for r in rooms:
         if r["kind"] in ("bedroom", "living", "study"):
             rx0, rv0, rx1, rv1 = r["rect"]
@@ -422,9 +450,11 @@ def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None):
             ms = sd.get("min_side")
             if ms and w + 1e-6 < ms:
                 checks.append({"ok": False, "msg": "%s: lado %.2f m < mínimo %.2f m" % (r["name"], w, ms)})
+                chicas.add(r["id"])
             ma = sd.get("min_area")
             if ma and r["area"] + 1e-6 < ma:
                 checks.append({"ok": False, "msg": "%s: %.1f m² < mínimo %.1f m²" % (r["name"], r["area"], ma)})
+                chicas.add(r["id"])
             ta = sd.get("typ_area")
             if r["kind"] == "living":
                 ta = V["estar_por_dorms"][min(nb, len(V["estar_por_dorms"]) - 1)]
@@ -432,13 +462,14 @@ def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None):
                 below.append("%s %.1f de %.0f m²" % (r["name"], r["area"], ta))
         elif w + 1e-6 < MIN_W.get(r["kind"], 0):
             checks.append({"ok": False, "msg": "%s: ancho %.2f m < mínimo %.2f m" % (r["name"], w, MIN_W[r["kind"]])})
+            chicas.add(r["id"])
     aberturas = {}                                     # bordes abiertos entre estancias de día: ahí no va un artefacto
     for e in edges:
         if e["type"] == "abierto" and e["ok"]:
             seg = _shared(rooms[ids[e["a"]]]["rect"], rooms[ids[e["b"]]]["rect"])
-            for i in (e["a"], e["b"]):
-                aberturas.setdefault(i, []).append(seg)
-    equipo, faltan = EQ.equipar(rooms, doors, aberturas, equip, nb)       # F5: baños, cocina y lavadero
+            for i, otra in ((e["a"], e["b"]), (e["b"], e["a"])):
+                aberturas.setdefault(i, []).append((seg[0], seg[1], otra))
+    equipo, faltan = EQ.equipar(rooms, doors, aberturas, equip, nb, fachadas, chicas)     # F5: artefactos y muebles
     checks += faltan
     for w in warnings:
         if isinstance(w, tuple):

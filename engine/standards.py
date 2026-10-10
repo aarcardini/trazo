@@ -11,6 +11,8 @@ Fuentes principales (ver STANDARDS.md):
 - Estacionamiento: plaza 2,50 x 5,00 y calle de 6,00 (práctica habitual en Uruguay, indicado por el usuario).
 - Equipamiento de baños, cocina y lavadero: módulos habituales (E. Neufert, Arte de proyectar en arquitectura); puertas
   interiores de 0,70 y mesada de 0,60 de fondo (criterio del usuario).
+- Muebles: camas, mesas de luz, placard, mesa con sillas, sofá, butaca y rack de TV con sus pasos (E. Neufert); asientos
+  de la mesa según dormitorios: 4 y 2 más por cada dormitorio después del primero (criterio del usuario).
 Las medidas "típicas" son criterios de proyecto (no normativos) y pueden ajustarse.
 """
 import copy
@@ -108,6 +110,22 @@ DEFAULTS = {
         "lavarropas": [0.60, 0.60],
         "pileta_lavar": [0.55, 0.45],
         "paso_lavadero": 0.60,
+        # muebles (F5, segunda parte): camas [ancho, largo]; los demás [largo a lo largo de la pared, fondo]
+        "cama_doble": [1.40, 1.90],
+        "cama_individual": [0.90, 1.90],
+        "mesita": [0.45, 0.40],
+        "paso_cama": 0.60,               # libre a los lados y al pie de la cama
+        "placard_fondo": 0.60,
+        "placard_largo": [1.80, 1.20],   # dormitorio principal, otros
+        "asiento": 0.60,                 # ancho de mesa por comensal
+        "mesa_fondo": 0.90,
+        "paso_silla": 0.75,              # de la mesa a la pared o mueble más cercano, para la silla
+        "asientos": [2, 4, 2],           # monoambiente, 1 dormitorio, cada dormitorio más (criterio del usuario)
+        "sofa": [2.00, 0.90],
+        "butaca": [0.80, 0.80],
+        "rack_tv": [1.60, 0.45],
+        "distancia_tv": 1.50,            # libre entre el sofá y el rack (unos 2,2 m de los ojos a la pantalla)
+        "paso_estar": 0.90,              # libre delante de las aberturas al hall, al pasillo y a la cocina
     },
 }
 

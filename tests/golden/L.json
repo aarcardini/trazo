@@ -1,7 +1,7 @@
 {
  "ejemplo": "samples/L.json",
  "nombre": "Forma en L",
- "version_motor": "2.21",
+ "version_motor": "2.22",
  "metricas": {
   "unidades": 9,
   "unidades_totales": 45,
@@ -19,7 +19,7 @@
   "circulacion": 28.1,
   "match_score": 94.4,
   "fit_m2": 10.6,
-  "calidad_planos": 89,
+  "calidad_planos": 87,
   "evacuacion_max": 17.4,
   "nsa_total": 3799.0
  }

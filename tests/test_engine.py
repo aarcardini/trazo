@@ -1021,3 +1021,113 @@ def test_equipamiento():
 
 if __name__ == "__main__":
     test_equipamiento(); print("OK32")
+
+
+def test_muebles():
+    """F5 (R5.6, segunda parte): muebles. Dormitorio principal: cama doble con mesas de luz, paso a los lados y al pie, y
+    placard; los demás, dos camas individuales (o una, con aviso informativo); estar: sofá frente al rack de TV; mesa con 4
+    asientos y 2 más por cada dormitorio después del primero (monoambiente: 2, con la cama doble). Nada se pisa ni pisa el
+    barrido de las puertas o el paso delante de las aberturas; placard y rack no van contra la ventana; desde las puertas
+    se llega a todo. Lo que no entra se avisa, salvo en una estancia que ya no llega a su medida mínima."""
+    from engine import geometry as G, plans as P, equipamiento as EQ, standards as ST, dxf
+    rect = lambda w, d: [(0.0, 0.0), (w, 0.0), (w, d), (0.0, d)]
+    tipos = lambda res, rid=None: sorted(q["kind"] for q in res["equipamiento"] if rid is None or q["room"] == rid)
+    sillas = lambda res: tipos(res).count("silla")
+    caja = lambda pl: (min(p[0] for p in pl), min(p[1] for p in pl), max(p[0] for p in pl), max(p[1] for p in pl))
+    choca = lambda a, b, h=0.0: a[0] < b[2] + h - 1e-6 and b[0] < a[2] + h - 1e-6 and a[1] < b[3] + h - 1e-6 and b[1] < a[3] + h - 1e-6
+    # 1. dos dormitorios en 9,5 × 8: todo entra
+    res = P.layout_unit(rect(9.5, 8.0), 2)
+    assert tipos(res, "bed1") == ["cama_doble", "mesita", "mesita", "placard"], tipos(res, "bed1")
+    assert tipos(res, "bed2") == ["cama_individual", "cama_individual", "mesita", "placard"], tipos(res, "bed2")
+    assert {"sofa", "rack_tv", "mesa"} <= set(tipos(res, "living")) and sillas(res) == 6, tipos(res, "living")
+    assert all(c["ok"] for c in res["checks"]), res["checks"]
+    salas = {x["id"]: x["poly"] for x in res["rooms"]}
+    cuerpos = [q for q in res["equipamiento"] if q["kind"] not in ("silla", "bacha_cocina", "cocina_horno")]
+    for q in res["equipamiento"]:                                      # dentro de su estancia
+        fuera = sum(abs(G.area(e)) - sum(abs(G.area(h)) for h in hs) for e, hs in G.subtract(q["poly"], [salas[q["room"]]])[0])
+        assert fuera < 1e-3, (q["kind"], q["room"], fuera)
+    for i, a in enumerate(cuerpos):                                    # sin pisarse (las sillas van en su lugar libre)
+        for b in cuerpos[i + 1:]:
+            assert not choca(caja(a["poly"]), caja(b["poly"])), (a["kind"], b["kind"])
+    for s in (q for q in res["equipamiento"] if q["kind"] == "silla"):
+        assert not any(choca(caja(s["poly"]), caja(b["poly"])) for b in cuerpos), s
+    cama = caja(next(q["poly"] for q in res["equipamiento"] if q["kind"] == "cama_doble"))
+    for b in cuerpos:                                                  # 0,60 libres a los lados y al pie de la cama
+        if b["kind"] not in ("cama_doble", "mesita") and b["room"] == "bed1":
+            assert not choca(cama, caja(b["poly"]), 0.59), b["kind"]
+    for d in res["doors"]:                                             # el barrido de cada puerta, libre
+        if d.get("entry") or d["b"] not in salas:
+            continue
+        (px, py), (qx, qy) = d["p"], d["q"]
+        c = G.centroid(salas[d["b"]])
+        n = (-(qy - py), qx - px)
+        if (c[0] - px) * n[0] + (c[1] - py) * n[1] < 0:
+            n = (-n[0], -n[1])
+        barrido = caja([(px, py), (qx, qy), (qx + n[0], qy + n[1]), (px + n[0], py + n[1])])
+        assert not any(choca(barrido, caja(b["poly"])) for b in cuerpos if b["room"] == d["b"]), d["b"]
+    contra_ventana = lambda c, v1: abs(c[3] - v1) < 0.01 and c[2] - c[0] > 0.61     # a lo largo de la fachada (v = v1)
+    for q in res["equipamiento"]:                                      # placard y rack: no contra la ventana
+        if q["kind"] in ("placard", "rack_tv"):
+            assert not contra_ventana(caja(q["poly"]), 8.0), q
+    cocina = caja(salas["kitchen"])[3]                                 # delante de la cocina y el hall: 0,90 libres
+    for q in res["equipamiento"]:
+        if q["room"] == "living" and q["kind"] in ("sofa", "rack_tv", "mesa", "butaca"):
+            assert caja(q["poly"])[1] >= cocina + 0.9 - 1e-6, q
+    # 2. asientos según los dormitorios; monoambiente con cama doble; estar y comedor separados
+    assert sillas(P.layout_unit(rect(7.0, 8.0), 1)) == 4 and sillas(P.layout_unit(rect(12.5, 8.5), 3)) == 8
+    mono = P.layout_unit(rect(6.5, 6.5), 0)
+    assert sillas(mono) == 2 and {"cama_doble", "mesita", "mesa", "sofa", "rack_tv"} <= set(tipos(mono)), tipos(mono)
+    hondo = P.layout_unit(rect(9.5, 11.0), 2)
+    assert "dining" in {x["id"] for x in hondo["rooms"]} and {"mesa", "silla"} <= set(tipos(hondo, "dining"))
+    assert {"sofa", "rack_tv"} <= set(tipos(hondo, "living")), tipos(hondo)
+    # 3. lo que no entra: estar chico, una sola cama, mesa para 2 en un dormitorio; estancia ya avisada por su medida
+    S = ST.merged(None)["equipamiento"]
+    abre = lambda w: {"living": [((0.0, 0.0), (w - 1.4, 0.0), "kitchen"), ((w - 1.4, 0.0), (w, 0.0), "hall"),
+                                 ((w, 0.0), (w, 1.0), "hallway")]}
+    estar = lambda w, d, nb: EQ.equipar([{"id": "living", "kind": "living", "name": "Estar-Comedor", "rect": (0.0, 0.0, w, d)}],
+                                        [], abre(w), S, nb, {"living": [((0.0, d), (w, d))]})
+    pz, ch = estar(3.43, 4.1, 2)
+    assert [c["msg"] for c in ch] == ["Estar-Comedor: no entra la mesa para 6 (entra una para 4)"], ch
+    pz, ch = estar(3.43, 4.1, 3)
+    assert [c["msg"] for c in ch] == ["Estar-Comedor: no entra la mesa para 8 (entra una para 4)"], ch
+    pz, ch = estar(3.0, 3.8, 1)
+    assert [(c["ok"], c["msg"]) for c in ch] == [(True, "Estar-Comedor: mesa para 2 (para 4 no hay lugar)")], ch
+    puerta = [{"p": (0.75, 0.0), "q": (1.45, 0.0), "a": "hallway", "b": "bed2", "ancho": 0.7}]
+    pz, ch = EQ.equipar([{"id": "bed2", "kind": "bedroom", "name": "Dormitorio 2", "rect": (0.0, 0.0, 2.2, 4.0)}], puerta, {},
+                        S, 2, {"bed2": [((0.0, 4.0), (2.2, 4.0))]})
+    assert [q["kind"] for q in pz].count("cama_individual") == 1 and [c["msg"] for c in ch] == \
+        ["Dormitorio 2: entra una sola cama individual"] and ch[0]["ok"], (pz, ch)
+    angosta = P.layout_unit(rect(6.6, 13.5), 3)                        # dormitorios de 1,15 m: ya se avisa su lado
+    msgs = [c["msg"] for c in angosta["checks"]]
+    assert any("Dormitorio 2: lado" in m for m in msgs) and not any(m.startswith("Dormitorio 2: no entra") for m in msgs), msgs
+    # 4. un dormitorio principal angosto (2,60 × 3,60): el placard se achica antes que ir contra la ventana; la cama
+    # conserva su paso; con la puerta en la esquina, nada en su barrido
+    dorm = lambda w, d, x: EQ.equipar([{"id": "bed1", "kind": "bedroom", "name": "Dormitorio", "rect": (0.0, 0.0, w, d)}],
+                                      [{"p": (x, 0.0), "q": (x + 0.7, 0.0), "a": "hallway", "b": "bed1", "ancho": 0.7}], {},
+                                      S, 2, {"bed1": [((0.0, d), (w, d))]})
+    pz, ch = dorm(2.6, 3.6, 0.95)
+    assert [c["msg"] for c in ch] == ["Dormitorio: placard de 0.90 m (no entra el de 1.80 m)"], ch
+    placard, cama = [caja(next(q["poly"] for q in pz if q["kind"] == k)) for k in ("placard", "cama_doble")]
+    assert not contra_ventana(placard, 3.6) and not choca(cama, placard, 0.59), (placard, cama)
+    pz, ch = dorm(2.4, 3.0, 0.1)
+    assert pz and not any(choca((0.1, 0.0, 0.8, 0.7), caja(q["poly"])) for q in pz), pz
+    # 5. recorrido: un mueble que corta el paso entre dos aberturas no vale
+    r = EQ._Estancia((0.0, 0.0, 4.0, 3.0))
+    accesos = [((0.0, 1.0), (0.0, 2.0)), ((4.0, 1.0), (4.0, 2.0))]
+    assert EQ._alcanza(r, [(1.5, 0.5, 2.5, 2.5)], accesos, []) and not EQ._alcanza(r, [(1.5, 0.0, 2.5, 3.0)], accesos, [])
+    # 6. las medidas de la web mandan: asientos y largo del placard
+    S2 = ST.merged({"equipamiento": {"asientos": [2, 4, 1], "placard_largo": [1.5, 1.2]}})["equipamiento"]
+    otra = P.layout_unit(rect(9.5, 8.0), 2, equip=S2)
+    assert sillas(otra) == 5, tipos(otra)
+    pl = caja(next(q["poly"] for q in otra["equipamiento"] if q["kind"] == "placard" and q["room"] == "bed1"))
+    assert abs(max(pl[2] - pl[0], pl[3] - pl[1]) - 1.5) < 1e-6, pl
+    # DXF y web
+    r = run([[0, 0], [60, 0], [60, 16], [0, 16]])
+    assert dxf.result_to_dxf(r).count("Trazo_L00_Equipamiento") > 400
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    for t in ("cama_doble:'Cama doble (ancho × largo, m)'", "asientos:'Asientos: monoambiente", "const STD_LISTA",
+              "equipamiento:'Equipamiento y muebles'"):
+        assert t in html, t
+
+if __name__ == "__main__":
+    test_muebles(); print("OK33")

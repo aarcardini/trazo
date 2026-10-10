@@ -46,6 +46,25 @@ Cada artefacto ocupa un módulo contra una pared maciza (largo a lo largo de la 
 
 Reglas del motor: el baño principal lleva ducha, inodoro y lavatorio (y bidé si entra); un segundo baño donde no entra la ducha queda como toilette (inodoro y lavatorio, con aviso). La puerta de un baño o lavadero va al centro del borde o junto a una esquina, donde mejor entran los artefactos. El ancho mínimo de un baño sale del inodoro con su paso (0,70 + 0,60 = 1,30 m) y el del lavadero, del lavarropas con su paso (1,20 m). La cocina lleva una mesada corrida con heladera, bacha, mesada de trabajo y cocina; si no entra en línea, la heladera va en otra pared (en L). Lo que no entra se avisa en la ficha de la vivienda.
 
+## Muebles de dormitorios, estar y comedor (F5)
+
+Cada mueble es un módulo con su paso libre. Ninguno va delante de las aberturas al hall, al pasillo o a la cocina (paso del estar), el placard y el rack de TV no van contra una ventana, y desde cada puerta o abertura se llega a todos (un paso de unos 0,50 m como mínimo entre muebles). Editables en la web («Medidas y normativa → Equipamiento y muebles»).
+
+| Elemento | Valor por defecto | Referencia |
+|---|---|---|
+| Cama doble | 1,40 × 1,90 m (ancho × largo) | E. Neufert (medidas habituales) |
+| Cama individual | 0,90 × 1,90 m | Ídem |
+| Mesa de luz | 0,45 × 0,40 m | Ídem |
+| Paso junto a la cama | 0,60 m a los lados y al pie de la cama doble; entre dos individuales y a un costado de una sola | Ídem (0,60–0,75 m) |
+| Placard | 0,60 m de fondo; 1,80 m de largo en el dormitorio principal y 1,20 m en los demás, con 0,60 m de paso | Medidas habituales |
+| Mesa del comedor | 0,60 m de largo por asiento (mínimo 0,80), 0,90 m de ancho, 0,75 m para las sillas a cada lado | Neufert |
+| Asientos | 2 en un monoambiente; 4 con un dormitorio y 2 más por cada dormitorio siguiente (6 con dos, 8 con tres) | Criterio indicado por el usuario |
+| Sofá / butaca | 2,00 × 0,90 m / 0,80 × 0,80 m | Medidas habituales |
+| Rack de TV | 1,60 × 0,45 m, a 1,50 m o más del sofá | Neufert (unos 2,2 m de los ojos a la pantalla) |
+| Paso delante de las aberturas del estar | 0,90 m | Criterio de proyecto (circulación del hall al pasillo y a la cocina) |
+
+Reglas del motor: el dormitorio principal lleva la cama doble (mejor con la cabecera contra una pared sin ventana ni puerta) y su placard; los demás, dos camas individuales o, si no entran, una (aviso informativo). Si el placard no entra entero, se prueba más corto (de a 0,30 m, hasta 0,90 m) antes que dejarlo afuera. En el estar, el rack va contra una pared maciza sin ventana y el sofá enfrente, contra la pared opuesta o suelto a la distancia de la TV; la mesa va cerca de la cocina. Si la mesa no entra con todos los asientos, se prueba una más chica y se avisa (para un dormitorio, una mesa más chica es aceptable y el aviso es informativo). El comedor y el estar contiguos se amueblan juntos. En una estancia que ya no llega a su lado o área mínima no se suma el aviso de lo que no entra.
+
 ## Núcleo de circulación vertical
 
 | Elemento | Valor | Referencia |
