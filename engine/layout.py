@@ -9,7 +9,7 @@ from . import plans as P
 from . import standards as ST
 from . import programs as PR
 
-VERSION = "2.4"
+VERSION = "2.5"
 
 DEFAULT_PARAMS = {
     # Masa

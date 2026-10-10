@@ -23,10 +23,10 @@ Tiene dos modos en el mismo repositorio: **Edificio** (`/`, planta tipo) y **Mas
 | `web/index.html` | Interfaz completa (HTML+CSS+JS en un archivo, sin dependencias). Dos vistas: «Planta 2D» (SVG, zoom/desplazamiento, edición de líneas y núcleos, ficha de unidad) y «Axonometría 3D» (SVG proyectado, algoritmo del pintor, selección de niveles por clic o por programa). |
 | `web/masterplan.html` | Interfaz del modo Masterplan (un archivo): predio, calles, usos de manzana, mix de lotes, construcción, planta 2D y axonometría, «Abrir en modo Edificio». |
 | `samples/masterplan/*.json` | Predios de ejemplo del modo Masterplan (`damero: true` traza el damero al cargar). |
-| `rhino/trazo_rhino.py` | Puente Rhino 8 (CPython 3, `rhinoscriptsyntax`/RhinoCommon): Enviar masa / Recibir resultado. |
+| `rhino/trazo_rhino.py` | Puente Rhino 8 (CPython 3, `rhinoscriptsyntax`/RhinoCommon): Enviar masa / Recibir resultado / Diagnostico. Recibir dibuja solo en las capas de resultado (`Trazo::Footprint` y `Trazo::L00…` con subcapas) y, si ya hay un resultado, pregunta si reemplazarlo; las capas de entrada (`Trazo::Centerline`, `Cores`, `Medianeras`, `Patios`) no se tocan. |
 | `samples/*.json` | Masas de ejemplo que aparecen en el desplegable de la web. |
 | `tests/test_engine.py` | Pruebas del motor (`python tests/test_engine.py`). |
-| `tests/test_rhino.py` | Pruebas del script de Rhino sin Rhino: lo carga con Rhino simulado (`unittest.mock`) y habla con `server.py` real. Mensajes, diagnóstico y menú; la geometría solo se prueba en Rhino. |
+| `tests/test_rhino.py` | Pruebas del script de Rhino sin Rhino: lo carga con Rhino simulado (`unittest.mock`) y habla con `server.py` real. Mensajes, diagnóstico, menú y Recibir sin duplicar (qué capas se reemplazan, qué se borra, qué se pregunta); la geometría solo se prueba en Rhino. |
 | `tests/regresion.py`, `tests/golden/` | Pruebas de regresión: métricas de referencia de cada ejemplo de `samples/` (unidades, eficiencia, sin usar, núcleos, lotes…) con un margen por métrica. Corren dentro de `test_engine.py`. |
 
 API: `GET /api/version`, `GET|POST /api/mass` (Rhino→web y Masterplan→Edificio), `POST /api/generate` (web→motor), `GET /api/result` (→Rhino), `GET /api/dxf`, `GET /api/samples`, `POST /api/reset` (botón «Nuevo»: el servidor olvida la masa y el resultado).

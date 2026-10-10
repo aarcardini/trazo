@@ -86,7 +86,9 @@ Desde entonces basta con escribir `trazo` en Rhino.
    - En la planta 2D se ven las **cotas totales** de la huella (por fuera, alineadas con el edificio) y una **escala gráfica** abajo a la derecha; se ocultan con la casilla «Cotas».
    - El selector «Ejemplo» muestra siempre qué está cargado: un ejemplo, «Masa de Rhino: …» o «— En blanco —». Si miras un ejemplo, puedes volver a tu masa de Rhino eligiéndola en el selector.
 4. En Rhino: ejecuta de nuevo el script y elige **Recibir** (capas `Trazo::L00::Units`, `Rooms`, etc.).
-   Alternativa sin script: botón **DXF (Rhino)** y luego `Import`.
+   - Si ya habías recibido un resultado, pregunta qué hacer: **Reemplazar** (borra el anterior, también lo que esté oculto o bloqueado, y dibuja el nuevo), **Agregar** (deja los dos) o **Cancelar**. No dibujes a mano en las capas `Trazo::Footprint` ni `Trazo::L00…`: Reemplazar las vacía.
+   - Los patios recibidos se dibujan en cada nivel (`Trazo::L00::Patios`…); la capa `Trazo::Patios` es solo para enviar.
+   - Alternativa sin script: botón **DXF (Rhino)** y luego `Import`.
 
 ## Actualizar Trazo
 Cuando haya cambios nuevos en GitHub (por ejemplo, después de aceptar un PR):
@@ -109,6 +111,7 @@ Después cierra Trazo (Ctrl+C), vuelve a arrancarlo y recarga la página en el n
 | Rhino: `Seleccionaste una curva` (o una malla, un bloque, un SubD…) | La masa tiene que ser un sólido cerrado (polisuperficie o extrusión): el mensaje dice cómo convertirlo. |
 | Rhino: `No encontré una cara inferior plana y horizontal` | La masa necesita una base plana y horizontal (por ejemplo, una extrusión cerrada). Si está abierta abajo, `_Cap`. |
 | Rhino: `La masa es muy pequeña` o `La masa es enorme` | Casi siempre son las unidades del archivo: revísalas con `_Units` (Trazo trabaja en metros). Pregunta antes de enviar. |
+| Rhino: después de **Recibir** aparece todo repetido | Hasta la v2.4, cada Recibir dibujaba encima del anterior. Ahora pregunta: elige **Reemplazar** y borra también las copias viejas. |
 | Rhino: `Todavía no hay un resultado` | Genera primero en la web y después elige **Recibir**. |
 | Rhino: `El resultado no viene de una masa de Rhino` o `no coincide con la última masa` | En la web elegiste un ejemplo u otra masa: vuelve a **Enviar** tu masa, genera y recibe de nuevo. |
 | Rhino: `error inesperado` | Copia el mensaje completo y pégalo en la sesión de Claude Code. |
@@ -128,6 +131,11 @@ Si algo falla en Rhino, ejecuta el script y elige **Diagnostico**. Si no se resu
 - **Pasillo y núcleos**: eje (automático o dibujado), ancho de pasillo, núcleos (ancho, fondo incluyendo pasillo, cantidad), distancias de evacuación (salida única / múltiple) y núcleos extra automáticos.
 - **Mix**: tipos con m² objetivo y %, ancho mínimo, muro medianero; métricas Match Score, Fit y Unidades únicas.
 - **Planos**: distribución día/noche con pasillo interno, puertas y grafo de conexiones verificado.
+
+## Novedades v2.5
+- **Recibir sin duplicar (Rhino):** si el archivo ya tiene un resultado de Trazo, Recibir dice cuántos objetos hay y en qué capas, y pregunta: **Reemplazar** (borra el anterior, también lo oculto, bloqueado o en capas apagadas, y dibuja el nuevo), **Agregar** (deja los dos) o **Cancelar** (no cambia nada). Al reemplazar, también quita las capas de los niveles que ya no existen (por ejemplo, al pasar de 10 a 5 pisos). Solo toca las capas de resultado (`Trazo::Footprint` y `Trazo::L00…`), nunca las que usas para enviar.
+- Los patios recibidos se dibujan en cada nivel (`Trazo::L00::Patios`…) y no en `Trazo::Patios`: antes, al volver a enviar, se mandaban repetidos y un patio automático pasaba a manual.
+- **Diagnostico** muestra si el archivo ya tiene un resultado dibujado.
 
 ## Novedades v2.4
 - **Patios de aire y luz en el modo Edificio:** la masa menos los patios da uno o más **bloques**, cada uno con su muro exterior, su pasillo, **su propio núcleo** y sus viviendas; el mix se reparte entre todos los bloques.
