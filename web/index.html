@@ -213,7 +213,13 @@ function draw(){ const gb=$('gb'); gb.innerHTML='';
  }
  drawDims(gb); drawOverlay(); }
 /* ---------- cotas y escala gráfica ---------- */
-function domAngle(poly){ let best=0, a=0; poly.forEach((p,i)=>{ const q=poly[(i+1)%poly.length], L=Math.hypot(q[0]-p[0],q[1]-p[1]); if(L>best){ best=L; a=Math.atan2(q[1]-p[1],q[0]-p[0]); } }); const r=Math.PI/2; return ((a%r)+r)%r; }
+function domAngle(poly){ // dirección (módulo 90°) de las cotas: entre las de los bordes, la del rectángulo más chico que contiene la planta (en una planta no ortogonal, no la de un ala girada); a igual rectángulo, la más cercana a los ejes del plano y después la del borde más largo
+ const r=Math.PI/2; let best=null;
+ poly.forEach((p,i)=>{ const q=poly[(i+1)%poly.length], L=Math.hypot(q[0]-p[0],q[1]-p[1]); if(L<1e-6) return;
+  const a=((Math.atan2(q[1]-p[1],q[0]-p[0])%r)+r)%r, c=Math.cos(a), s=Math.sin(a), xs=poly.map(t=>t[0]*c+t[1]*s), ys=poly.map(t=>-t[0]*s+t[1]*c);
+  const A=(Math.max(...xs)-Math.min(...xs))*(Math.max(...ys)-Math.min(...ys)), g=Math.min(a,r-a), tol=best?best[0]*1e-3:0;
+  if(!best||A<best[0]-tol||(A<=best[0]+tol&&(g<best[3]-1e-9||(g<=best[3]+1e-9&&L>best[1])))) best=[A,L,a,g]; });
+ return best?best[2]:0; }
 function cota(g,a,b,ea,eb){ const st={stroke:'#667085','stroke-width':1};   // línea de cota a-b; ea/eb: puntos acotados
  [[ea,a],[eb,b]].forEach(([p,q])=>g.appendChild(el('line',{x1:X(p),y1:Y(p),x2:X(q),y2:Y(q),...st,'stroke-dasharray':'2 2','pointer-events':'none'})));
  g.appendChild(el('line',{x1:X(a),y1:Y(a),x2:X(b),y2:Y(b),...st,'pointer-events':'none'}));

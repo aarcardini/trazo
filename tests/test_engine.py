@@ -557,3 +557,68 @@ def test_lavadero():
 
 if __name__ == "__main__":
     test_lavadero(); print("OK21")
+
+
+def test_no_ortogonales():
+    """R3.4: una planta no ortogonal se divide en alas, cada una con su propio eje: una barra con quiebre, una L con
+    ochava, el tallo oblicuo de una T. Las plantas convexas (un trapecio) siguen con un solo pasillo y una estrella no
+    se parte en puntas."""
+    import math
+    from engine import geometry as G, circulation as C, layout as LY, massing as M
+    caja = lambda p: G.bbox([tuple(q) for q in p])
+    toca = lambda a, b: a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]
+    pisa = lambda a, b: sum(abs(G.area(o)) for o in G.subtract(a, [b])[1][0]) if toca(caja(a), caja(b)) else 0.0
+    oscuras = lambda r: [u["id"] for u in r["units"] if any(not c["ok"] and "sin fachada" in c["msg"] for c in u["checks"])]
+    muestra = lambda n: json.load(open(os.path.join(os.path.dirname(__file__), "..", "samples", n), encoding="utf-8"))
+    for nombre, efic in (("quiebre_45.json", 72), ("L_ochava.json", 70)):
+        s = muestra(nombre)
+        r = run(s["footprint"])
+        m = r["metrics"]
+        assert m["wings"] == 2 and m["efficiency"] >= efic and not oscuras(r), (nombre, m["wings"], m["efficiency"], oscuras(r))
+        assert not [w for w in r["warnings"] if "servido" in w], r["warnings"]
+        sol = sum(pisa(u["poly"], o) for u in r["units"] for o in r["corridors"] + [c["poly"] for c in r["cores"]])
+        assert sol < 0.05, (nombre, sol)
+        areas = [abs(G.area([tuple(p) for p in c["poly"]])) for c in r["cores"]]
+        assert min(areas) >= 0.9 * max(areas), (nombre, areas)          # núcleos enteros, no recortados por el inglete
+    # la planta real (con el muro descontado) también da dos alas: sin escalones de redondeo al girarla
+    import random
+    azar = random.Random(3)
+    for _ in range(60):                                  # quiebres al azar, girados y en coordenadas UTM
+        a, w, t = azar.uniform(20, 70), azar.uniform(13, 20), azar.uniform(0, 3)
+        h = w / 2 * math.tan(math.radians(a) / 2)
+        e = (math.cos(math.radians(a)), math.sin(math.radians(a)))
+        L1, L2 = azar.uniform(25, 50), azar.uniform(25, 50)
+        q = [[0, -w / 2], [L1 + h, -w / 2], [L1 + L2 * e[0] + w / 2 * e[1], L2 * e[1] - w / 2 * e[0]],
+             [L1 + L2 * e[0] - w / 2 * e[1], L2 * e[1] + w / 2 * e[0]], [L1 - h, w / 2], [0, w / 2]]
+        o = azar.choice([(0, 0), (580000.0, 6140000.0)])
+        q = [[o[0] + x * math.cos(t) - y * math.sin(t), o[1] + x * math.sin(t) + y * math.cos(t)] for x, y in q]
+        plate = run(q, h=3)["blocks"][0]["plate"]
+        alas = M.descomponer_alas(plate)
+        assert alas and len(alas) == 2 and sum(abs(G.area(p)) for p, _ in alas) >= 0.99 * abs(G.area(plate)), (q, alas)
+    # T con el tallo a 60°: el pasillo del tallo va a lo largo del tallo
+    t = math.radians(60)
+    fp = [[0, 0], [60, 0], [60, 16], [38, 16], [38 - 30 * math.cos(t), 16 + 30 * math.sin(t)],
+          [38 - 30 * math.cos(t) - 16 / math.sin(t), 16 + 30 * math.sin(t)], [38 - 16 / math.sin(t), 16], [0, 16]]
+    pcs = C.build_pieces(fp, LY.merge_params({}))
+    angs = sorted(round(math.degrees(pc["angle"]) % 180) for pc in pcs)
+    assert angs == [0, 120], angs
+    r = run(fp)
+    assert r["metrics"]["efficiency"] > 60 and not oscuras(r), (r["metrics"]["efficiency"], oscuras(r))
+    sol = sum(pisa(u["poly"], o) for u in r["units"] for o in r["corridors"] + [c["poly"] for c in r["cores"]])
+    assert sol < 0.05, sol                               # el conector oblicuo no pasa del otro borde del pasillo
+    # convexas: un solo pasillo, como antes; una estrella no se parte en puntas
+    for fp in ([[0, 0], [60, 0], [52, 18], [6, 18]], [[0, 0], [50, 5], [45, 40], [15, 32], [-5, 20]],
+               [[0, 0], [60, 4], [54, 40], [18, 32], [-6, 20]]):
+        assert run(fp)["metrics"]["wings"] == 1, fp
+    estrella = [[(30 if k % 2 == 0 else 14) * math.cos(k * math.pi / 10), (30 if k % 2 == 0 else 14) * math.sin(k * math.pi / 10)]
+                for k in range(20)]
+    assert M.descomponer_alas(estrella) is None
+    aleta = [[0, 0], [60, 0], [60, 16], [40, 16], [30, 31], [20, 16], [0, 16]]       # barra con una punta en triángulo
+    assert len(M.descomponer_alas(aleta) or []) <= 1, M.descomponer_alas(aleta)       # la punta no es un ala
+    # web: las cotas van en la dirección del rectángulo más chico que contiene la planta, no en la de un ala girada
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    cuerpo = html.split("function domAngle(poly){", 1)[1].split("\nfunction ", 1)[0]
+    assert "Math.max(...xs)-Math.min(...xs)" in cuerpo and "Math.max(...ys)-Math.min(...ys)" in cuerpo, cuerpo[:200]
+
+if __name__ == "__main__":
+    test_no_ortogonales(); print("OK22")

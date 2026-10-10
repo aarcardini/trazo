@@ -142,6 +142,183 @@ def decompose_wings(plate, min_side=5.0, holes=None, blind=None):
     return th, [[G.rotate(p, th) for p in r] for r in best[1]]
 
 
+def _dir90(a, b):
+    return math.atan2(b[1] - a[1], b[0] - a[0]) % (math.pi / 2)
+
+
+def _dist90(a, b):
+    d = abs(a - b) % (math.pi / 2)
+    return min(d, math.pi / 2 - d)
+
+
+def _rectificar(loc, tol=1e-6):
+    """Polígono ortogonal que contiene a loc: cada borde inclinado se cambia por el escalón de afuera."""
+    out = []
+    n = len(loc)
+    for i in range(n):
+        a, b = loc[i], loc[(i + 1) % n]
+        out.append(a)
+        if abs(a[0] - b[0]) > tol and abs(a[1] - b[1]) > tol:
+            c = (b[0], a[1])
+            m = ((a[0] + b[0] + c[0]) / 3.0, (a[1] + b[1] + c[1]) / 3.0)
+            out.append(c if not G.point_in_poly(m, loc) else (a[0], b[1]))
+    return G.clean(out)
+
+
+def _ajustar(loc, tol=1e-3):
+    """Coordenadas que difieren menos de tol (un milímetro) pasan a ser iguales: sin escalones de redondeo al girar
+    la planta a su marco."""
+    def mapa(vals):
+        m, grupo = {}, []
+        for v in sorted(set(vals)):
+            if grupo and v - grupo[-1] > tol:
+                for w in grupo:
+                    m[w] = grupo[0]
+                grupo = []
+            grupo.append(v)
+        for w in grupo:
+            m[w] = grupo[0]
+        return m
+    mx, my = mapa([p[0] for p in loc]), mapa([p[1] for p in loc])
+    return G.clean([(mx[p[0]], my[p[1]]) for p in loc])
+
+
+def _alas_en_marco(part, th, min_side):
+    """Alas de una parte de la planta en el marco th: se rectifica (bordes inclinados por fuera), se divide en
+    rectángulos como una planta ortogonal y cada rectángulo se recorta con la parte real."""
+    loc = G.ensure_ccw([G.rotate(p, -th) for p in part])
+    rl = _rectificar(_ajustar(loc))
+    best = None
+    for vertical in (True, False):
+        rects = [r for r in _slabs(rl, vertical)
+                 if min(G.bbox(r)[2] - G.bbox(r)[0], G.bbox(r)[3] - G.bbox(r)[1]) >= min_side]
+        alas = []
+        for r in rects:
+            x0, y0, x1, y1 = G.bbox(r)
+            q = G.largest_part(G.clip_rect(loc, x0, x1, y0, y1))
+            if not q or abs(G.area(q)) < 10.0 or len(G.clean(q, 1e-6)) < 4:
+                continue                                 # una punta en triángulo no es un ala
+            alas.append((q, abs(G.area(q)) / ((x1 - x0) * (y1 - y0))))
+        if not alas:
+            continue
+        # como en una planta ortogonal (alas largas, pocas), más la superficie de las alas casi llenas: así no gana
+        # una división que deja afuera una franja, ni una que mete una punta dentro de un ala
+        score = sum(max(G.bbox(q)[2] - G.bbox(q)[0], G.bbox(q)[3] - G.bbox(q)[1]) for q, _ in alas) - 8.0 * len(alas) \
+            + sum(abs(G.area(q)) for q, f in alas if f >= 0.85) / 10.0
+        if best is None or score > best[0]:
+            best = (score, [q for q, _ in alas])
+    return [[G.rotate(p, th) for p in q] for q in best[1]] if best else []
+
+
+def _pureza(poly, cortes):
+    """(ángulo, fracción, largo total) de la dirección dominante (módulo 90°) de los bordes de poly, sin contar las
+    cuerdas de corte (cortes: conjunto de bordes, como pares de puntos redondeados)."""
+    n = len(poly)
+    grupos, tot = [], 0.0
+    for i in range(n):
+        a, b = poly[i], poly[(i + 1) % n]
+        if _clave(a, b) in cortes:
+            continue
+        L = math.hypot(b[0] - a[0], b[1] - a[1])
+        ang = _dir90(a, b)
+        tot += L
+        g = next((g for g in grupos if _dist90(g[0], ang) < math.radians(3)), None)
+        if g:
+            g[1] += L
+            if L > g[2]:
+                g[0], g[2] = ang, L                      # el ángulo del grupo es el de su borde más largo
+        else:
+            grupos.append([ang, L, L])
+    if not grupos or tot <= 0:
+        return 0.0, 0.0, 0.0
+    g = max(grupos, key=lambda g: g[1])
+    return g[0], g[1] / tot, tot
+
+
+def _clave(a, b):
+    k = lambda p: (round(p[0], 4), round(p[1], 4))
+    return frozenset((k(a), k(b)))
+
+
+def _paralelos(poly, cortes, th, min_side):
+    """¿Tiene la parte dos bordes largos paralelos en la dirección th (los lados de un ala)?"""
+    n = len(poly)
+    dirs = []
+    for i in range(n):
+        a, b = poly[i], poly[(i + 1) % n]
+        if _clave(a, b) in cortes or math.hypot(b[0] - a[0], b[1] - a[1]) < min_side:
+            continue
+        if _dist90(_dir90(a, b), th) < math.radians(3):
+            dirs.append(math.atan2(b[1] - a[1], b[0] - a[0]) % math.pi)
+    return any(min(abs(u - v) % math.pi, math.pi - abs(u - v) % math.pi) < math.radians(3)
+               for i, u in enumerate(dirs) for v in dirs[i + 1:])
+
+
+def _partir(poly, cortes, min_side, prof=0):
+    """Divide la planta por cuerdas desde un vértice entrante mientras las partes queden con distinta dirección
+    dominante y cada una más «pura» (más borde en una sola dirección): un ala girada, el tallo oblicuo de una T.
+    Devuelve [(parte, ángulo)]."""
+    th, pur, _ = _pureza(poly, cortes)
+    n = len(poly)
+    if pur >= 0.9 or prof > 4 or n < 5:
+        return [(poly, th)]
+    cruz = lambda o, a, b: (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+    reflex = [i for i in range(n) if cruz(poly[i - 1], poly[i], poly[(i + 1) % n]) < -1e-9]
+    best = None
+    for r in reflex:
+        for v in range(n):
+            if v in (r, (r - 1) % n, (r + 1) % n):
+                continue
+            a, b = poly[r], poly[v]
+            m = ((a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0)
+            if not G.point_in_poly(m, poly):
+                continue
+            cruza = False
+            for j in range(n):
+                if j in (r, (r - 1) % n, v, (v - 1) % n):
+                    continue
+                tu = G.seg_intersection(a, b, poly[j], poly[(j + 1) % n])
+                if tu and 1e-6 < tu[0] < 1 - 1e-6:
+                    cruza = True
+                    break
+            if cruza:
+                continue
+            p1 = [poly[(r + k) % n] for k in range((v - r) % n + 1)]
+            p2 = [poly[(v + k) % n] for k in range((r - v) % n + 1)]
+            if min(abs(G.area(p1)), abs(G.area(p2))) < 4 * min_side * min_side:
+                continue
+            c2 = cortes | {_clave(a, b)}
+            t1, u1, l1 = _pureza(p1, c2)
+            t2, u2, l2 = _pureza(p2, c2)
+            if _dist90(t1, t2) < math.radians(3):
+                continue                                 # mismo marco: lo resuelve la división ortogonal
+            if not (_paralelos(p1, c2, t1, min_side) and _paralelos(p2, c2, t2, min_side)):
+                continue                                 # cada parte, un ala: dos lados largos paralelos (no una punta)
+            peso = (u1 * l1 + u2 * l2) / ((l1 + l2) or 1.0)
+            if best is None or peso > best[0]:
+                best = (peso, p1, p2, c2)
+    if best is None or best[0] < pur + 0.05:
+        return [(poly, th)]
+    return _partir(best[1], best[3], min_side, prof + 1) + _partir(best[2], best[3], min_side, prof + 1)
+
+
+def descomponer_alas(plate, min_side=5.0):
+    """Planta no ortogonal (R3.4): [(polígono del ala, ángulo de su marco)] o None.
+    Un brazo con otra dirección (un ala girada, el tallo oblicuo de una T) se separa por una cuerda desde un vértice
+    entrante, y cada parte se divide en alas en su propio marco: se rectifica (los bordes inclinados por fuera, como
+    una ochava) y se recorta con la planta real. Una planta convexa no se divide (un solo pasillo, como antes)."""
+    poly = G.ensure_ccw(G.clean([tuple(p) for p in plate]))
+    n = len(poly)
+    cruz = lambda o, a, b: (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+    if n < 5 or not any(cruz(poly[i - 1], poly[i], poly[(i + 1) % n]) < -1e-9 for i in range(n)):
+        return None
+    partes = _partir(poly, frozenset(), min_side)
+    alas = [(q, th) for p, th in partes for q in _alas_en_marco(p, th, min_side)]
+    if not alas or sum(abs(G.area(q)) for q, _ in alas) < 0.85 * abs(G.area(poly)):
+        return None
+    return alas
+
+
 def _lado_ciego(r, th, blind):
     """Largo de un ala (rectángulo en el marco girado th) si uno de sus lados largos es medianera ciega, si no 0."""
     x0, y0, x1, y1 = G.bbox(r)

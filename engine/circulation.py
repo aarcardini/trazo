@@ -3,7 +3,7 @@ medianeras. Parte del motor (ver engine/layout.py)."""
 import math
 from . import geometry as G
 from . import plans as P
-from .massing import _dist_point_segment, _dist_to_boundary, decompose_wings
+from .massing import _dist_point_segment, _dist_to_boundary, decompose_wings, descomponer_alas
 
 BOLSILLO = 4.5     # fondo detrás de un núcleo por debajo del cual no cabe una unidad útil (el núcleo llega a la
 #   fachada) y largo de un tramo sin luz que todavía puede ser depósito de la vivienda vecina
@@ -154,7 +154,12 @@ def build_pieces(plate, params):
             return up
     holes = params.get("_huecos")
     dec = decompose_wings(plate, holes=holes, blind=params.get("_blind"))
-    if not dec:
+    alas = None
+    if not dec and not holes:                           # planta no ortogonal: alas con su propio eje (R3.4)
+        alas = descomponer_alas(plate)
+        if alas and len(alas) < 2:
+            alas = None
+    if not dec and not alas:
         o, a, xa, xb = pick_frame(plate, params)
         pc = _make_piece(plate, o, a, xa, xb)
         loc = pc["loc_plate"]
@@ -166,11 +171,12 @@ def build_pieces(plate, params):
             pc = _make_piece(plate, o, a, xa, xb)
             pc["single"] = True
         return [pc]
-    th, polys = dec
+    alas = [(p, dec[0]) for p in dec[1]] if dec else alas
+    polys = [p for p, _ in alas]
     centre = G.centroid(plate)
     pieces = []
     bl = params.get("_blind")
-    for poly in polys:
+    for poly, th in alas:
         x0, y0, x1, y1 = G.bbox([G.rotate(p, -th) for p in poly])
         ang = th if (x1 - x0) >= (y1 - y0) else th + math.pi / 2
         short = min(x1 - x0, y1 - y0)
@@ -202,6 +208,11 @@ def build_pieces(plate, params):
         else:
             pc = _make_piece(poly, *_frame_for_poly(poly, ang))
         pieces.append(pc)
+    if not dec:
+        for pc in pieces:                               # el eje termina donde corta el borde del ala (inglete, cuerda)
+            ivs = G.line_intervals(pc["loc_plate"], 0.0)
+            if ivs:
+                pc["eje"] = max(ivs, key=lambda t: t[1] - t[0])
     return pieces
 
 
@@ -209,7 +220,7 @@ def _link(pieces, i, e, nb, params):
     """Une el extremo e (0=xa, 1=xb) de la pieza i con el pasillo de la pieza nb (conector + bloqueo)."""
     cw, pw = params["corridor_width"], params["party_wall"]
     pc, q = pieces[i], pieces[nb]
-    xe, sgn = (pc["xa"], -1) if e == 0 else (pc["xb"], 1)
+    xe, sgn = (pc.get("eje", (pc["xa"], pc["xb"]))[e], -1 if e == 0 else 1)
     pc["free"][e] = False
     E = G.to_world([(xe, 0.0)], pc["origin"], pc["angle"])[0]
     P = G.to_local([E], q["origin"], q["angle"])[0]
@@ -224,6 +235,13 @@ def _link(pieces, i, e, nb, params):
     else:
         box = [(xe, -cw / 2), (xe + ext_len, -cw / 2), (xe + ext_len, cw / 2), (xe, cw / 2)]
     world_box = G.to_world(box, pc["origin"], pc["angle"])
+    if "eje" in pc:                                      # alas de una planta no ortogonal (R3.4)
+        if t < 0.05:                                     # inglete: los dos pasillos ya se encuentran en el corte
+            pc["junctions"].append({"x": xe, "nb": nb, "nbx": P[0]})
+            return
+        qb_ = G.to_local(world_box, q["origin"], q["angle"])   # un conector oblicuo no pasa del otro borde del pasillo
+        qb_ = G.clip_rect(qb_, None, None, -cw / 2, None) if P[1] > 0 else G.clip_rect(qb_, None, None, None, cw / 2)
+        world_box = G.to_world(qb_, q["origin"], q["angle"]) if qb_ else world_box
     pc["corridor_ext"].append(world_box)
     qb = G.to_local(world_box, q["origin"], q["angle"])
     bx0, by0, bx1, by1 = G.bbox(qb)
@@ -238,7 +256,8 @@ def _link(pieces, i, e, nb, params):
 def _connect(pieces, plate, params):
     """Alas automáticas: detecta extremos libres/uniones y crea los conectores de pasillo."""
     for i, pc in enumerate(pieces):
-        for e, (xe, sgn) in enumerate(((pc["xa"], -1), (pc["xb"], 1))):
+        ea, eb = pc.get("eje", (pc["xa"], pc["xb"]))
+        for e, (xe, sgn) in enumerate(((ea, -1), (eb, 1))):
             probe = G.to_world([(xe + sgn * 0.8, 0.0)], pc["origin"], pc["angle"])[0]
             nb = next((j for j, q in enumerate(pieces) if j != i and G.point_in_poly(probe, q["poly"])), None)
             if nb is not None:
@@ -715,6 +734,24 @@ def _add_core(pc, x, side, params):
                         "poly_local": G.clip_rect(pc["loc_plate"], box[0], box[2], box[1], box[3])})
 
 
+def _x_que_entra(pc, x, side, params):
+    """Alas con inglete o con un extremo inclinado (R3.4): la x más cercana a x donde la caja entera del núcleo entra
+    en el ala (si no, un núcleo recortado por el borde no tendría lugar para la escalera)."""
+    half, cw, d = params["core_width"] / 2.0, params["corridor_width"], params["core_depth"]
+    y0, y1 = (-cw / 2, -cw / 2 + d) if side > 0 else (cw / 2 - d, cw / 2)
+
+    def entra(xx):
+        c = G.clip_rect(pc["loc_plate"], xx - half, xx + half, y0, y1)
+        return bool(c) and abs(G.area(c)) >= 0.98 * 2 * half * d
+    if entra(x):
+        return x
+    for k in range(1, 121):
+        for xx in (x - 0.25 * k, x + 0.25 * k):
+            if pc["xa"] + half <= xx <= pc["xb"] - half and entra(xx):
+                return xx
+    return x
+
+
 def _pisa_nucleo(pieces, pc, nuevo):
     """¿El núcleo nuevo de la pieza pc se superpone con uno que ya está (de cualquier pieza)?"""
     b = nuevo["box"]
@@ -881,7 +918,8 @@ def _generate_circulation(plate, params):
                 x = pc["xa"] + half if e == 0 else pc["xb"] - half
                 if pc["xb"] - pc["xa"] < 2 * half:
                     x = (pc["xa"] + pc["xb"]) / 2.0
-                _add_core(pc, x, 1 if pc.get("single") else next_side(), params)
+                lado = 1 if pc.get("single") else next_side()
+                _add_core(pc, _x_que_entra(pc, x, lado, params) if "eje" in pc else x, lado, params)
                 if pc.get("user") and _pisa_nucleo(pieces, pc, pc["cores"][-1]):
                     pc["cores"].pop()       # ya hay un núcleo ahí (las dos mitades cortas de una línea cortada en un cruce)
                     continue
@@ -915,7 +953,8 @@ def _generate_circulation(plate, params):
         if oscuro is not None:      # de preferencia en un tramo sin luz cercano: no le quita fachada a ninguna vivienda
             _add_core(pc, oscuro[0], oscuro[1], params)
             continue
-        _add_core(pc, x, 1 if pc.get("single") else next_side(), params)
+        lado = 1 if pc.get("single") else next_side()
+        _add_core(pc, _x_que_entra(pc, x, lado, params) if "eje" in pc else x, lado, params)
     # R3.1: un núcleo de punta que deja una franja suelta hasta la fachada se apoya contra ella, si la evacuación
     # sigue dentro del máximo (si no, queda donde estaba)
     for pc in pieces:
@@ -923,6 +962,8 @@ def _generate_circulation(plate, params):
             if c.get("punta") is None:
                 continue
             x2 = _punta(pc, c["punta"], c["x"], c["side"], params)
+            if "eje" in pc:
+                x2 = _x_que_entra(pc, x2, c["side"], params)
             if abs(x2 - c["x"]) < 1e-9:
                 continue
             _add_core(pc, x2, c["side"], params)

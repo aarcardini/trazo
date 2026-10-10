@@ -133,6 +133,16 @@ Si algo falla en Rhino, ejecuta el script y elige **Diagnostico**. Si no se resu
 - **Mix**: tipos con m² objetivo y %, ancho mínimo, muro medianero; métricas Match Score, Fit y Unidades únicas.
 - **Planos**: distribución día/noche con pasillo interno, puertas y grafo de conexiones verificado.
 
+## Novedades v2.12
+- **Plantas no ortogonales (R3.4):** una masa que no es ortogonal (una barra con un quiebre, un ala girada, el tallo oblicuo de una T, o una L, T o U con ochavas) ya no recibe un solo pasillo recto para toda la planta. Se divide en alas y cada ala tiene su propio pasillo a lo largo, que se encuentra con el de la otra en el quiebre (a inglete) o llega a él como una T. Las ochavas y los lados inclinados cortos solo recortan el ala.
+  - En «Barra con quiebre a 45°»: antes 4 viviendas, todas a oscuras, con 18 % de eficiencia («Solo el 18 % de la planta está servido»); ahora 10 viviendas con plano completo y 74,6 %.
+  - En «Esquina en L con ochava»: de 4 viviendas y 38 % a 10 viviendas y 72,6 %.
+  - En formas al azar con quiebres, T oblicuas, Y y ochavas, la superficie de viviendas con plano completo (calidad 80 o más) pasa de casi nada a unos 560-770 m² por planta, y las viviendas a oscuras, de 2,4-5 a menos de 1 por caso (las que quedan dan a una medianera).
+- Las plantas convexas (trapecio, paralelogramo, pentágono) siguen con un solo pasillo, como antes, y las formas ortogonales no cambian.
+- En un ala con un extremo inclinado, el núcleo se corre hasta donde entra entero (antes podía quedar recortado por el borde).
+- Las cotas de la planta van en la dirección del rectángulo más chico que la contiene: en una forma no ortogonal podían quedar giradas y lejos del dibujo.
+- Ejemplos nuevos: «Barra con quiebre a 45° (no ortogonal)» y «Esquina en L con ochava».
+
 ## Novedades v2.11
 - **Corrección: lavadero «sin acceso».** Un lavadero de 0,90 m de ancho (justo lo que pide su puerta) a veces quedaba «sin acceso desde la entrada», según dónde estuviera la vivienda en la planta: un error de redondeo hacía que midiera 0,8999… m. Esas viviendas tenían puntaje 0 en su plano sin un problema real; en formas al azar, 1 de cada 10. En «T con 2 polilíneas», la calidad de planos pasa de 17 a 61.
 
