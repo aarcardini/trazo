@@ -541,3 +541,19 @@ def test_cruces():
 
 if __name__ == "__main__":
     test_cruces(); print("OK20")
+
+
+def test_lavadero():
+    """Corrección (v2.11): un lavadero de 0,90 m (el mínimo para su puerta) quedaba «sin acceso» cuando el cálculo daba
+    0,8999… m, según dónde estuviera la vivienda: 1 de cada 10 viviendas con puntaje 0 sin motivo."""
+    from engine import plans as P
+    for x0 in (0.0, 9.95, 14.39):
+        res = P.layout_unit([(x0, 0), (x0 + 9.15, 0), (x0 + 9.15, 8.5), (x0, 8.5)], 2, None, P.V)
+        assert not [c for c in res["checks"] if not c["ok"]], (x0, [c["msg"] for c in res["checks"] if not c["ok"]])
+    s = json.load(open(os.path.join(os.path.dirname(__file__), "..", "samples", "T_dos_lineas.json"), encoding="utf-8"))
+    r = run(s["footprint"], centerlines=s["centerlines"])
+    assert not [u["id"] for u in r["units"] if any("Lavadero" in c["msg"] and not c["ok"] for c in u["checks"])]
+    assert r["metrics"]["plan_score"] >= 60, r["metrics"]["plan_score"]
+
+if __name__ == "__main__":
+    test_lavadero(); print("OK21")

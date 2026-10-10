@@ -341,7 +341,7 @@ def layout_unit(poly, nb, is_facade=None, vivienda=None):
             continue
         seg = _shared(rooms[ids[a]]["rect"], rooms[ids[b]]["rect"])
         L = 0.0 if not seg else ((seg[1][0] - seg[0][0]) ** 2 + (seg[1][1] - seg[0][1]) ** 2) ** 0.5
-        ok = L >= MIN_SHARE[typ]
+        ok = L >= MIN_SHARE[typ] - 1e-6                 # un borde de 0,8999… m es de 0,90 m
         edges.append({"a": a, "b": b, "type": typ, "ok": ok})
         if ok and typ == "puerta":
             m = ((seg[0][0] + seg[1][0]) / 2, (seg[0][1] + seg[1][1]) / 2)
