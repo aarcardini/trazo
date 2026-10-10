@@ -13,7 +13,11 @@ Tiene dos modos en el mismo repositorio: **Edificio** (`/`, planta tipo) y **Mas
 | Ruta | Qué hace |
 |---|---|
 | `engine/geometry.py` | Geometría 2D pura: área y centroide (desde el primer vértice: precisos con coordenadas UTM), recortes (Sutherland-Hodgman), marcos locales, offsets; `subtract` (resta de polígonos que devuelve varias partes) y `union_parts`; `line_intervals_multi` (polígonos con huecos). |
-| `engine/layout.py` | Motor completo. `generate(data)` es la entrada única. Contiene `VERSION` y `DEFAULT_PARAMS`. |
+| `engine/layout.py` | Fachada del motor: `generate(data)` es la entrada única (orquesta las etapas). Contiene `VERSION`, `DEFAULT_PARAMS` y `merge_params`, y reexporta las funciones de los módulos de abajo (`layout.split_blocks`, etc.). |
+| `engine/massing.py` | Masa: retiros y medianeras (`apply_setbacks`, `make_blind`), `build_massing` (planta y niveles), descomposición en alas (`decompose_wings`, también con patios interiores) y distancias a bordes. |
+| `engine/circulation.py` | Pasillo y núcleos: piezas automáticas (`build_pieces`, alas puente en anillos) y de polilíneas (`build_user_pieces`), uniones (`_link`, `_connect`), núcleos (`_add_core`), evacuación (`egress_at`) y el caso entre medianeras (`is_between`). Entrada: `generate_circulation`. |
+| `engine/units.py` | Viviendas: tramos laterales libres (`_segments`), reparto del mix (`generate_unit_mix`), `metrics_mix` y `unit_rooms` (planos de cada unidad con `plans.layout_unit`). |
+| `engine/patios.py` | Patios y bloques: `auto_patios`, `split_blocks` (bloques y anillos), `make_patio_dark`, `_block_of`. |
 | `engine/plans.py` | Planos de unidad: zonas día/noche, pasillo interno, puertas, grafo de conexiones y comprobaciones. |
 | `engine/standards.py` | Medidas mínimas (normativa) y típicas; cálculo de escalera, ascensores, núcleo e inodoros. Ver `STANDARDS.md`. |
 | `engine/programs.py` | Núcleo por partes (escalera, ascensores, palier, ductos), oficinas/comercio (hall + baños + planta libre) y estacionamiento. |
@@ -32,7 +36,7 @@ Tiene dos modos en el mismo repositorio: **Edificio** (`/`, planta tipo) y **Mas
 API: `GET /api/version`, `GET|POST /api/mass` (Rhino→web y Masterplan→Edificio), `POST /api/generate` (web→motor), `GET /api/result` (→Rhino), `GET /api/dxf`, `GET /api/samples`, `POST /api/reset` (botón «Nuevo»: el servidor olvida la masa y el resultado).
 Masterplan: `GET /masterplan`, `GET /api/mp_samples`, `POST /api/masterplan` (→ `masterplan.generate`), `POST /api/damero` ({predio, masterplan} → {streets}).
 
-### Modelo del motor (layout.py)
+### Modelo del motor (layout.py y sus módulos: massing, circulation, units, patios)
 - Unidades: **metros**. Coordenadas de mundo en planta (x, y). La altura solo afecta a plantas (`stories`).
 - La planta (`plate`) es la huella con el muro exterior descontado (`inset`).
 - **Piezas** (`pieces`): cada tramo de pasillo es una pieza con marco local (`origin`, `angle`): x a lo largo del pasillo, y transversal; el pasillo ocupa |y| ≤ ancho/2.
@@ -43,7 +47,7 @@ Masterplan: `GET /masterplan`, `GET /api/mp_samples`, `POST /api/masterplan` (�
   - `junctions`: uniones entre piezas, usadas por `egress_at` (distancia de evacuación por el pasillo).
 - Núcleos: automáticos (`cores_mode="auto"`, en extremos libres + los que pida la evacuación) o manuales (`cores_mode="manual"`, `params.cores` = puntos de mundo que se ajustan al pasillo más cercano).
 - Unidades: `_segments` da los tramos laterales libres; `generate_unit_mix` los corta en franjas con el mix objetivo (estado compartido entre piezas para respetar porcentajes).
-- Planos: `unit_rooms` (layout.py) pasa cada unidad a su marco propio (x = fachada, v = profundidad desde el pasillo común) y llama a `plans.layout_unit`.
+- Planos: `unit_rooms` (units.py) pasa cada unidad a su marco propio (x = fachada, v = profundidad desde el pasillo común) y llama a `plans.layout_unit`.
   `plans.py` decide zona de día/noche, crea rectángulos de estancias, deduce conexiones abiertas (estancias de día que comparten borde) y con puerta (pasillo→dormitorios/baños), coloca puertas y comprueba: alcance desde la entrada (BFS), fachada de estancias habitables (`is_facade` contra el borde de la planta), anchos mínimos (`MIN_W`) y frente mínimo (`facade_min`). Unidades no rectangulares: rectángulo principal + anexos (estudio/depósito).
 - Medianeras: `params.medianeras` = [{a, b, retiro}]. `apply_setbacks` recorta la huella; `make_blind` crea `params["_blind"](punto)` para saber si un punto está sobre una medianera ciega (retiro < `predio.retiro_ventanas`). Lo usan la comprobación de fachada, `_single_frame` (pasillo contra la medianera) y `is_between` (predio entre medianeras: franja central con núcleo `side=0` y hall).
 - **Patios y bloques** (v2.4): `params.patios_mode` = `auto` (por defecto: `auto_patios` abre patios del ancho `predio.patio_min` en predios entre medianeras demasiado profundos) o `manual` (`params.patios` = polígonos de mundo). `split_blocks` resta los patios de la huella (`G.subtract`) y da los **bloques**; `generate` procesa cada bloque con su copia de parámetros (`pb`: pasillo, núcleos —al menos uno por bloque—, unidades, programas) y comparte el estado del mix. `make_patio_dark` crea `params["_patio_dark"](punto)` para las caras que dan a un patio más angosto que el mínimo. El resultado agrega `blocks` [{footprint, plate}], `patios`, `patios_auto` y `metrics.blocks`/`patio_area`; `plate` es la del primer bloque. Sin patios, el resultado es idéntico al de antes. Pendiente: alturas por bloque (varias masas a la vez).
@@ -96,7 +100,6 @@ En GitHub, `.github/workflows/pruebas.yml` ejecuta las pruebas y valida el scrip
 - Cruces en X entre polilíneas no se resuelven (solapes cerca del cruce).
 - En codos queda ~5 % de planta sin usar; tramos menores que el ancho mínimo se descartan.
 - Masterplan: calles curvas, cruces en ángulo muy agudo y quiebres de calle a mitad de manzana no se resuelven todavía; no hay salida a Rhino/DXF del masterplan.
-- `layout.py` es grande; su división en módulos está prevista en el roadmap (tarea R2.1).
 
 ## Glosario
 Masa: volumen del edificio. Zona de día: hall, cocina, comedor, estar. Zona de noche: pasillo interno, dormitorios, baños.

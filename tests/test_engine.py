@@ -366,3 +366,19 @@ def test_patios_interiores():
 
 if __name__ == "__main__":
     test_patios_interiores(); print("OK15")
+
+
+def test_modulos():
+    """R2.1: el motor está repartido en módulos (massing, circulation, units, patios); layout reexporta sus funciones
+    y el servidor los recarga en orden cuando cambia un archivo (sin reiniciar)."""
+    import server
+    from engine import layout, massing, circulation, units, patios
+    assert layout.decompose_wings is massing.decompose_wings and layout.split_blocks is patios.split_blocks
+    assert layout.generate_circulation is circulation.generate_circulation and layout.unit_rooms is units.unit_rooms
+    server._loaded[0] = 0                                  # como si hubiera cambiado un archivo del motor
+    lay, _ = server.engine()
+    r = lay.generate({"footprint": [[0, 0], [60, 0], [60, 16], [0, 16]], "height": 15, "stage": "plans"})
+    assert len(r["units"]) == 8 and lay.split_blocks is patios.split_blocks, len(r["units"])
+
+if __name__ == "__main__":
+    test_modulos(); print("OK16")
