@@ -18,7 +18,7 @@ Leyenda de esfuerzo: S = pequeño, M = mediano, L = grande (dividir antes de emp
   *Hecho cuando:* cambiar el motor sin querer rompe una prueba con un mensaje claro. **Requisito de R2.1.**
 
 ## Fase 1 — Puente con Rhino fiable (requiere pruebas del usuario)
-- [ ] **R1.1 (M) Diagnóstico en Rhino.** Mensajes claros en la consola de Rhino para cada fallo (servidor apagado, objeto no válido, sin base plana, unidades). Comando de prueba que muestre versión de Rhino, unidades y estado del servidor.
+- [x] **R1.1 (M) Diagnóstico en Rhino.** Mensajes claros en la consola de Rhino para cada fallo (servidor apagado, objeto no válido, sin base plana, unidades). Comando de prueba que muestre versión de Rhino, unidades y estado del servidor.
   *Hecho cuando:* el usuario ejecuta Enviar/Recibir en Mac y Windows sin errores, o con un mensaje que explica qué hacer.
 - [ ] **R1.2 (S) Modo archivo de respaldo.** Si la conexión HTTP falla, el script guarda/lee un JSON en una carpeta conocida, y la web permite cargarlo/descargarlo.
 - [ ] **R1.3 (M) Masas con varios volúmenes y huecos.** Aceptar varias masas a la vez y huellas con patios (huecos interiores).

@@ -192,3 +192,12 @@ def test_masterplan_samples_manzana():
 
 if __name__ == "__main__":
     test_masterplan_samples_manzana(); print("OK9")
+
+
+def test_puente_rhino():
+    """Script de Rhino con Rhino simulado: mensajes claros, diagnóstico y menú (R1.1). Detalle en tests/test_rhino.py."""
+    import test_rhino
+    test_rhino.todas()
+
+if __name__ == "__main__":
+    test_puente_rhino(); print("OK10")

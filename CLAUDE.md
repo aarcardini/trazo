@@ -26,6 +26,7 @@ Tiene dos modos en el mismo repositorio: **Edificio** (`/`, planta tipo) y **Mas
 | `rhino/trazo_rhino.py` | Puente Rhino 8 (CPython 3, `rhinoscriptsyntax`/RhinoCommon): Enviar masa / Recibir resultado. |
 | `samples/*.json` | Masas de ejemplo que aparecen en el desplegable de la web. |
 | `tests/test_engine.py` | Pruebas del motor (`python tests/test_engine.py`). |
+| `tests/test_rhino.py` | Pruebas del script de Rhino sin Rhino: lo carga con Rhino simulado (`unittest.mock`) y habla con `server.py` real. Mensajes, diagnóstico y menú; la geometría solo se prueba en Rhino. |
 | `tests/regresion.py`, `tests/golden/` | Pruebas de regresión: métricas de referencia de cada ejemplo de `samples/` (unidades, eficiencia, sin usar, núcleos, lotes…) con un margen por métrica. Corren dentro de `test_engine.py`. |
 
 API: `GET /api/version`, `GET|POST /api/mass` (Rhino→web y Masterplan→Edificio), `POST /api/generate` (web→motor), `GET /api/result` (→Rhino), `GET /api/dxf`, `GET /api/samples`.
@@ -76,7 +77,7 @@ Ningún tamaño de estancia, núcleo, baño o plaza se escribe a mano en el cód
 3. Implementa, ejecuta `python tests/test_engine.py` y, si tocas la web, comprueba en navegador headless que la página carga sin errores de consola (Playwright si está disponible).
    Si el motor cambia métricas de los ejemplos **a propósito**, actualiza las referencias (`python tests/regresion.py --actualizar`) y pega en el PR la tabla de `python tests/regresion.py` con lo que cambió. Si cambian sin querer, es un error: corrígelo.
 4. En el PR explica en lenguaje de arquitecto: qué cambia en la planta, cómo probarlo en la web y en Rhino, y qué no se pudo probar.
-5. **No puedes probar con Rhino.** Indica en el PR los pasos exactos para que el usuario lo pruebe y qué mensaje debería ver.
+5. **No puedes probar con Rhino.** Lo que no depende de la geometría se prueba en `tests/test_rhino.py` (Rhino simulado). Indica en el PR los pasos exactos para que el usuario lo pruebe y qué mensaje debería ver. Los mensajes del script empiezan con «Trazo:» y siempre dicen qué hacer.
 
 ## Comandos
 ```bash
