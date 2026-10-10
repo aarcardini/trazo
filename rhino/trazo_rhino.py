@@ -6,7 +6,8 @@ Ejecuta este archivo en Rhino 8 con el comando:   _RunPythonScript   (selecciona
 o ábrelo en _ScriptEditor y pulsa Run.
 
   Enviar       : toma un sólido cerrado, extrae la huella y la altura y la manda a la web.
-  Recibir      : dibuja en Rhino lo que generaste en la web (capas Trazo::...).
+  Recibir      : dibuja en Rhino lo que generaste en la web (capas Trazo::Footprint y Trazo::L00, L01…).
+                 Si ya hay un resultado anterior, pregunta si reemplazarlo.
   Diagnostico  : muestra la versión de Rhino, las unidades del archivo, las capas de Trazo y el estado del servidor.
 
 Requiere que el servidor esté corriendo:  py server.py (Windows)  /  python3 server.py (Mac)
@@ -334,6 +335,66 @@ def add_poly(points, z, lyr, k, name=None):
     return guid
 
 
+# Capas de resultado: lo que dibuja Recibir (Trazo::Footprint y los niveles Trazo::L00, L01… con sus subcapas).
+# Las capas de entrada (Trazo::Centerline, Trazo::Cores, Trazo::Medianeras, Trazo::Patios) no se tocan nunca.
+def es_capa_resultado(ruta):
+    partes = (ruta or "").split("::")
+    if len(partes) < 2 or partes[0] != "Trazo":
+        return False
+    p = partes[1]
+    return p == "Footprint" or (len(p) >= 2 and p[0] == "L" and p[1:].isdigit())
+
+
+def resultado_anterior():
+    """Lo que dejó un Recibir anterior: (objetos, {índice de capa: ruta}). Incluye los objetos ocultos o bloqueados
+    y los de capas apagadas o bloqueadas, para que Reemplazar no deje copias escondidas."""
+    capas = {c.Index: c.FullPath for c in sc.doc.Layers if not c.IsDeleted and es_capa_resultado(c.FullPath)}
+    if not capas:
+        return [], capas
+    s = Rhino.DocObjects.ObjectEnumeratorSettings()
+    s.HiddenObjects = True
+    s.LockedObjects = True
+    s.ReferenceObjects = False          # los de un archivo vinculado o de referencia no son de este archivo
+    return [o for o in sc.doc.Objects.GetObjectList(s) if o.Attributes.LayerIndex in capas], capas
+
+
+def donde(objs, capas):
+    """«Trazo::Footprint y Trazo::L00…L04»: dónde están los objetos de un resultado."""
+    raices = {capas[o.Attributes.LayerIndex].split("::")[1] for o in objs}
+    niveles = sorted(r for r in raices if r != "Footprint")
+    partes = ["Trazo::Footprint"] if "Footprint" in raices else []
+    if niveles:
+        partes.append("Trazo::" + (niveles[0] if len(niveles) == 1 else "%s…%s" % (niveles[0], niveles[-1])))
+    return " y ".join(partes)
+
+
+def borrar(objs):
+    """Borra los objetos aunque estén ocultos o bloqueados (el usuario eligió Reemplazar). Devuelve los que no pudo."""
+    quedan = []
+    for o in objs:
+        try:
+            ok = sc.doc.Objects.Delete(o, True, True)        # silencioso y sin respetar ocultos/bloqueados
+        except TypeError:                                     # por si esa variante no existiera
+            ok = sc.doc.Objects.Delete(o.Id, True)
+        if not ok:
+            quedan.append(o)
+    return quedan
+
+
+def quitar_niveles_sobrantes(usados):
+    """Tras Reemplazar: borra las capas de nivel que el resultado nuevo no usa y quedaron vacías (por ejemplo, al
+    pasar de 10 a 5 pisos), de las subcapas hacia arriba. Si alguna no se puede borrar (la capa actual), queda."""
+    objs, capas = resultado_anterior()
+    raiz = lambda ruta: ruta.split("::")[1]
+    llenos = {raiz(capas[o.Attributes.LayerIndex]) for o in objs}
+    for i, ruta in sorted(capas.items(), key=lambda c: -c[1].count("::")):
+        if raiz(ruta) not in usados and raiz(ruta) != "Footprint" and raiz(ruta) not in llenos:
+            try:
+                sc.doc.Layers.Delete(i, True)
+            except Exception:
+                pass
+
+
 def receive_result():
     data = http("GET", "/api/result")
     res = data.get("result")
@@ -344,17 +405,31 @@ def receive_result():
     inv = k                        # metros / (metros por unidad) = unidades
     mass = http("GET", "/api/mass").get("mass") or {}
     aviso = origen_resultado(res, mass)
+    if aviso:
+        print("Trazo: aviso: " + aviso)
+    viejos, capas = resultado_anterior()
+    modo = "reemplazar"
+    if viejos:
+        print("Trazo: ya hay un resultado anterior en este archivo: %d objeto(s) en %s." %
+              (len(viejos), donde(viejos, capas)))
+        print("  Reemplazar: lo borra (también lo oculto o bloqueado) y dibuja el nuevo. Agregar: lo deja y dibuja "
+              "el nuevo además. Cancelar: no cambia nada.")
+        op = rs.GetString("¿Qué hago con el resultado anterior?", "Reemplazar", ["Reemplazar", "Agregar", "Cancelar"])
+        modo = (op or "Cancelar").strip().lower()
+        if modo not in ("reemplazar", "agregar"):
+            print("Trazo: no recibí nada; el resultado anterior quedó como estaba. Para recibir, vuelve a elegir Recibir.")
+            return
     z_origin = mass.get("origin_z", 0.0)
     sc.doc.Views.RedrawEnabled = False
-    count = 0
+    count, quedan = 0, []
     stories = [s for s in res["stories"] if s["program"] == "Residential"] or res["stories"][:1]
     try:
         add_poly(res["footprint"], z_origin, layer("Footprint", LAYER_COLORS["Footprint"]), inv)
-        for p in res.get("patios", []):
-            add_poly(p, z_origin, layer("Patios", LAYER_COLORS["Patios"]), inv, "Patio")
         for s in stories:
             z = z_origin + s["z"] / k
             tag = "L%02d" % s["index"]
+            for p in res.get("patios", []):      # en el nivel, no en Trazo::Patios (esa capa es para enviar)
+                add_poly(p, z, layer(tag + "::Patios", LAYER_COLORS["Patios"]), inv, "Patio")
             for c in res.get("corridors", []):
                 add_poly(c, z, layer(tag + "::Corridor", LAYER_COLORS["Corridor"]), inv)
             for c in res.get("cores", []):
@@ -372,13 +447,21 @@ def receive_result():
                 for r in u.get("rooms", []):
                     add_poly(r["poly"], z, layer(tag + "::Rooms::" + r["kind"], LAYER_COLORS.get(r["kind"], SD.Color.Gray)),
                              inv, "%s %.1fm2" % (r["name"], r["area"]))
+        if viejos and modo == "reemplazar":      # el anterior se borra después: si algo falla, no se pierde
+            quedan = borrar(viejos)
+            quitar_niveles_sobrantes({"L%02d" % s["index"] for s in stories})
     finally:
         sc.doc.Views.RedrawEnabled = True
         sc.doc.Views.Redraw()
-    if aviso:
-        print("Trazo: aviso: " + aviso)
-    print("Importado: %d objetos principales en capas Trazo::... (niveles %s)" %
+    print("Trazo: recibido: %d objetos principales en capas Trazo::... (niveles %s)." %
           (count, ", ".join("L%02d" % s["index"] for s in stories)))
+    if viejos and modo == "reemplazar":
+        print("Trazo: reemplacé el resultado anterior (%d objeto(s) borrados)." % (len(viejos) - len(quedan)))
+        if quedan:
+            print("Trazo: aviso: no pude borrar %d objeto(s) del resultado anterior: bórralos a mano en %s." %
+                  (len(quedan), donde(quedan, capas)))
+    elif viejos:
+        print("Trazo: el resultado anterior sigue en sus capas (elegiste Agregar).")
 
 
 # ------------------------------------------------------------------ diagnóstico
@@ -395,6 +478,9 @@ def diagnostico():
                        ("Trazo::Medianeras", "líneas de medianeras"), ("Trazo::Patios", "curvas cerradas de patios")):
         n = len(rs.ObjectsByLayer(capa) or []) if rs.IsLayer(capa) else None
         print("  Capa %s: %s" % (capa, "no existe (es opcional: %s)" % para if n is None else "%d objeto(s)" % n))
+    viejos, capas = resultado_anterior()
+    print("  Resultado dibujado en este archivo: %s" % ("%d objeto(s) en %s (Recibir pregunta si reemplazarlo)" %
+                                                       (len(viejos), donde(viejos, capas)) if viejos else "ninguno"))
     try:
         version = http("GET", "/api/version", timeout=5).get("version")
         mass = http("GET", "/api/mass", timeout=5)

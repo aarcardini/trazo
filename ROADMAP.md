@@ -23,7 +23,7 @@ Leyenda de esfuerzo: S = pequeño, M = mediano, L = grande (dividir antes de emp
 - [ ] **R1.2 (S) Modo archivo de respaldo.** Si la conexión HTTP falla, el script guarda/lee un JSON en una carpeta conocida, y la web permite cargarlo/descargarlo.
 - [~] **R1.3 (M) Masas con varios volúmenes y huecos.** (v2.4: patios que separan la masa en bloques, automáticos y manuales, también desde Rhino con la capa `Trazo::Patios`; faltan varias masas a la vez y patios rodeados de edificio) Aceptar varias masas a la vez y huellas con patios (huecos interiores).
   *Hecho cuando:* una masa en U cerrada (con patio) genera unidades alrededor del patio.
-- [ ] **R1.4 (S) Recibir sin duplicar.** Al recibir de nuevo, borrar o reemplazar las capas `Trazo::L..` anteriores (preguntando antes).
+- [x] **R1.4 (S) Recibir sin duplicar.** (v2.5: pregunta Reemplazar / Agregar / Cancelar; reemplaza también lo oculto o bloqueado y quita los niveles que sobran; los patios recibidos van en `Trazo::Lnn::Patios`) Al recibir de nuevo, borrar o reemplazar las capas `Trazo::L..` anteriores (preguntando antes).
 
 ## Fase 2 — Ordenar el motor (sin cambiar resultados)
 - [ ] **R2.1 (L) Dividir `layout.py`** en `massing.py`, `circulation.py` (piezas, uniones, núcleos), `units.py` (segmentos y mix), `plans.py` (estancias), con `layout.generate` como fachada.
