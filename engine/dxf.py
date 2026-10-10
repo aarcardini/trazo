@@ -28,4 +28,8 @@ def result_to_dxf(res):
                 out += _poly("Trazo_%s_Rooms_%s" % (tag, r["kind"]), r["poly"], z)
             for d in u.get("doors", []):
                 out += _poly("Trazo_%s_Doors" % tag, [d["p"], d["q"]], z, closed=False)
+            for q in u.get("equipamiento", []):
+                out += _poly("Trazo_%s_Equipamiento" % tag, q["poly"], z)
+                for ln in q.get("lines", []):
+                    out += _poly("Trazo_%s_Equipamiento" % tag, ln, z, closed=False)
     return out + "0\nENDSEC\n0\nEOF\n"

@@ -30,7 +30,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:3px 4px;b
  <div id="rhinoBadge" class="w" style="color:var(--mut)">Esperando masa de Rhino… (o usa un ejemplo)</div>
  <h2>0 · Medidas y normativa</h2>
  <details id="stdBox"><summary style="cursor:pointer;font-size:13px">Ver y editar medidas (mínimos y típicos)</summary><div id="stdPanel"></div>
-  <button class="s" onclick="resetStd()">Restaurar valores</button><div class="hint">Mínimos: ordenanzas de higiene de la vivienda (Uruguay), Bomberos IT 19, IM ductos de ascensor, Dec. 406/988. Detalle y fuentes en STANDARDS.md.</div></details>
+  <button class="s" onclick="resetStd()">Restaurar valores</button><div class="hint">Mínimos: ordenanzas de higiene de la vivienda (Uruguay), Bomberos IT 19, IM ductos de ascensor, Dec. 406/988; equipamiento: módulos habituales (Neufert). Detalle y fuentes en STANDARDS.md.</div></details>
  <h2>1 · Masa</h2>
  <label>Ejemplo <select id="sample"></select></label>
  <button class="s" onclick="nuevo()" title="Borra la masa, las polilíneas, los núcleos, las medianeras, las variantes y el resultado; conserva medidas, mix y colores">Nuevo (en blanco)</button>
@@ -98,6 +98,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:3px 4px;b
   <button class="s" id="btnUndo" style="padding:2px 9px" onclick="deshacer()" disabled title="Deshacer (Ctrl+Z)">↶</button><button class="s" id="btnRedo" style="padding:2px 9px" onclick="rehacer()" disabled title="Rehacer (Ctrl+Shift+Z)">↷</button>
   <span class="grp" id="lvlGrp">Nivel <select id="lvl" onchange="planStory=+this.value;draw()"></select>
    <label style="margin:0;gap:4px"><input type="checkbox" id="showGraph" checked onchange="showGraph=this.checked;draw()">Conexiones</label>
+   <label style="margin:0;gap:4px" title="Artefactos de baños, cocina y lavadero"><input type="checkbox" id="showEquip" checked onchange="showEquip=this.checked;draw()">Equipamiento</label>
    <label style="margin:0;gap:4px" title="Medidas totales por fuera de la planta y escala gráfica"><input type="checkbox" id="showDims" checked onchange="showDims=this.checked;draw()">Cotas</label>
    <label style="margin:0;gap:4px" title="Tramos de pasillo y viviendas que no cumplen el fondo de saco (naranja) o el recorrido máximo (rojo)"><input type="checkbox" id="showEvac" checked onchange="showEvac=this.checked;draw()">Evacuación</label>
    <button class="s" style="padding:2px 7px" title="Encuadrar" onclick="zoom=1;pan=[0,0];draw()">⤢</button></span>
@@ -150,7 +151,7 @@ const UNIT_L=[0.58,0.72,0.46,0.82,0.38,0.88];
 const roomColor=(kind,prog)=>tone(progColor(prog||'Residential'),ROOM_L[kind]??0.7);
 const COL=new Proxy({},{get:(t,k)=>roomColor(k)});
 const KLABEL={bedroom:'Dormitorio',living:'Estar',dining:'Comedor',kitchen:'Cocina',bath:'Baño',hall:'Hall',hallway:'Pasillo',laundry:'Lavadero',storage:'Depósito',study:'Estudio'};
-let selUnit=null, selCore=null, selSpec=null, showGraph=true, showDims=true, showEvac=true;
+let selUnit=null, selCore=null, selSpec=null, showGraph=true, showDims=true, showEvac=true, showEquip=true;
 const EVAC={ok:'#1a9d5b',saco:'#e8890c',fail:'#d63b3b'};   // puerta de cada vivienda: cumple, fondo de saco largo, recorrido largo
 
 /* ---------- paneles de entrada ---------- */
@@ -216,7 +217,7 @@ function draw(){ const gb=$('gb'); gb.innerHTML='';
    else gb.appendChild(el('polygon',{points:pts(u.poly),fill:unitColor(u)}));
    gb.appendChild(el('polygon',{points:pts(u.poly),fill:'none',stroke:u.id===selUnit?'#2f6fed':'#1b2430','stroke-width':u.id===selUnit?3:sw}));
    gb.appendChild(el('polygon',{points:pts(u.poly),fill:'transparent','data-unit':u.id,style:'cursor:pointer'}));
-   const gd=el('g',{'pointer-events':'none'}); drawDoors(gd,u); if(showGraph) drawGraph(gd,u); gb.appendChild(gd);
+   const gd=el('g',{'pointer-events':'none'}); if(showEquip) drawEquip(gd,u); drawDoors(gd,u); if(showGraph) drawGraph(gd,u); gb.appendChild(gd);
    const cx=u.poly.reduce((a,p)=>a+p[0],0)/u.poly.length, cy=u.poly.reduce((a,p)=>a+p[1],0)/u.poly.length;
    gb.appendChild(el('text',{x:X([cx,cy]),y:Y([cx,cy]),'text-anchor':'middle','font-size':11,fill:'#1b2430','pointer-events':'none'},u.id+' · '+u.area+' m²'+(u.editada?' ✎':'')));
    if(showEvac&&u.egress_status&&u.egress_status!=='ok') gb.appendChild(el('polygon',{points:pts(u.poly),fill:'none',stroke:EVAC[u.egress_status],'stroke-width':2.5,'stroke-dasharray':'7 4','pointer-events':'none'}));
@@ -279,10 +280,11 @@ function drawOverlay(){ const go=$('go'); go.innerHTML=''; if(!view) return; dra
  if(tool==='addcore'&&mouse){ go.appendChild(el('rect',{x:X(mouse)-8,y:Y(mouse)-8,width:16,height:16,fill:circColor('core'),'fill-opacity':.6,stroke:circStroke()})); } }
 
 /* ---------- medidas y normativa ---------- */
-const STD_LABELS={predio:'Predio',retiro_ventanas:'Retiro de medianera para ventanas (m)',patio_min:'Ancho mínimo de patio para iluminar (m)',vivienda:'Vivienda',nucleo:'Núcleo',oficinas:'Oficinas',comercial:'Comercial',estacionamiento:'Estacionamiento',
+const STD_LABELS={predio:'Predio',retiro_ventanas:'Retiro de medianera para ventanas (m)',patio_min:'Ancho mínimo de patio para iluminar (m)',vivienda:'Vivienda',nucleo:'Núcleo',oficinas:'Oficinas',comercial:'Comercial',estacionamiento:'Estacionamiento',equipamiento:'Equipamiento (baños, cocina y lavadero)',
  dorm_principal:'Dormitorio principal',dorm_secundario:'Dormitorio secundario',estar_comedor:'Estar-comedor',cocina:'Cocina',bano:'Baño',bano_aux:'Baño auxiliar',lavadero:'Lavadero',pasillo:'Pasillo interno',hall:'Hall de entrada',estudio:'Estudio',
  min_area:'mín. m²',min_side:'lado mín.',typ_area:'típ. m²',typ:'típ. frente × fondo',typ_side:'típico',escalera_ancho:'Ancho de tramo (m)',contrahuella:'Contrahuella máx. (m)',huella:'Huella (m)',ojo:'Ojo (m)',muro:'Muro (m)',ascensor_ducto:'Ducto ascensor (m)',ascensor_cabina:'Cabina (m)',palier:'Palier (m)',ducto_instalaciones:'Ducto instalaciones (m)',unidades_por_ascensor:'Unidades por ascensor',altura_sin_ascensor:'Altura máx. sin ascensor (m)',pisos_dos_ascensores:'Niveles para 2 ascensores',
- m2_por_persona:'m² por persona',trabajadores_por_inodoro:'Personas por inodoro',cubiculo:'Cubículo inodoro (m)',zona_lavabos:'Zona lavabos (m)',bano_accesible:'Baño accesible (m)',hall_extra:'Hall extra (m)',plaza:'Plaza (m)',calle:'Calle (m)'};
+ m2_por_persona:'m² por persona',trabajadores_por_inodoro:'Personas por inodoro',cubiculo:'Cubículo inodoro (m)',zona_lavabos:'Zona lavabos (m)',bano_accesible:'Baño accesible (m)',hall_extra:'Hall extra (m)',plaza:'Plaza (m)',calle:'Calle (m)',
+ puerta_interior:'Puerta interior (m)',puerta_entrada:'Puerta de entrada (m)',inodoro:'Inodoro (largo × fondo, m)',bide:'Bidé (m)',lavatorio:'Lavatorio (m)',ducha:'Ducha (m)',paso_bano:'Paso delante de los artefactos (m)',mesada_fondo:'Fondo de mesada (m)',heladera:'Heladera (m)',bacha_cocina:'Bacha de cocina, largo (m)',cocina_horno:'Cocina y horno, largo (m)',mesada_trabajo:'Mesada entre bacha y cocina (m)',paso_cocina:'Paso delante de la mesada (m)',lavarropas:'Lavarropas (m)',pileta_lavar:'Pileta de lavar (m)',paso_lavadero:'Paso en el lavadero (m)'};
 async function loadStd(){ try{ STD_DEF=await (await fetch('/api/standards')).json(); }catch(e){ return; } let sv=null; try{ sv=JSON.parse((localStorage.getItem('trazo.std')||localStorage.getItem('finchlocal.std'))||'null'); }catch(e){}
  STD=JSON.parse(JSON.stringify(STD_DEF)); if(sv) for(const g in sv) for(const k in sv[g]) if(STD[g]&&k in STD[g]) STD[g][k]=sv[g][k]; renderStd(); }
 function saveStd(){ try{ localStorage.setItem('trazo.std',JSON.stringify(STD)); }catch(e){} }
@@ -290,7 +292,7 @@ function resetStd(){ STD=JSON.parse(JSON.stringify(STD_DEF)); saveStd(); renderS
 function setStd(path,val){ let o=STD; for(let i=0;i<path.length-1;i++) o=o[path[i]]; o[path[path.length-1]]=val; saveStd(); renderMeds(); if(lastStage) run(lastStage,{keepView:true}); }
 function numIn(path,v){ return `<input type="number" step="0.05" value="${v}" style="width:58px" onchange="setStd(${JSON.stringify(path).replace(/"/g,"'")},+this.value)">`; }
 function renderStd(){ if(!STD) return; let h='';
- for(const g of ['vivienda','nucleo','oficinas','comercial','predio','estacionamiento']){ h+=`<div class="hint" style="font-weight:600;color:var(--ink);margin-top:8px">${STD_LABELS[g]}</div>`;
+ for(const g of ['vivienda','equipamiento','nucleo','oficinas','comercial','predio','estacionamiento']){ h+=`<div class="hint" style="font-weight:600;color:var(--ink);margin-top:8px">${STD_LABELS[g]}</div>`;
   for(const [k,v] of Object.entries(STD[g])){
    if(g==='vivienda'&&typeof v==='object'&&!Array.isArray(v)){ h+=`<div style="font-size:12px;margin:4px 0 2px">${STD_LABELS[k]||k}</div><div style="display:flex;gap:4px;flex-wrap:wrap;font-size:11px;color:var(--mut)">`+Object.entries(v).map(([kk,vv])=>Array.isArray(vv)?`${STD_LABELS[kk]} ${numIn([g,k,kk,0],vv[0])}×${numIn([g,k,kk,1],vv[1])}`:`${STD_LABELS[kk]} ${numIn([g,k,kk],vv)}`).join(' ')+`</div>`; }
    else if(g==='vivienda') continue;
@@ -316,6 +318,8 @@ function drawShapesAxo(g,shapes,poly,S,z){ shapes.forEach(sh=>{ g.appendChild(el
   (sh.lines||[]).forEach(l=>{ const a=S(l[0][0],l[0][1],z).split(','), b=S(l[1][0],l[1][1],z).split(','); g.appendChild(el('line',{x1:a[0],y1:a[1],x2:b[0],y2:b[1],stroke:sh.lc||'#333','stroke-width':.4})); }); }); }
 
 /* ---------- puertas y grafo de conexiones ---------- */
+function drawEquip(g,u){ (u.equipamiento||[]).forEach(q=>{ g.appendChild(el('polygon',{points:pts(q.poly),fill:'#f7f8fa',stroke:'#4a5160','stroke-width':.7}));   // F5: artefactos
+  (q.lines||[]).forEach(ln=>g.appendChild(el('polyline',{points:pts(ln),fill:'none',stroke:'#4a5160','stroke-width':.6}))); }); }
 function drawDoors(g,u){ if(!u.doors) return; const sc=view.s;
  u.doors.forEach(d=>{ const P=[X(d.p),Y(d.p)], Q=[X(d.q),Y(d.q)]; const L=Math.hypot(Q[0]-P[0],Q[1]-P[1]); if(L<2) return;
   g.appendChild(el('line',{x1:P[0],y1:P[1],x2:Q[0],y2:Q[1],style:'stroke:var(--bg)','stroke-width':d.entry?4:3}));

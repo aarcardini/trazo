@@ -19,7 +19,8 @@ Tiene dos modos en el mismo repositorio: **Edificio** (`/`, planta tipo) y **Mas
 | `engine/evacuacion.py` | Evacuación (R3.6): la red de pasillos como grafo; desde la puerta de cada vivienda, `recorrido` hasta el núcleo más cercano y `saco` (tramo con una sola dirección de salida, hasta un núcleo o un punto con dos direcciones; un anillo da dos aunque lleguen al mismo núcleo) y `tramos` de pasillo fuera de norma. |
 | `engine/units.py` | Viviendas: tramos laterales libres (`_segments`), reparto del mix (`generate_unit_mix`), `sin_solapes` (pasillos dibujados: recorta o quita la vivienda que pise a otra, a un pasillo o a un núcleo), `metrics_mix` y `unit_rooms` (planos de cada unidad con `plans.layout_unit`). |
 | `engine/patios.py` | Patios y bloques: `auto_patios`, `split_blocks` (bloques y anillos), `make_patio_dark`, `_block_of`. |
-| `engine/plans.py` | Planos de unidad: zonas día/noche, pasillo interno, puertas, grafo de conexiones y comprobaciones. |
+| `engine/plans.py` | Planos de unidad: zonas día/noche, pasillo interno, puertas (ancho de `standards` → `equipamiento`), grafo de conexiones y comprobaciones. |
+| `engine/equipamiento.py` | F5: artefactos de baños, cocina y lavadero dentro de las estancias de `plans.py` (módulos contra paredes macizas, paso libre, sin pisar el barrido de las puertas; `resolver` con memoria por geometría). `plans` elige la puerta de baños y lavaderos donde mejor entran; un baño 2 donde no entra la ducha queda como toilette. Cada vivienda trae `equipamiento` [{kind, name, room, poly, lines}]; la web, Rhino (`Trazo::Lnn::Equipamiento`) y el DXF lo dibujan. |
 | `engine/standards.py` | Medidas mínimas (normativa) y típicas; cálculo de escalera, ascensores, núcleo e inodoros. Ver `STANDARDS.md`. |
 | `engine/programs.py` | Núcleo por partes (escalera, ascensores, palier, ductos), oficinas/comercio (hall + baños + planta libre) y estacionamiento. |
 | `engine/dxf.py` | Exportador DXF R12 (polilíneas por capa). |

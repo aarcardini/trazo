@@ -19,7 +19,7 @@ from .units import (_bisect_x, _chain_union, _is_rect, _segments, generate_unit_
                     unit_rooms, sin_solapes, editar_unidades, vecinas)  # noqa: F401
 from .patios import (auto_patios, _anillo, split_blocks, make_patio_dark, _block_of, _block_of_line)  # noqa: F401
 
-VERSION = "2.20"
+VERSION = "2.21"
 
 DEFAULT_PARAMS = {
     # Masa
@@ -333,6 +333,8 @@ def generate(data):
                               "a": d["a"], "b": d["b"]} for d in pl["doors"]]
             item["graph"] = {"nodes": [{"id": n["id"], "name": n["name"], "kind": n["kind"], "pos": Wp(n["pos"])}
                                        for n in pl["graph"]["nodes"]], "edges": pl["graph"]["edges"]}
+            item["equipamiento"] = [{"kind": q["kind"], "name": q["name"], "room": q["room"], "poly": W(pc, q["poly"]),
+                                     "lines": [W(pc, ln) for ln in q["lines"]]} for q in pl["equipamiento"]]
             item["checks"] = pl["checks"]
             item["plan_score"] = pl["score"]
             item["facade"], item["facade_min"] = pl["facade"], pl["facade_min"]

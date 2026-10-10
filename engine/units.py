@@ -383,13 +383,17 @@ def unit_rooms(u, params, pc=None, plate=None):
                 if min(_dist_to_boundary(w, b) for b in bordes) > 0.4 or (bl and bl(w)) or (pd and pd(w)):
                     return False
             return True
-    res = P.layout_unit(poly, nb, is_fac, ST.merged(params.get("standards"))["vivienda"])
+    S = ST.merged(params.get("standards"))
+    res = P.layout_unit(poly, nb, is_fac, S["vivienda"], S["equipamiento"])
 
     def back_poly(pl):
         out = [back(p) for p in pl]
         return out[::-1] if side < 0 else out
     for r in res["rooms"]:
         r["poly_local"] = back_poly(r.pop("poly"))
+    for q in res["equipamiento"]:
+        q["poly"] = back_poly(q["poly"])
+        q["lines"] = [[back(p) for p in ln] for ln in q["lines"]]
     for d in res["doors"]:
         d["p"], d["q"] = back(d["p"]), back(d["q"])
         d["into"] = d["into"] * (side if not d["vertical"] else 1)

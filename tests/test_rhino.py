@@ -292,7 +292,8 @@ def test_capas_resultado():
 
 
 def test_recibir_primera_vez():
-    """Sin resultado anterior no pregunta nada; los patios se dibujan en el nivel, no en la capa Trazo::Patios."""
+    """Sin resultado anterior no pregunta nada; los patios se dibujan en el nivel, no en la capa Trazo::Patios. El
+    equipamiento (F5) va en su capa de nivel, con su contorno cerrado y su dibujo abierto."""
     m = cargar()
     with Servidor() as url:
         m.SERVER = url
@@ -301,6 +302,9 @@ def test_recibir_primera_vez():
     assert not m.rs.GetString.called and not m.sc.doc.Objects.Delete.called
     capas = {c.args[1] for c in m.rs.ObjectLayer.call_args_list}
     assert "Trazo::L00::Patios" in capas and "Trazo::Patios" not in capas, capas
+    assert "Trazo::L00::Equipamiento" in capas, capas
+    nombres = {c.args[1] for c in m.rs.ObjectName.call_args_list}
+    assert {"Inodoro", "Ducha", "Heladera", "Lavarropas"} <= nombres, nombres
     assert "Trazo: recibido" in out and "(niveles L00)" in out and "Traceback" not in out, out
 
 

@@ -312,6 +312,7 @@ LAYER_COLORS = {
     "living": SD.Color.FromArgb(230, 170, 50),
     "kitchen": SD.Color.FromArgb(110, 180, 100),
     "bath": SD.Color.FromArgb(60, 170, 200),
+    "Equipamiento": SD.Color.FromArgb(90, 95, 105),
 }
 
 
@@ -322,11 +323,12 @@ def layer(name, color):
     return full
 
 
-def add_poly(points, z, lyr, k, name=None):
+def add_poly(points, z, lyr, k, name=None, cerrar=True):
     pl = Rhino.Geometry.Polyline()
     for x, y in points:
         pl.Add(x / k, y / k, z)
-    pl.Add(pl[0])
+    if cerrar:
+        pl.Add(pl[0])
     guid = sc.doc.Objects.AddPolyline(pl)
     if guid:
         rs.ObjectLayer(guid, lyr)
@@ -447,6 +449,11 @@ def receive_result():
                 for r in u.get("rooms", []):
                     add_poly(r["poly"], z, layer(tag + "::Rooms::" + r["kind"], LAYER_COLORS.get(r["kind"], SD.Color.Gray)),
                              inv, "%s %.1fm2" % (r["name"], r["area"]))
+                for q in u.get("equipamiento", []):      # artefactos de baños, cocina y lavadero (contorno y dibujo)
+                    lq = layer(tag + "::Equipamiento", LAYER_COLORS["Equipamiento"])
+                    add_poly(q["poly"], z, lq, inv, q["name"])
+                    for ln in q.get("lines", []):
+                        add_poly(ln, z, lq, inv, cerrar=False)
         if viejos and modo == "reemplazar":      # el anterior se borra después: si algo falla, no se pierde
             quedan = borrar(viejos)
             quitar_niveles_sobrantes({"L%02d" % s["index"] for s in stories})

@@ -11,6 +11,7 @@ sys.path.insert(0, ROOT)
 import importlib
 import engine.layout as _layout
 import engine.geometry as _geometry
+import engine.equipamiento as _equipamiento
 import engine.plans as _plans
 import engine.standards as _standards
 import engine.programs as _programs
@@ -37,6 +38,7 @@ def engine():
     if st != _loaded[0]:
         importlib.reload(_geometry)
         importlib.reload(_standards)
+        importlib.reload(_equipamiento)                 # antes de plans, que lo usa
         importlib.reload(_plans)
         importlib.reload(_programs)
         importlib.reload(_masterplan)

@@ -937,3 +937,77 @@ def test_editar_viviendas():
 
 if __name__ == "__main__":
     test_editar_viviendas(); print("OK31")
+
+
+def test_equipamiento():
+    """F5 (R5.6, primera parte): artefactos de baños, cocina y lavadero dentro de sus estancias, contra paredes macizas,
+    sin pisarse ni pisar el barrido de las puertas. Las puertas interiores miden 0,70 y la de entrada 0,90 (editables).
+    Lo que no entra se avisa; un segundo baño sin lugar para la ducha queda como toilette. Va también al DXF."""
+    import math
+    from engine import geometry as G, equipamiento as EQ, standards as ST, dxf
+    S = ST.merged(None)["equipamiento"]
+    barra = [[0, 0], [60, 0], [60, 16], [0, 16]]
+    r = run(barra)
+    u = r["units"][0]
+    rooms = {x["id"]: x for x in u["rooms"]}
+    de = lambda rid: {q["kind"] for q in u["equipamiento"] if q["room"] == rid}
+    assert {"ducha", "inodoro", "lavatorio", "bide"} <= de("bath1") and {"ducha", "inodoro", "lavatorio"} <= de("bath2")
+    assert {"heladera", "mesada", "bacha_cocina", "cocina_horno"} <= de("kitchen") and {"lavarropas", "pileta_lavar"} <= de("laundry")
+    adentro = lambda a, b: sum(abs(G.area(o)) for o in G.subtract(a, [b])[1][0])
+    for q in u["equipamiento"]:
+        assert abs(G.area(q["poly"])) - adentro(q["poly"], rooms[q["room"]]["poly"]) < 0.01, q    # dentro de su estancia
+    piezas = [q for q in u["equipamiento"] if q["kind"] != "mesada"]                       # bacha y cocina van sobre la mesada
+    for i, a in enumerate(piezas):
+        for b in piezas[i + 1:]:
+            assert adentro(a["poly"], b["poly"]) < 0.01, (a["kind"], b["kind"])
+    largos = sorted(round(math.hypot(d["q"][0] - d["p"][0], d["q"][1] - d["p"][1]), 2) for d in u["doors"])
+    assert set(largos) == {0.7, 0.9} and largos.count(0.9) == 1, largos                      # interiores 0,70; entrada 0,90
+    for x in r["units"]:                                                                       # cada puerta, en el borde de su estancia
+        for d in x["doors"]:
+            pl = next((y["poly"] for y in x["rooms"] if y["id"] == d["b"]), None)
+            m = ((d["p"][0] + d["q"][0]) / 2, (d["p"][1] + d["q"][1]) / 2)
+            if pl:
+                lejos = min(math.hypot(m[0] - (a[0] + (b[0] - a[0]) * t), m[1] - (a[1] + (b[1] - a[1]) * t))
+                            for a, b in zip(pl, pl[1:] + pl[:1]) for t in [i / 200 for i in range(201)])
+                assert lejos < 0.03, (x["id"], d["b"], lejos)
+    for d in u["doors"]:                                                                       # el barrido de la hoja, libre
+        if d["b"] in ("bath1", "bath2", "laundry"):
+            p, q = d["p"], d["q"]
+            c = G.centroid(rooms[d["b"]]["poly"])
+            n = (-(q[1] - p[1]), q[0] - p[0])
+            if (c[0] - p[0]) * n[0] + (c[1] - p[1]) * n[1] < 0:
+                n = (-n[0], -n[1])
+            barrido = [p, q, (q[0] + n[0], q[1] + n[1]), (p[0] + n[0], p[1] + n[1])]
+            assert all(adentro(x["poly"], barrido) < 0.01 for x in u["equipamiento"] if x["room"] == d["b"]), d["b"]
+    puerta = [{"p": (0.1, 0.0), "q": (0.8, 0.0), "a": "hallway", "b": "bath1", "ancho": 0.7}]    # puerta junto a una esquina
+    pz, _ = EQ.equipar([{"id": "bath1", "kind": "bath", "name": "Baño", "rect": (0.0, 0.0, 2.4, 1.7)}], puerta, {}, S, 2)
+    assert {"ducha", "inodoro", "lavatorio"} <= {q["kind"] for q in pz}
+    assert all(adentro(q["poly"], [(0.1, 0.0), (0.8, 0.0), (0.8, 0.7), (0.1, 0.7)]) < 0.01 for q in pz), pz   # ni en el barrido
+    r8 = run(barra, standards={"equipamiento": {"puerta_interior": 0.8}})                      # la medida de la web manda
+    assert 0.8 in {round(math.hypot(d["q"][0] - d["p"][0], d["q"][1] - d["p"][1]), 2) for d in r8["units"][0]["doors"]}
+    # cocina abierta al estar y al hall (bordes de arriba y de la derecha): la mesada va contra las paredes macizas
+    abierta = {"kitchen": [((3.2, 0.0), (3.2, 2.6)), ((0.0, 2.6), (3.2, 2.6))]}
+    pz, ch = EQ.equipar([{"id": "kitchen", "kind": "kitchen", "name": "Cocina", "rect": (0.0, 0.0, 3.2, 2.6)}], [], abierta, S, 2)
+    assert not ch and {q["kind"] for q in pz} >= {"heladera", "mesada", "bacha_cocina", "cocina_horno"}
+    for q in pz:
+        xs, vs = [p[0] for p in q["poly"]], [p[1] for p in q["poly"]]
+        assert min(xs) < 1e-6 or min(vs) < 1e-6, q                                             # apoyada en una pared maciza
+        assert max(xs) < 3.2 - 0.85 or max(vs) < 2.6 - 0.85, q                                 # con paso hacia lo abierto
+    chica = lambda h: EQ.equipar([{"id": "kitchen", "kind": "kitchen", "name": "Cocina", "rect": (0.0, 0.0, 2.4, h)}], [],
+                                 {"kitchen": [((2.4, 0.0), (2.4, h)), ((0.0, h), (2.4, h))]}, S, 2)
+    pz, ch = chica(2.0)                                     # 2,40 × 2,00: la mesada en una pared y la heladera en la otra (L)
+    assert not ch and {"heladera", "mesada"} <= {q["kind"] for q in pz}
+    pz, ch = chica(1.9)                                     # 2,40 × 1,90: la heladera ya no entra
+    assert [c["msg"] for c in ch] == ["Cocina: no entra la heladera (0.70 × 0.70 m)"] and "mesada" in {q["kind"] for q in pz}
+    # segundo baño chico: sin ducha, queda como toilette (aviso informativo, no falla)
+    puerta = [{"p": (0.3, 2.1), "q": (1.0, 2.1), "a": "hallway", "b": "bath2", "ancho": 0.7}]
+    pz, ch = EQ.equipar([{"id": "bath2", "kind": "bath", "name": "Baño 2", "rect": (0.0, 0.0, 1.3, 2.1)}], puerta, {}, S, 2)
+    assert {q["kind"] for q in pz} == {"inodoro", "lavatorio"} and len(ch) == 1 and ch[0]["ok"] and "toilette" in ch[0]["msg"], ch
+    # DXF y web
+    assert "Trazo_L00_Equipamiento" in dxf.result_to_dxf(r)
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    for t in ('id="showEquip"', "function drawEquip", "'vivienda','equipamiento'", "puerta_interior:'Puerta interior (m)'"):
+        assert t in html, t
+
+if __name__ == "__main__":
+    test_equipamiento(); print("OK32")
