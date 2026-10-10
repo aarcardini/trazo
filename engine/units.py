@@ -170,7 +170,7 @@ def generate_unit_mix(circ, params, state=None):
                 a_ = abs(G.area(poly))
                 w = xe - xs0
                 units.append({"type": m["name"], "target": m["area"], "area": a_, "width": w,
-                              "side": side, "x0": xs0, "x1": xe, "poly_local": poly})
+                              "side": side, "x0": xs0, "x1": xe, "poly_local": poly, "_region": region})
                 if w < params["min_unit_width"]:
                     warnings.append("Unidad con ancho %.2f m < mínimo %.2f m" % (w, params["min_unit_width"]))   # con 1 decimal, 4.98 < 5 se leía «5.0 < 5.0»
             x = x1
@@ -186,6 +186,110 @@ def generate_unit_mix(circ, params, state=None):
             warnings.append("Unidad %s de %.0f m² tiene profundidad %.1f m (> %.1f m): poca luz natural" %
                             (u["type"], u["area"], u["depth"], params["max_unit_depth"]))
     return units, warnings
+
+
+# ---------------------------------------------------------------- viviendas editadas (R4.4)
+def vecinas(units, params):
+    """Pares (a, b) de viviendas vecinas de una misma franja (mismo tramo de pasillo y lado): b sigue a a, del otro
+    lado del tabique."""
+    pw = params["party_wall"]
+    return [(a, b) for a in units for b in units
+            if a is not b and a.get("_region") is not None and a.get("_region") is b.get("_region")
+            and abs(a["x1"] + pw - b["x0"]) < 0.01]
+
+
+def _local(u, p):
+    pc = u["_pc"]
+    return G.to_local([tuple(p)], pc["origin"], pc["angle"])[0]
+
+
+def _recortar(u, x0, x1, params):
+    """La vivienda u pasa a ocupar [x0, x1] de su franja."""
+    poly = G.largest_part(G.clip_rect(u["_region"], x0, x1))
+    if not poly:
+        return False
+    ys = [q[1] for q in poly]
+    u.update({"x0": x0, "x1": x1, "poly_local": poly, "area": abs(G.area(poly)), "width": x1 - x0,
+              "depth": max(ys) - min(ys), "door_local": ((x0 + x1) / 2.0, (params["corridor_width"] / 2) * u["side"]),
+              "editada": True})
+    return True
+
+
+def _tipo(u, params, conservar=False):
+    """Tipo de una vivienda editada: el suyo si la superficie sigue cerca de su objetivo (tabique movido); si no, el
+    del mix de superficie más parecida y, si ninguno se parece (±35 %), uno por sus dormitorios («1 dorm», «Monoambiente»)."""
+    cerca = lambda t: bool(t) and abs(u["area"] - t) <= 0.35 * t
+    if conservar and cerca(u.get("target")):
+        return
+    mix = [m for m in params["unit_mix"] if m.get("area", 0) > 0]
+    m = min(mix, key=lambda t: abs(t["area"] - u["area"])) if mix else None
+    if m and cerca(m["area"]):
+        u["type"], u["target"] = m["name"], m["area"]
+    else:
+        nb = P.bedrooms_for(u["area"])
+        u["type"], u["target"] = ("%d dorm" % nb if nb else "Monoambiente"), round(u["area"])
+
+
+def _tabique_en(units, p, params, tol=0.75):
+    """Las dos vecinas cuyo tabique pasa a menos de tol del punto p (de mundo), o None."""
+    pw, mejor = params["party_wall"], None
+    for a, b in vecinas(units, params):
+        x, y = _local(a, p)
+        ys = [q[1] for q in a["poly_local"] + b["poly_local"]]
+        d = abs(x - (a["x1"] + pw / 2))
+        if y * a["side"] > 0 and min(ys) - tol <= y <= max(ys) + tol and d <= tol and (mejor is None or d < mejor[0]):
+            mejor = (d, a, b)
+    return mejor[1:] if mejor else None
+
+
+def editar_unidades(units, edits, params, hechos):
+    """R4.4: aplica en orden los cambios del usuario a las viviendas de un bloque (puntos de mundo):
+    {"op": "tabique", "p", "a"} mueve hasta a el tabique que pasa por p; {"op": "fusionar", "p"} une las dos viviendas
+    de ese tabique; {"op": "dividir", "p"} parte en dos, en p, la vivienda que contiene p. Cada parte conserva al menos
+    la mitad del ancho mínimo. Anota en hechos los índices de los cambios aplicados (los demás se avisan)."""
+    pw, wmin = params["party_wall"], 0.5 * params["min_unit_width"]
+    for k, e in enumerate(edits or []):
+        op, p = e.get("op"), e.get("p")
+        if k in hechos or not p:
+            continue
+        if op in ("tabique", "fusionar"):
+            par = _tabique_en(units, p, params)
+            if not par or (op == "tabique" and not e.get("a")):
+                continue
+            a, b = par
+            if op == "tabique":
+                x = min(max(_local(a, e["a"])[0], a["x0"] + wmin + pw / 2), b["x1"] - wmin - pw / 2)
+                if x - pw / 2 <= a["x0"] or not (_recortar(a, a["x0"], x - pw / 2, params) and _recortar(b, x + pw / 2, b["x1"], params)):
+                    continue
+                _tipo(a, params, conservar=True)
+                _tipo(b, params, conservar=True)
+            else:
+                if not _recortar(a, a["x0"], b["x1"], params):
+                    continue
+                _tipo(a, params)
+                units.remove(b)
+        elif op == "dividir":
+            u = next((u for u in units if u.get("_region") is not None and G.point_in_poly(_local(u, p), u["poly_local"])), None)
+            if u is None:                              # punto fuera de la figura (vivienda en L): la de la franja que lo cubre
+                cerca = []
+                for v in units:
+                    x, y = _local(v, p) if v.get("_region") is not None else (None, 0)
+                    ys = [q[1] for q in v["poly_local"]]
+                    if x is not None and v["x0"] <= x <= v["x1"] and y * v["side"] > 0:
+                        cerca.append((max(0.0, min(ys) - y, y - max(ys)), id(v), v))
+                u = min(cerca)[2] if cerca and min(cerca)[0] < 1.0 else None
+            if u is None or u["x1"] - u["x0"] < 2 * wmin + pw:
+                continue
+            x = min(max(_local(u, p)[0], u["x0"] + wmin + pw / 2), u["x1"] - wmin - pw / 2)
+            otra = dict(u)
+            if not (_recortar(otra, x + pw / 2, u["x1"], params) and _recortar(u, u["x0"], x - pw / 2, params)):
+                continue
+            _tipo(u, params)
+            _tipo(otra, params)
+            units.insert(units.index(u) + 1, otra)
+        else:
+            continue
+        hechos.add(k)
 
 
 def sin_solapes(units, pieces, nucleos, params):

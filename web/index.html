@@ -83,6 +83,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:3px 4px;b
  <label>Muro medianero (m) <input type="number" id="party_wall" value="0.3" step="0.05"></label>
  <label>Profundidad máx. unidad <input type="number" id="max_unit_depth" value="14"></label>
  <button onclick="run('mix')">Generar mix</button>
+ <div class="hint" id="edInfo"></div>
  <h2>4 · Planos de unidad</h2>
  <button onclick="run('plans')">Generar planos</button>
  <h2>Variantes</h2>
@@ -135,7 +136,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:3px 4px;b
 const $=id=>document.getElementById(id), NS='http://www.w3.org/2000/svg';
 let footprint=[[0,0],[60,0],[60,16],[0,16]], centerlines=[], curLine=[], tool=null, mouse=null, patios=[], curPatio=[];
 let result=null, samples={}, massVer=0, view=null, lastStage=null, drag=null, coresManual=[], externa=null;
-let nombre='', abierto=null, VER='';   // nombre de la masa o del proyecto; proyecto o archivo abierto (vuelve desde el selector); versión del motor
+let nombre='', abierto=null, VER='', ediciones=[];   // ediciones: cambios en las viviendas (R4.4), en orden;   // nombre de la masa o del proyecto; proyecto o archivo abierto (vuelve desde el selector); versión del motor
 let mix=[{name:'2 dorm',area:75,percent:50,dorms:2},{name:'3 dorm',area:95,percent:50,dorms:3}];
 let stories=null;
 /* Colores: cada programa tiene un color base; sus áreas internas son tonos de ese color. */
@@ -159,7 +160,7 @@ function renderStories(){ if(!stories){ $('storyTable').innerHTML='<div class="w
  $('storyTable').innerHTML=stories.map((s,i)=>`<div class="mixrow" style="grid-template-columns:30px 1fr 60px"><span>${i}</span><select onchange="stories[${i}].program=this.value">${PROGS.map(p=>`<option value="${p.key}" ${p.key==s.program?'selected':''}>${p.label}</option>`).join('')}</select><input type="number" step="0.1" value="${s.height}" onchange="stories[${i}].height=+this.value"></div>`).join('');}
 let STD=null, STD_DEF=null, medianeras=[], medHover=null;
 function params(){ const g=id=>+$(id).value; const manual=$('cores_mode').value==='manual';
- return {core_auto:$('core_auto').checked,standards:STD,medianeras:medianeras.length?medianeras:null,floor_height:g('floor_height'),outer_wall:g('outer_wall'),loading:$('loading').value,corridor_width:g('corridor_width'),core_width:g('core_width'),core_depth:g('core_depth'),core_count:g('core_count'),auto_cores:$('auto_cores').checked,core_side:$('core_side').value,egress_single:g('egress_single'),egress_multi:g('egress_multi'),min_unit_width:g('min_unit_width'),party_wall:g('party_wall'),max_unit_depth:g('max_unit_depth'),unit_mix:mix,centerlines:centerlines.length?centerlines:null,cores_mode:manual?'manual':'auto',cores:manual?coresManual:null,patios_mode:$('patios_mode').value,patios:$('patios_mode').value==='manual'?patios:null,stories:stories}; }
+ return {core_auto:$('core_auto').checked,standards:STD,medianeras:medianeras.length?medianeras:null,floor_height:g('floor_height'),outer_wall:g('outer_wall'),loading:$('loading').value,corridor_width:g('corridor_width'),core_width:g('core_width'),core_depth:g('core_depth'),core_count:g('core_count'),auto_cores:$('auto_cores').checked,core_side:$('core_side').value,egress_single:g('egress_single'),egress_multi:g('egress_multi'),min_unit_width:g('min_unit_width'),party_wall:g('party_wall'),max_unit_depth:g('max_unit_depth'),unit_mix:mix,centerlines:centerlines.length?centerlines:null,cores_mode:manual?'manual':'auto',cores:manual?coresManual:null,unit_edits:ediciones.length?ediciones:null,patios_mode:$('patios_mode').value,patios:$('patios_mode').value==='manual'?patios:null,stories:stories}; }
 async function run(stage,opt){ opt=opt||{}; if(!footprint.length){ $('tag').textContent='Trazo está en blanco: envía una masa desde Rhino o elige un ejemplo'; return; } lastStage=stage; $('tag').textContent='Calculando…';
  let j; try{ const r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({footprint,height:+$('height').value,stage,params:params()})}); j=await r.json(); }
  catch(e){ j={error:'no hay conexión con el servidor de Trazo: arráncalo (py server.py en Windows, python3 server.py en Mac) y recarga la página'}; }
@@ -217,7 +218,7 @@ function draw(){ const gb=$('gb'); gb.innerHTML='';
    gb.appendChild(el('polygon',{points:pts(u.poly),fill:'transparent','data-unit':u.id,style:'cursor:pointer'}));
    const gd=el('g',{'pointer-events':'none'}); drawDoors(gd,u); if(showGraph) drawGraph(gd,u); gb.appendChild(gd);
    const cx=u.poly.reduce((a,p)=>a+p[0],0)/u.poly.length, cy=u.poly.reduce((a,p)=>a+p[1],0)/u.poly.length;
-   gb.appendChild(el('text',{x:X([cx,cy]),y:Y([cx,cy]),'text-anchor':'middle','font-size':11,fill:'#1b2430','pointer-events':'none'},u.id+' · '+u.area+' m²'));
+   gb.appendChild(el('text',{x:X([cx,cy]),y:Y([cx,cy]),'text-anchor':'middle','font-size':11,fill:'#1b2430','pointer-events':'none'},u.id+' · '+u.area+' m²'+(u.editada?' ✎':'')));
    if(showEvac&&u.egress_status&&u.egress_status!=='ok') gb.appendChild(el('polygon',{points:pts(u.poly),fill:'none',stroke:EVAC[u.egress_status],'stroke-width':2.5,'stroke-dasharray':'7 4','pointer-events':'none'}));
    gb.appendChild(el('circle',{cx:X(u.door),cy:Y(u.door),r:4,fill:EVAC[u.egress_status]||EVAC.ok})); });
   if(showEvac&&result.evacuacion){ const ev=result.evacuacion;      // tramos de pasillo fuera de norma (R3.6)
@@ -226,6 +227,9 @@ function draw(){ const gb=$('gb'); gb.innerHTML='';
   drawShapes2D(gb,coreShapes());
   (result.cores||[]).forEach((c,i)=>{ if(i===selCore) gb.appendChild(el('polygon',{points:pts(c.poly),fill:'none',stroke:'#2f6fed','stroke-width':3,'pointer-events':'none'}));
    const t=el('polygon',{points:pts(c.poly),fill:'transparent','data-core':i,style:'cursor:move'}); t.appendChild(el('title',{},'Núcleo '+(i+1)+': arrástralo para moverlo; clic para cambiar sus medidas o girarlo')); gb.appendChild(t); });
+  if(selUnit) (result.tabiques||[]).forEach((t,k)=>{ if(t.a!==selUnit&&t.b!==selUnit) return;   // R4.4: los tabiques de la vivienda elegida se arrastran
+   const l=el('line',{x1:X(t.seg[0]),y1:Y(t.seg[0]),x2:X(t.seg[1]),y2:Y(t.seg[1]),stroke:'#2f6fed','stroke-width':6,'stroke-linecap':'round',opacity:.85,'data-tab':k,'data-unit':selUnit,style:Math.abs(t.dir[0])>=Math.abs(t.dir[1])?'cursor:ew-resize':'cursor:ns-resize'});
+   l.appendChild(el('title',{},'Tabique entre '+t.a+' y '+t.b+': arrástralo para moverlo')); gb.appendChild(l); });
  }
  drawDims(gb); drawOverlay(); }
 /* ---------- cotas y escala gráfica ---------- */
@@ -258,6 +262,8 @@ function drawDims(g){ if(!showDims||!view||!footprint.length) return;
  [0,1].forEach(i=>g.appendChild(el('rect',{x:x+i*px/2,y:y-5,width:px/2,height:5,fill:i?'#fff':'#344054',stroke:'#344054','stroke-width':1,'pointer-events':'none'})));
  [[0,'0'],[px/2,String(m/2)],[px,m+' m']].forEach(([dx,t])=>g.appendChild(el('text',{x:x+dx,y:y-9,'text-anchor':'middle','font-size':10,fill:'#344054','pointer-events':'none'},t))); }
 function drawOverlay(){ const go=$('go'); go.innerHTML=''; if(!view) return; drawMeds(go);
+ if(dragTab&&dragTab.moved&&result&&result.tabiques&&result.tabiques[dragTab.k]){ const t=result.tabiques[dragTab.k], q=t.seg.map(p=>[p[0]+t.dir[0]*dragTab.d,p[1]+t.dir[1]*dragTab.d]);   // tabique arrastrado
+  go.appendChild(el('line',{x1:X(q[0]),y1:Y(q[0]),x2:X(q[1]),y2:Y(q[1]),stroke:'#2f6fed','stroke-width':3,'stroke-dasharray':'6 4','pointer-events':'none'})); }
  if(dragCore&&dragCore.moved&&result&&result.cores&&result.cores[dragCore.i]){ const d=dragCore.d;   // núcleo arrastrado: dónde va a quedar (el motor lo ajusta al pasillo)
   go.appendChild(el('polygon',{points:pts(result.cores[dragCore.i].poly.map(p=>[p[0]+d[0],p[1]+d[1]])),fill:'rgba(47,111,237,.15)',stroke:'#2f6fed','stroke-width':2,'stroke-dasharray':'5 3','pointer-events':'none'})); }
  const line=(a,b,dash)=>go.appendChild(el('line',{x1:X(a),y1:Y(a),x2:X(b),y2:Y(b),stroke:'#2f6fed','stroke-width':2,'stroke-dasharray':dash||'6 3'}));
@@ -333,6 +339,8 @@ function unitPanel(){ const c=$('ctx'); if(selCore!=null&&result&&result.cores&&
   <div class="hint">${(u.graph?u.graph.edges:[]).map(e=>{const na=(u.rooms.find(r=>r.id===e.a)||{}).name||e.a, nb=(u.rooms.find(r=>r.id===e.b)||{}).name||e.b; return `${e.ok?'✓':'✗'} ${na} ${e.type==='abierto'?'↔':'⇢'} ${nb} <i>(${e.type})</i>`;}).join('<br>')}</div>
   <h2 style="margin:10px 0 4px">Comprobaciones (${ok}/${n})</h2>
   ${(u.checks||[]).map(x=>`<div class="${x.ok?'hint':'w'}">${x.info?'ℹ':x.ok?'✓':'⚠'} ${x.msg}</div>`).join('')}
+  <h2 style="margin:10px 0 4px">Editar vivienda${u.editada?' (editada)':''}</h2><div class="hint">Arrastra sus tabiques (líneas azules) para moverlos.</div>
+  <button class="s" onclick="dividirVivienda()">Dividir en dos</button>${(result.tabiques||[]).map((t,k)=>t.a===u.id||t.b===u.id?`<button class="s" onclick="unirViviendas(${k})">Unir con ${t.a===u.id?t.b:t.a}</button>`:'').join('')}
   <button class="s" onclick="selUnit=null;draw();unitPanel()">Cerrar</button>`;
  c.style.display='block'; }
 
@@ -391,13 +399,13 @@ function drawMeds(g){ medianeras.forEach((m,i)=>{ g.appendChild(el('line',{x1:X(
 
 /* ---------- deshacer y rehacer (R4.2): polilíneas, núcleos, medianeras y patios ---------- */
 let atras=[], adelante=[];   // estados anteriores y deshechos: {f: foto del estado, txt: qué se hizo}
-function foto(){ return JSON.stringify({centerlines,coresManual,cores_mode:$('cores_mode').value,medianeras,patios,patios_mode:$('patios_mode').value}); }
+function foto(){ return JSON.stringify({centerlines,coresManual,cores_mode:$('cores_mode').value,medianeras,patios,patios_mode:$('patios_mode').value,ediciones}); }
 function recordar(txt,antes){ let f=foto(); if(antes) f=JSON.stringify(Object.assign(JSON.parse(f),antes));   // antes: lo que ya cambió (el modo elegido en el selector)
  if(!atras.length||atras[atras.length-1].f!==f) atras.push({f,txt}); if(atras.length>100) atras.shift(); adelante=[]; botonesHistoria(); }
 function olvidarHistoria(){ atras=[]; adelante=[]; botonesHistoria(); }   // otra masa: lo de antes no se aplica
 function botonesHistoria(){ const u=$('btnUndo'), r=$('btnRedo'); u.disabled=!atras.length; r.disabled=!adelante.length;
  u.title='Deshacer'+(atras.length?': '+atras[atras.length-1].txt:'')+' (Ctrl+Z)'; r.title='Rehacer'+(adelante.length?': '+adelante[adelante.length-1].txt:'')+' (Ctrl+Shift+Z)'; }
-function volverA(f){ const a=JSON.parse(foto()), s=JSON.parse(f); centerlines=s.centerlines; coresManual=s.coresManual; $('cores_mode').value=s.cores_mode; medianeras=s.medianeras; patios=s.patios; $('patios_mode').value=s.patios_mode;
+function volverA(f){ const a=JSON.parse(foto()), s=JSON.parse(f); centerlines=s.centerlines; coresManual=s.coresManual; $('cores_mode').value=s.cores_mode; medianeras=s.medianeras; patios=s.patios; $('patios_mode').value=s.patios_mode; ediciones=s.ediciones||[]; edInfo();
  selCore=null; curLine=[]; curPatio=[]; lineInfo(); coreInfo(); renderMeds(); renderPatios(); unitPanel();
  const circ=JSON.stringify([a.centerlines,a.coresManual,a.cores_mode])!==JSON.stringify([s.centerlines,s.coresManual,s.cores_mode]);   // como runCirc: al menos hasta el pasillo
  if(lastStage) return run(circ&&lastStage==='massing'?'corridor':lastStage,{keepView:true}); drawOverlay(); }
@@ -405,6 +413,14 @@ async function deshacer(){ if(tool==='line'&&curLine.length){ curLine.pop(); dra
  const f=foto(); while(atras.length&&atras[atras.length-1].f===f) atras.pop();   // lo que no cambió nada no cuenta
  const e=atras.pop(); if(!e) return botonesHistoria(); adelante.push({f,txt:e.txt}); botonesHistoria(); await volverA(e.f); $('tag').textContent='Deshecho: '+e.txt; }
 async function rehacer(){ const e=adelante.pop(); if(!e) return; atras.push({f:foto(),txt:e.txt}); botonesHistoria(); await volverA(e.f); $('tag').textContent='Rehecho: '+e.txt; }
+
+/* ---------- viviendas editadas (R4.4): tabique movido, unidas, divididas ---------- */
+const mitad=s=>[+((s[0][0]+s[1][0])/2).toFixed(3),+((s[0][1]+s[1][1])/2).toFixed(3)];
+function editar(op,txt){ recordar(txt); ediciones.push(op); edInfo(); return run(lastStage==='plans'?'plans':'mix',{keepView:true}); }   // el motor aplica los cambios en orden
+function dividirVivienda(){ const u=result.units.find(x=>x.id===selUnit); if(u){ const c=centroidOf(u.poly); editar({op:'dividir',p:[+c[0].toFixed(3),+c[1].toFixed(3)]},'dividir '+u.id); } }   // la primera parte conserva el número
+function unirViviendas(k){ const t=result.tabiques[k]; if(t){ selUnit=t.a; editar({op:'fusionar',p:mitad(t.seg)},'unir '+t.a+' y '+t.b); } }
+function descartarEdiciones(){ recordar('descartar los cambios de viviendas'); ediciones=[]; edInfo(); if(lastStage) run(lastStage,{keepView:true}); }
+function edInfo(){ $('edInfo').innerHTML=ediciones.length?`${ediciones.length} cambio(s) en las viviendas (✎) · <button class="s" style="padding:0 6px" onclick="descartarEdiciones()">Descartar cambios</button>`:'Para editar una vivienda: clic en ella; arrastra sus tabiques (líneas azules) o usa «Dividir» y «Unir» en su ficha.'; }
 
 /* ---------- herramientas ---------- */
 function setTool(t){ if(viewMode!=='plan') setView('plan'); if(tool==='line'&&t!=='line') finishLine(); curPatio=[]; tool=(tool===t)?null:t;
@@ -438,8 +454,9 @@ svg.addEventListener('dblclick',e=>{ if(tool==='line'){ finishLine(); } });
 svg.addEventListener('wheel',e=>{ e.preventDefault(); const r=svg.getBoundingClientRect(); const mx=e.clientX-r.left, my=e.clientY-r.top;
  const f=e.deltaY<0?1.15:1/1.15; const nz=Math.max(0.5,Math.min(12,zoom*f)); const k=nz/zoom; const W=svg.clientWidth,H=svg.clientHeight;
  pan=[(mx-W/2)*(1-k)+pan[0]*k,(my-H/2)*(1-k)+pan[1]*k]; zoom=nz; draw(); },{passive:false});
-let panDrag=null, dragCore=null;
+let panDrag=null, dragCore=null, dragTab=null;
 svg.addEventListener('pointerdown',e=>{ if(tool||drag) return; if(e.target.closest&&e.target.closest('circle')) return;
+ const tt=e.target.closest&&e.target.closest('[data-tab]'); if(tt&&result&&result.tabiques){ dragTab={k:+tt.getAttribute('data-tab'),x:e.clientX,y:e.clientY,w:toWorld(e),d:0,moved:false}; return; }   // R4.4: arrastrar un tabique
  const tc=e.target.closest&&e.target.closest('[data-core]'); if(tc&&result&&result.cores){ dragCore={i:+tc.getAttribute('data-core'),x:e.clientX,y:e.clientY,w:toWorld(e),d:[0,0],moved:false}; return; }   // R4.3: arrastrar un núcleo
  panDrag={x:e.clientX,y:e.clientY,p:pan.slice(),moved:false}; });
 window.addEventListener('pointermove',e=>{ if(!panDrag) return; const dx=e.clientX-panDrag.x, dy=e.clientY-panDrag.y; if(Math.abs(dx)+Math.abs(dy)>4) panDrag.moved=true; if(panDrag.moved){ pan=[panDrag.p[0]+dx,panDrag.p[1]+dy]; draw(); } });
@@ -450,6 +467,11 @@ svg.addEventListener('mousemove',e=>{ if(!view) return; const w=toWorld(e);
  if(tool==='line'||tool==='addcore') { mouse=tool==='line'?snap(w,curLine[curLine.length-1]):w; drawOverlay(); } });
 svg.addEventListener('pointermove',e=>{ if(!drag||!view) return; if(!drag.moved) recordar('mover vértice'); const pl=centerlines[drag.li]; const prev=pl[drag.vi-1]||pl[drag.vi+1]; pl[drag.vi]=snap(toWorld(e),null); drag.moved=true; drawOverlay(); });
 svg.addEventListener('pointerup',e=>{ if(drag){ const d=drag; drag=null; if(d.moved&&lastStage) runCirc(); } });
+svg.addEventListener('pointermove',e=>{ if(!dragTab||!view) return; if(!dragTab.moved){ if(Math.abs(e.clientX-dragTab.x)+Math.abs(e.clientY-dragTab.y)<5) return; svg.setPointerCapture(e.pointerId); }
+ const w=toWorld(e), t=result.tabiques[dragTab.k]; dragTab.moved=true; dragTab.d=(w[0]-dragTab.w[0])*t.dir[0]+(w[1]-dragTab.w[1])*t.dir[1]; drawOverlay(); });   // solo a lo largo del pasillo
+svg.addEventListener('pointerup',e=>{ if(!dragTab) return; const g=dragTab; dragTab=null; if(!g.moved) return;
+ svg._skipClick=true; setTimeout(()=>svg._skipClick=false,0); const t=result.tabiques[g.k]; if(!t) return drawOverlay();
+ const m=mitad(t.seg); editar({op:'tabique',p:m,a:[+(m[0]+t.dir[0]*g.d).toFixed(3),+(m[1]+t.dir[1]*g.d).toFixed(3)]},'mover el tabique entre '+t.a+' y '+t.b); });
 svg.addEventListener('pointermove',e=>{ if(!dragCore||!view) return; if(!dragCore.moved){ if(Math.abs(e.clientX-dragCore.x)+Math.abs(e.clientY-dragCore.y)<5) return; svg.setPointerCapture(e.pointerId); }   // se captura al moverse: un clic sigue abriendo la ficha
  const w=toWorld(e); dragCore.moved=true; dragCore.d=[w[0]-dragCore.w[0],w[1]-dragCore.w[1]]; drawOverlay(); });
 svg.addEventListener('pointerup',e=>{ if(!dragCore) return; const g=dragCore; dragCore=null; if(!g.moved) return;   // sin mover es un clic: abre la ficha
@@ -581,11 +603,11 @@ function setMass(m,fromRhino,opt){ opt=opt||{}; olvidarHistoria(); const o=$('sa
  nombre=m.name||''; footprint=m.footprint; selCore=null; if(m.height) $('height').value=m.height; centerlines=(m.centerlines||(m.centerline?[m.centerline]:[])).map(pl=>pl.map(p=>[p[0],p[1]])); curLine=[]; lineInfo();
  coresManual=(m.cores||[]).map(p=>Array.isArray(p)?[p[0],p[1]]:Object.assign({},p,{p:[p.p[0],p.p[1]]})); $('cores_mode').value=m.cores_mode||(coresManual.length?'manual':'auto'); coreInfo();
  stories=m.stories?m.stories.map(x=>({program:x.program,height:x.height})):null; medianeras=(m.medianeras||[]).map(x=>({a:x.a,b:x.b,retiro:x.retiro||0})); renderMeds();
- patios=(m.patios||[]).map(p=>p.map(q=>[q[0],q[1]])); curPatio=[]; $('patios_mode').value=m.patios_mode||(patios.length?'manual':'auto'); renderStories(); result=null; lastStage=null; sel.clear(); planStory=null; zoom=1; pan=[0,0]; draw(); panels2(); if(fromRhino) $('rhinoBadge').textContent=(m.source==='masterplan'?'Lote recibido del Masterplan: ':'Masa recibida de Rhino: ')+(m.name||'sin nombre'); return run(opt.etapa||'massing'); }
+ patios=(m.patios||[]).map(p=>p.map(q=>[q[0],q[1]])); curPatio=[]; ediciones=(m.unit_edits||[]).map(e=>JSON.parse(JSON.stringify(e))); edInfo(); $('patios_mode').value=m.patios_mode||(patios.length?'manual':'auto'); renderStories(); result=null; lastStage=null; sel.clear(); planStory=null; zoom=1; pan=[0,0]; draw(); panels2(); if(fromRhino) $('rhinoBadge').textContent=(m.source==='masterplan'?'Lote recibido del Masterplan: ':'Masa recibida de Rhino: ')+(m.name||'sin nombre'); return run(opt.etapa||'massing'); }
 async function nuevo(){ if((footprint.length||result)&&!confirm('¿Empezar en blanco? Se borran la masa, las polilíneas, los núcleos, las medianeras, las variantes y el resultado, también los guardados en el servidor. Las medidas, el mix y los colores se conservan.')) return;
  try{ await fetch('/api/reset',{method:'POST'}); }catch(e){} olvidarHistoria();
  if(tool) setTool(tool); footprint=[]; centerlines=[]; curLine=[]; coresManual=[]; $('cores_mode').value='auto'; stories=null; medianeras=[]; result=null; lastStage=null; selUnit=null; selCore=null; sel.clear(); planStory=null; zoom=1; pan=[0,0];
- externa=null; nombre=''; abierto=null; variantes=[]; verVariantes(false); ['__rhino','__mp','__proyecto'].forEach(v=>{ const o=$('sample').querySelector('option[value="'+v+'"]'); if(o) o.remove(); }); selLabel('__nuevo','— En blanco —',true);
+ externa=null; nombre=''; abierto=null; variantes=[]; verVariantes(false); ediciones=[]; edInfo(); ['__rhino','__mp','__proyecto'].forEach(v=>{ const o=$('sample').querySelector('option[value="'+v+'"]'); if(o) o.remove(); }); selLabel('__nuevo','— En blanco —',true);
  patios=[]; curPatio=[]; $('patios_mode').value='auto'; $('height').value=$('height').defaultValue; $('lvl').innerHTML=''; lineInfo(); coreInfo(); renderMeds(); renderStories(); panels2(); unitPanel();
  $('rhinoBadge').textContent='Esperando masa de Rhino… (o usa un ejemplo)'; setView('plan'); $('tag').textContent='En blanco'; }
 /* ---------- proyectos (R4.1): el archivo es el pedido al motor (/api/generate) más nombre, versión y fecha ---------- */
@@ -617,7 +639,7 @@ function abrirProyecto(p,archivo,opt){ opt=opt||{}; const no=t=>{ alert('Trazo: 
   if(Array.isArray(P.unit_mix)&&P.unit_mix.length){ mix=P.unit_mix.map(m=>Object.assign({},m)); renderMix(); legend(); }
   if(STD_DEF){ STD=JSON.parse(JSON.stringify(STD_DEF)); const d=P.standards||{}; for(const g in d) for(const k in d[g]) if(STD[g]&&k in STD[g]) STD[g][k]=d[g][k]; saveStd(); renderStd(); }   // las medidas del proyecto (guarda solo las cambiadas)
   const otra=p.version_motor&&VER&&p.version_motor!==VER;
-  return setMass({name:p.name,footprint:p.footprint,height:p.height,centerlines:P.centerlines,cores:P.cores,cores_mode:P.cores_mode,stories:P.stories,medianeras:P.medianeras,patios:P.patios,patios_mode:P.patios_mode},false,{label:(opt.variante?'Variante: '+archivo:'Proyecto: '+(p.name||archivo)),etapa:ETAPAS.includes(p.stage)?p.stage:'massing'})
+  return setMass({name:p.name,footprint:p.footprint,height:p.height,centerlines:P.centerlines,cores:P.cores,cores_mode:P.cores_mode,stories:P.stories,medianeras:P.medianeras,patios:P.patios,patios_mode:P.patios_mode,unit_edits:P.unit_edits},false,{label:(opt.variante?'Variante: '+archivo:'Proyecto: '+(p.name||archivo)),etapa:ETAPAS.includes(p.stage)?p.stage:'massing'})
    .then(()=>{ if(otra) $('tag').textContent+=' · guardado con Trazo v'+p.version_motor+' (ahora v'+VER+'): el resultado puede variar'; }); }
  catch(e){ no('está incompleto o dañado ('+e.message+'). Prueba con otra copia del proyecto.'); } }
 /* ---------- variantes (R4.5): soluciones guardadas para compararlas ---------- */

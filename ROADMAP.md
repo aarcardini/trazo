@@ -43,7 +43,7 @@ Leyenda de esfuerzo: S = pequeño, M = mediano, L = grande (dividir antes de emp
 - [x] **R4.1 (M) Guardar y abrir proyectos** (v2.16: «Guardar proyecto» y «Abrir proyecto…» en la web; el archivo `.trazo.json` es el pedido al motor más nombre, versión y fecha, con solo las medidas cambiadas; también abre masas sueltas) (JSON con masa, líneas, núcleos, mix y parámetros).
 - [x] **R4.2 (S) Deshacer/rehacer** (v2.17: botones ↶ ↷ y Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z o Ctrl+Y; también medianeras y patios) para líneas y núcleos.
 - [x] **R4.3 (M) Arrastrar núcleos** (v2.18: vista previa punteada; al soltar pasa a manual, el motor lo ajusta al pasillo del lado donde quedó; se deshace con Ctrl+Z) con el ratón (como los vértices).
-- [ ] **R4.4 (L) Editar unidades:** mover el tabique entre dos unidades vecinas, fusionar y dividir; métricas se actualizan.
+- [x] **R4.4 (L) Editar unidades:** (v2.20: clic en una vivienda; sus tabiques se arrastran y su ficha tiene «Dividir en dos» y «Unir con…»; los cambios van en `params.unit_edits`, se deshacen, se guardan con el proyecto y se descartan desde el mix) mover el tabique entre dos unidades vecinas, fusionar y dividir; métricas se actualizan.
 - [x] **R4.5 (M) Variantes:** (v2.19: «Guardar como variante» y «Comparar»; tabla con lo mejor de cada columna en verde, abrir, renombrar, borrar y copiar a una planilla; se guardan con el proyecto) guardar varias soluciones y compararlas en una tabla (unidades, eficiencia, match, circulación).
 
 ## Fase 5 — Planos de unidad y conexiones internas

@@ -783,7 +783,7 @@ def test_deshacer():
     js = html.split("<script>", 1)[1].split("</script>", 1)[0]
     exentas = ("function volverA", "function setMass", "async function nuevo", "function ensureManual", "function ensurePatiosManual")
     bloques = re.compile(r"\nfunction |\nasync function |addEventListener\(|onclick=\"|onchange=\"")
-    cambio = re.compile(r"\b(centerlines|coresManual|medianeras|patios)(\[[^\]]*\])*(\.retiro)?(=(?![=>])|\.(push|pop|splice)\()|\bpl\.splice\(|\bpl\[drag\.vi\]=")
+    cambio = re.compile(r"\b(centerlines|coresManual|medianeras|patios|ediciones)(\[[^\]]*\])*(\.retiro)?(=(?![=>])|\.(push|pop|splice)\()|\bpl\.splice\(|\bpl\[drag\.vi\]=")
     sin, n = [], 0
     for m in cambio.finditer(js):
         linea = js[js.rfind("\n", 0, m.start()) + 1:m.start()]
@@ -873,3 +873,67 @@ def test_aviso_ancho():
 
 if __name__ == "__main__":
     test_aviso_ancho(); print("OK30")
+
+
+def test_editar_viviendas():
+    """R4.4: el usuario edita las viviendas con cambios en orden (puntos de mundo, en params.unit_edits): mueve el
+    tabique entre dos vecinas, las une o divide una en dos. Las demás no cambian, los planos, la evacuación y las
+    métricas se recalculan, y un cambio que ya no entra (la planta cambió) se avisa. La web arrastra los tabiques."""
+    import math
+    barra = [[0, 0], [60, 0], [60, 16], [0, 16]]
+    base = run(barra)
+    U = {u["id"]: u for u in base["units"]}
+    t = base["tabiques"][0]
+    a, b = U[t["a"]], U[t["b"]]
+    largo = math.hypot(t["seg"][1][0] - t["seg"][0][0], t["seg"][1][1] - t["seg"][0][1])
+    assert t["a"] != t["b"] and abs(math.hypot(*t["dir"]) - 1) < 1e-6 and largo > 3, t
+    mid = [(t["seg"][0][0] + t["seg"][1][0]) / 2, (t["seg"][0][1] + t["seg"][1][1]) / 2]
+    hacia = lambda d: [mid[0] + d * t["dir"][0], mid[1] + d * t["dir"][1]]
+    # mover el tabique 2 m: una crece, la otra achica, las demás igual; conservan el tipo y se rehacen los planos
+    r = run(barra, unit_edits=[{"op": "tabique", "p": mid, "a": hacia(2)}])
+    R = {u["id"]: u for u in r["units"]}
+    assert abs(R[t["a"]]["width"] - (a["width"] + 2)) < 0.02 and abs(R[t["b"]]["width"] - (b["width"] - 2)) < 0.02
+    assert R[t["a"]].get("editada") and abs(R[t["a"]]["area"] + R[t["b"]]["area"] - a["area"] - b["area"]) < 0.1
+    assert all(R[k]["poly"] == U[k]["poly"] for k in U if k not in (t["a"], t["b"]))
+    assert R[t["a"]]["type"] == a["type"] and R[t["a"]]["rooms"] and not any("no se pudieron" in w for w in r["warnings"])
+    r = run(barra, unit_edits=[{"op": "tabique", "p": mid, "a": hacia(100)}])          # no deja una vivienda sin ancho
+    assert min(u["width"] for u in r["units"]) >= 0.5 * 5.0 - 0.01
+    # unir: una sola vivienda con el ancho de las dos y el tabique
+    r = run(barra, unit_edits=[{"op": "fusionar", "p": mid}])
+    m = next(u for u in r["units"] if u["id"] == t["a"])
+    assert len(r["units"]) == len(base["units"]) - 1 and abs(m["width"] - (a["width"] + 0.3 + b["width"])) < 0.02
+    # dividir: dos partes; la primera conserva el número; un tipo del mix solo si la superficie se le parece
+    c = [sum(p[0] for p in a["poly"]) / len(a["poly"]), sum(p[1] for p in a["poly"]) / len(a["poly"])]
+    r = run(barra, unit_edits=[{"op": "dividir", "p": c}])
+    p1, p2 = [u for u in r["units"] if u.get("editada")]
+    assert len(r["units"]) == len(base["units"]) + 1 and p1["id"] == t["a"] and abs(p1["width"] + 0.3 + p2["width"] - a["width"]) < 0.02
+    assert p1["area"] < 0.65 * 75 and p1["type"] == ("%d dorm" % p1["bedrooms"] if p1["bedrooms"] else "Monoambiente"), p1["type"]
+    assert r["metrics"]["mix"]["match_score"] < base["metrics"]["mix"]["match_score"]   # el mix se aleja del objetivo
+    # en orden: dividir y después mover el tabique nuevo
+    tn = next(x for x in r["tabiques"] if (x["a"], x["b"]) == (p1["id"], p2["id"]))
+    mn = [(tn["seg"][0][0] + tn["seg"][1][0]) / 2, (tn["seg"][0][1] + tn["seg"][1][1]) / 2]
+    r2 = run(barra, unit_edits=[{"op": "dividir", "p": c}, {"op": "tabique", "p": mn, "a": [mn[0] + tn["dir"][0], mn[1] + tn["dir"][1]]}])
+    q1 = next(u for u in r2["units"] if u["id"] == p1["id"])
+    assert abs(q1["width"] - (p1["width"] + 1)) < 0.02 and not any("no se pudieron" in w for w in r2["warnings"])
+    # un cambio que ya no entra se avisa y no cambia nada
+    r = run(barra, unit_edits=[{"op": "dividir", "p": [500, 500]}])
+    assert any("1 cambio(s) de viviendas no se pudieron aplicar" in w for w in r["warnings"]) and len(r["units"]) == len(base["units"])
+    # edificio con patio (dos bloques): el cambio en el segundo bloque también se aplica
+    larga = [[0, 0], [90, 0], [90, 16], [0, 16]]
+    pat = dict(patios_mode="manual", patios=[[[40, 0], [48, 0], [48, 16], [40, 16]]])
+    rb = run(larga, **pat)
+    t2 = max(rb["tabiques"], key=lambda x: x["seg"][0][0])                            # el tabique más a la derecha
+    m2 = [(t2["seg"][0][0] + t2["seg"][1][0]) / 2, (t2["seg"][0][1] + t2["seg"][1][1]) / 2]
+    assert m2[0] > 48
+    r = run(larga, unit_edits=[{"op": "fusionar", "p": m2}], **pat)
+    assert len(r["units"]) == len(rb["units"]) - 1 and not any("no se pudieron" in w for w in r["warnings"])
+    # web: tabiques que se arrastran, dividir y unir en la ficha, descartar, y todo se puede deshacer
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    js = html.split("<script>", 1)[1]
+    for s_ in ("unit_edits:ediciones.length?ediciones:null", "function dividirVivienda", "function unirViviendas",
+               "function descartarEdiciones", "'data-tab':k", "op:'tabique'", "op:'fusionar'", "op:'dividir'", "dragTab={k:"):
+        assert s_ in js, s_
+    assert "ediciones" in js.split("function foto(){", 1)[1].split("\n", 1)[0]
+
+if __name__ == "__main__":
+    test_editar_viviendas(); print("OK31")
