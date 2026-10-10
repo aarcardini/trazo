@@ -775,16 +775,38 @@ def _x_que_entra(pc, x, side, params):
     return x
 
 
+def _sin_pisar(pieces, pc, x, side, params, sentido):
+    """La x más cercana a x, hacia sentido (+1/-1) y dentro de la pieza, donde un núcleo nuevo no pisa a otro (hasta
+    dos frentes de núcleo); None si no hay."""
+    half = params["core_width"] / 2.0
+    for k in range(0, int(4 * half / 0.25) + 1):
+        xx = x + sentido * 0.25 * k
+        if not (pc["xa"] + half - 1e-9 <= xx <= pc["xb"] - half + 1e-9):
+            break
+        if "eje" in pc:
+            xx = _x_que_entra(pc, xx, side, params)
+        _add_core(pc, xx, side, params)
+        pisa = _pisa_nucleo(pieces, pc, pc["cores"][-1])
+        pc["cores"].pop()
+        if not pisa:
+            return xx
+    return None
+
+
 def _pisa_nucleo(pieces, pc, nuevo):
-    """¿El núcleo nuevo de la pieza pc se superpone con uno que ya está (de cualquier pieza)?"""
-    b = nuevo["box"]
+    """¿El núcleo nuevo de la pieza pc se superpone (más de 0,1 m²) con uno que ya está, de cualquier pieza?"""
+    if not nuevo.get("poly_local"):
+        return False
+    b = G.bbox(nuevo["poly_local"])
     for q in pieces:
         for c in q["cores"]:
             if c is nuevo or not c.get("poly_local"):
                 continue
             ol = G.to_local(G.to_world(c["poly_local"], q["origin"], q["angle"]), pc["origin"], pc["angle"])
-            z = G.clip_rect(ol, b[0], b[2], b[1], b[3])
-            if z and abs(G.area(z)) > 0.1:
+            o = G.bbox(ol)
+            if o[0] >= b[2] or b[0] >= o[2] or o[1] >= b[3] or b[1] >= o[3]:
+                continue
+            if sum(abs(G.area(p)) for p in G.subtract(nuevo["poly_local"], [ol])[1][0]) > 0.1:
                 return True
     return False
 
@@ -925,7 +947,7 @@ def _generate_circulation(plate, params):
                 lx = (pc["xa"] + pc["xb"]) / 2.0
             side = 1 if pc.get("single") else (1 if ly >= 0 else -1) if abs(ly) > 0.3 else next_side()
             _add_core(pc, lx, side, dict(params, core_width=w, core_depth=d), bolsillo=not (isinstance(spec, dict) and spec.get("fondo")))
-            pc["cores"][-1].update({"spec": idx, "giro": giro})
+            pc["cores"][-1].update({"spec": idx, "giro": giro, "pisa": _pisa_nucleo(pieces, pc, pc["cores"][-1])})
         return pieces
     ring = bool(params.get("_huecos"))
     for pc in pieces:               # un núcleo en cada extremo libre
@@ -939,15 +961,20 @@ def _generate_circulation(plate, params):
                     codo = _nucleo_en_codo(pc, cerca, params)
                     if codo is not None:
                         _add_core(pc, codo[0], codo[1], params)
+                        if _pisa_nucleo(pieces, pc, pc["cores"][-1]):
+                            pc["cores"].pop()   # ya hay un núcleo en ese codo
                         continue
                 x = pc["xa"] + half if e == 0 else pc["xb"] - half
                 if pc["xb"] - pc["xa"] < 2 * half:
                     x = (pc["xa"] + pc["xb"]) / 2.0
                 lado = 1 if pc.get("single") else next_side()
                 _add_core(pc, _x_que_entra(pc, x, lado, params) if "eje" in pc else x, lado, params)
-                if pc.get("user") and _pisa_nucleo(pieces, pc, pc["cores"][-1]):
-                    pc["cores"].pop()       # ya hay un núcleo ahí (las dos mitades cortas de una línea cortada en un cruce)
-                    continue
+                if _pisa_nucleo(pieces, pc, pc["cores"][-1]):
+                    pc["cores"].pop()       # pisa otro núcleo (dos puntas cercanas): se corre hacia adentro, si entra
+                    x2 = _sin_pisar(pieces, pc, x, lado, params, 1 if e == 0 else -1)
+                    if x2 is None:
+                        continue            # no entra: el que está ya sirve a las dos puntas
+                    _add_core(pc, x2, lado, params)
                 pc["cores"][-1]["punta"] = e
 
     def worst():
@@ -977,9 +1004,24 @@ def _generate_circulation(plate, params):
         oscuro = _nucleo_en_codo(pc, [{"x": x}], dict(params, egress_single=BOLSILLO * 2))
         if oscuro is not None:      # de preferencia en un tramo sin luz cercano: no le quita fachada a ninguna vivienda
             _add_core(pc, oscuro[0], oscuro[1], params)
-            continue
+            if not _pisa_nucleo(pieces, pc, pc["cores"][-1]):
+                continue
+            pc["cores"].pop()
         lado = 1 if pc.get("single") else next_side()
         _add_core(pc, _x_que_entra(pc, x, lado, params) if "eje" in pc else x, lado, params)
+        if _pisa_nucleo(pieces, pc, pc["cores"][-1]):
+            pc["cores"].pop()       # pisa otro núcleo: del otro lado del pasillo o un poco más allá
+            x2 = None
+            for ld in ((lado,) if pc.get("single") else (-lado, lado)):
+                for d in (1, -1):
+                    x2 = _sin_pisar(pieces, pc, x, ld, params, d)
+                    if x2 is not None:
+                        _add_core(pc, x2, ld, params)
+                        break
+                if x2 is not None:
+                    break
+            if x2 is None:
+                break               # no entra sin pisar otro núcleo: no se agregan más
     # R3.1: un núcleo de punta que deja una franja suelta hasta la fachada se apoya contra ella, si la evacuación
     # sigue dentro del máximo (si no, queda donde estaba)
     for pc in pieces:
@@ -993,7 +1035,7 @@ def _generate_circulation(plate, params):
                 continue
             _add_core(pc, x2, c["side"], params)
             pc["cores"][k] = pc["cores"].pop()
-            if worst()[0] > max(params["egress_multi"], v):
+            if worst()[0] > max(params["egress_multi"], v) or _pisa_nucleo(pieces, pc, pc["cores"][k]):
                 pc["cores"][k] = c
     _zonas_oscuras(pieces, params)
     return pieces

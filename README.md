@@ -133,6 +133,10 @@ Si algo falla en Rhino, ejecuta el script y elige **Diagnostico**. Si no se resu
 - **Mix**: tipos con m² objetivo y %, ancho mínimo, muro medianero; métricas Match Score, Fit y Unidades únicas.
 - **Planos**: distribución día/noche con pasillo interno, puertas y grafo de conexiones verificado.
 
+## Novedades v2.15
+- **Corrección: núcleos encimados.** En plantas con varias alas (por ejemplo, una T o una L con un patio), dos puntas de pasillo cercanas ponían cada una su núcleo, y quedaban encimados: en formas al azar, hasta 60 m² de núcleo pisado. Ahora el segundo núcleo se corre hasta no pisar al primero o, si no entra, el primero sirve a las dos puntas. La evacuación de las viviendas no empeora en ningún caso.
+- Si pones a mano dos núcleos que se pisan, quedan donde los pusiste y se avisa: «El núcleo N se superpone con otro: muévelo o quítalo».
+
 ## Novedades v2.14
 - **Reglas de evacuación (R3.6):** cada vivienda se revisa con dos reglas, editables en el panel:
   - **Recorrido máximo:** por defecto 30 m desde la puerta hasta el núcleo más cercano, por el pasillo.

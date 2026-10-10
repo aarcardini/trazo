@@ -19,7 +19,7 @@ from .units import (_bisect_x, _chain_union, _is_rect, _segments, generate_unit_
                     unit_rooms, sin_solapes)  # noqa: F401
 from .patios import (auto_patios, _anillo, split_blocks, make_patio_dark, _block_of, _block_of_line)  # noqa: F401
 
-VERSION = "2.14"
+VERSION = "2.15"
 
 DEFAULT_PARAMS = {
     # Masa
@@ -194,6 +194,9 @@ def generate(data):
                                          "parts": [{"kind": p_["kind"], "name": p_["name"], "poly": W(pc, p_["poly"]),
                                                     "lines": [W(pc, ln) for ln in p_["lines"]]} for p_ in parts]})
                     cpolys.append(res["cores"][-1]["poly"])
+                    if c.get("pisa"):
+                        res["warnings"].append("El núcleo %d se superpone con otro: muévelo o quítalo (núcleos manuales)" %
+                                               len(res["cores"]))
         if len(plantas) > 1 and not cpolys:
             res["warnings"].append("El bloque %d no tiene núcleo: añade uno (en modo manual cada bloque necesita el suyo)" % (bi + 1))
         res["dark_zones"] += [G.pol_to_list(d_) for pc in pieces for d_ in pc.get("dark", [])]

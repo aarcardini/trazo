@@ -707,3 +707,24 @@ def test_evacuacion():
 
 if __name__ == "__main__":
     test_evacuacion(); print("OK24")
+
+
+def test_nucleos_sin_pisarse():
+    """Corrección (v2.15): dos núcleos no se pisan. En plantas con varias alas (por ejemplo, una T con un patio) dos
+    puntas cercanas ponían cada una su núcleo, encimados; ahora el segundo se corre hasta no pisar al primero o, si no
+    entra, el primero sirve a las dos. Con núcleos manuales encimados, se avisa."""
+    from engine import geometry as G
+    W, H = 66.49, 53.09
+    T = [[0, 0], [W, 0], [W, H * .4], [W * .65, H * .4], [W * .65, H], [W * .35, H], [W * .35, H * .4], [0, H * .4]]
+    patio = [[31.76, 24.66], [48.39, 24.66], [48.39, 40.58], [31.76, 40.58]]
+    r = run(T, patios_mode="manual", patios=[patio])
+    cs = [c["poly"] for c in r["cores"]]
+    pisa = sum(abs(G.area(o)) for i, a in enumerate(cs) for b in cs[i + 1:] for o in G.subtract(a, [b])[1][0])
+    assert r["units"] and pisa < 0.1, (pisa, len(cs))
+    assert not [u for u in r["units"] if u["egress_status"] != "ok"], [(u["id"], u["egress"], u["saco"]) for u in r["units"]]
+    # núcleos manuales encimados: quedan donde los puso el usuario, con un aviso
+    r = run([[0, 0], [40, 0], [40, 16], [0, 16]], cores_mode="manual", cores=[[18, 8], [21, 8]])
+    assert any("se superpone con otro" in w for w in r["warnings"]), r["warnings"]
+
+if __name__ == "__main__":
+    test_nucleos_sin_pisarse(); print("OK25")
