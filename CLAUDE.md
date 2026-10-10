@@ -98,7 +98,7 @@ En GitHub, `.github/workflows/pruebas.yml` ejecuta las pruebas y valida el scrip
 ## Problemas conocidos (contexto, no tareas)
 - `clip_halfplane`/`clip_rect` siguen siendo Sutherland-Hodgman: en polígonos cóncavos dejan puentes de ancho cero si el corte separa la figura. Donde el resultado tiene que ser una figura (tramos de viviendas, unidades, pasillos, núcleos, retiros, manzanas, lotes) se usan `clip_rect_parts`, `clip_halfplane_parts` o `largest_part` (R2.2); úsalos también en código nuevo.
 - Cruces en X entre polilíneas no se resuelven (solapes cerca del cruce).
-- En codos queda ~5 % de planta sin usar; tramos menores que el ancho mínimo se descartan.
+- En codos queda ~5 % de planta sin usar; tramos menores que el ancho mínimo se descartan (los que quedaban entre un núcleo de punta y la fachada ya no: el núcleo se apoya contra ella, R3.1; los que quedan entre un conector y un núcleo, sí).
 - Masterplan: calles curvas, cruces en ángulo muy agudo y quiebres de calle a mitad de manzana no se resuelven todavía; no hay salida a Rhino/DXF del masterplan.
 
 ## Glosario

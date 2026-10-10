@@ -407,3 +407,29 @@ def test_geometria_robusta():
 
 if __name__ == "__main__":
     test_geometria_robusta(); print("OK17")
+
+
+def test_sin_restos():
+    """R3.1: un pasillo dibujado que termina antes de la fachada ya no deja una franja suelta entre el núcleo de la
+    punta y el borde: el núcleo se apoya contra la fachada y la vivienda del otro lado crece (sin pasar la evacuación)."""
+    from engine import geometry as G
+    from engine import layout as L
+    r = run([[0, 0], [60, 0], [60, 16], [0, 16]], centerlines=[[[3, 8], [57.5, 8]]])
+    for arriba in (True, False):                   # a cada lado del pasillo, viviendas y núcleos de fachada a fachada
+        bb = [G.bbox(p) for p in [u["poly"] for u in r["units"]] + [c["poly"] for c in r["cores"]]]
+        bb = [b for b in bb if (b[1] + b[3]) / 2 > 8] if arriba else [b for b in bb if (b[1] + b[3]) / 2 < 8]
+        assert min(b[0] for b in bb) < 0.4 and max(b[2] for b in bb) > 59.6, bb
+    m, m0 = r["metrics"], run([[0, 0], [60, 0], [60, 16], [0, 16]])["metrics"]
+    assert m["efficiency"] >= m0["efficiency"] - 0.1 and m["egress_max"] <= L.DEFAULT_PARAMS["egress_multi"], (m, m0)
+    # el ejemplo «L con polilínea»: de 49,6 a menos de 25 m² sin usar
+    s = json.load(open(os.path.join(os.path.dirname(__file__), "..", "samples", "L_polilinea.json"), encoding="utf-8"))
+    m = run(s["footprint"], centerlines=s["centerlines"])["metrics"]
+    assert m["unused_area"] < 25 and m["efficiency"] > 72, m
+    # si detrás del núcleo hay un bolsillo, la franja y el bolsillo ya forman una vivienda: el núcleo no se mueve
+    fp = [[0, 0], [21.21, 0], [21.21, 23.5], [14.85, 23.5], [14.85, 9.4], [6.36, 9.4], [6.36, 23.5], [0, 23.5]]
+    r = run(fp, h=6, centerlines=[[[1.06, 7.05], [19.09, 7.05]]],
+            medianeras=[{"a": [21.21, 0], "b": [21.21, 23.5], "retiro": 3}, {"a": [0, 23.5], "b": [0, 0], "retiro": 0}])
+    assert sorted(round(u["area"]) for u in r["units"]) == [36, 76, 88], [round(u["area"]) for u in r["units"]]
+
+if __name__ == "__main__":
+    test_sin_restos(); print("OK18")

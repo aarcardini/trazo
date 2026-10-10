@@ -443,6 +443,35 @@ def egress_at(pieces, i, x, depth=3):
     return best
 
 
+BOLSILLO = 4.5     # fondo detrás de un núcleo por debajo del cual no cabe una unidad útil: el núcleo llega a la fachada
+
+
+def _punta(pc, e, x, side, params):
+    """Núcleo en una punta libre (R3.1). Si entre el núcleo y el borde de la planta queda una franja demasiado chica
+    para una vivienda (por ejemplo, una polilínea que termina antes de la fachada), el núcleo se apoya contra el borde:
+    esa franja ya no queda suelta y la vivienda del otro lado del núcleo crece en su lugar. Solo si el núcleo llega a la
+    fachada: si detrás le queda un bolsillo, la franja y el bolsillo ya forman una vivienda."""
+    cw, pw, d, half = params["corridor_width"], params["party_wall"], params["core_depth"], params["core_width"] / 2.0
+    y0, y1 = (-cw / 2, -cw / 2 + d) if side > 0 else (cw / 2 - d, cw / 2)
+    banda = G.clip_rect(pc["loc_plate"], None, None, y0, y1)
+    detras = G.clip_rect(pc["loc_plate"], x - half, x + half)
+    if not banda or not detras:
+        return x
+    ys = [p[1] for p in detras]
+    if (max(ys) - y1 if side > 0 else y0 - min(ys)) >= BOLSILLO:
+        return x
+    bx0, _, bx1, _ = G.bbox(banda)
+    resto = bx1 - (x + half) if e == 1 else (x - half) - bx0
+    if resto <= 0.05:
+        return x
+    franja = G.clip_rect(pc["loc_plate"], x + half if e == 1 else None, None if e == 1 else x - half,
+                         cw / 2 + pw / 2 if side > 0 else None, None if side > 0 else -cw / 2 - pw / 2)
+    mix = [m["area"] for m in params["unit_mix"] if m.get("percent", 0) > 0 and m.get("area", 0) > 0] or [1e9]
+    if resto < 0.6 * params["min_unit_width"] or abs(G.area(franja or [(0, 0)] * 3)) < 0.4 * min(mix):
+        return x + resto if e == 1 else x - resto
+    return x
+
+
 def _add_core(pc, x, side, params):
     cw, w, d = params["corridor_width"], params["core_width"], params["core_depth"]
     if side > 0:
@@ -452,7 +481,7 @@ def _add_core(pc, x, side, params):
     strip = G.clip_rect(pc["loc_plate"], box[0], box[2])
     if strip:
         ys = [p[1] for p in strip]
-        pocket = 4.5      # detrás del núcleo no cabe una unidad útil: el núcleo llega hasta la fachada
+        pocket = BOLSILLO
         if side > 0 and 0 < max(ys) - box[3] < pocket:
             box = (box[0], box[1], box[2], max(ys))
         if side < 0 and 0 < box[1] - min(ys) < pocket:
@@ -608,6 +637,7 @@ def _generate_circulation(plate, params):
                 if pc["xb"] - pc["xa"] < 2 * half:
                     x = (pc["xa"] + pc["xb"]) / 2.0
                 _add_core(pc, x, 1 if pc.get("single") else next_side(), params)
+                pc["cores"][-1]["punta"] = e
 
     def worst():
         w = (-1.0, None, None)
@@ -634,4 +664,17 @@ def _generate_circulation(plate, params):
         pc = pieces[i]
         x = min(max(x, pc["xa"] + half), pc["xb"] - half) if pc["xb"] - pc["xa"] >= 2 * half else (pc["xa"] + pc["xb"]) / 2
         _add_core(pc, x, 1 if pc.get("single") else next_side(), params)
+    # R3.1: un núcleo de punta que deja una franja suelta hasta la fachada se apoya contra ella, si la evacuación
+    # sigue dentro del máximo (si no, queda donde estaba)
+    for pc in pieces:
+        for k, c in enumerate(pc["cores"]):
+            if c.get("punta") is None:
+                continue
+            x2 = _punta(pc, c["punta"], c["x"], c["side"], params)
+            if abs(x2 - c["x"]) < 1e-9:
+                continue
+            _add_core(pc, x2, c["side"], params)
+            pc["cores"][k] = pc["cores"].pop()
+            if worst()[0] > max(params["egress_multi"], v):
+                pc["cores"][k] = c
     return pieces

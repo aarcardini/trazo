@@ -133,6 +133,9 @@ Si algo falla en Rhino, ejecuta el script y elige **Diagnostico**. Si no se resu
 - **Mix**: tipos con m² objetivo y %, ancho mínimo, muro medianero; métricas Match Score, Fit y Unidades únicas.
 - **Planos**: distribución día/noche con pasillo interno, puertas y grafo de conexiones verificado.
 
+## Novedades v2.8
+- **Sin restos sueltos en las puntas (R3.1):** cuando el pasillo (por ejemplo, una polilínea dibujada) termina antes de la fachada, el núcleo de esa punta dejaba una franja de 1 a 4 m hasta el borde, demasiado chica para una vivienda, que quedaba sin usar. Ahora el núcleo se apoya contra la fachada y la vivienda del otro lado del núcleo crece en su lugar. Solo si el núcleo ya llega a la fachada (si detrás le queda un bolsillo, franja y bolsillo ya forman una vivienda) y si la evacuación sigue dentro del máximo. En el ejemplo «L con polilínea», la eficiencia pasa de 69,8 % a 72,7 %; en «T con 2 polilíneas», de 69,9 % a 70,7 %.
+
 ## Novedades v2.7
 - **Corrección de geometría (R2.2):** cuando un corte separaba una figura cóncava en dos (por ejemplo, una masa con una muesca en V, o un predio en C en el Masterplan), las dos partes quedaban unidas por una línea de ancho cero: una vivienda o un pasillo de dos piezas, o una manzana doble. Ahora cada parte sale por separado: el pasillo que cruza una muesca se dibuja en dos tramos y cada manzana y cada lote son una sola figura.
 - Por dentro, el motor quedó repartido en módulos (R2.1: `massing.py`, `circulation.py`, `units.py`, `patios.py`), sin cambiar ningún resultado.

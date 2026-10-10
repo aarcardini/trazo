@@ -31,7 +31,7 @@ Leyenda de esfuerzo: S = pequeño, M = mediano, L = grande (dividir antes de emp
 - [x] **R2.2 (M) Geometría robusta.** (v2.7: `clip_rect_parts`, `clip_halfplane_parts`, `largest_part`; viviendas, pasillos, manzanas y lotes ya no salen unidos por puentes) Recorte de polígonos que devuelva varias partes cuando el corte separa la figura (reemplaza los puentes de ancho cero de Sutherland-Hodgman).
 
 ## Fase 3 — Calidad de la planta
-- [ ] **R3.1 (M) Sin restos pequeños.** Los tramos menores que el ancho mínimo se suman a la unidad vecina en vez de descartarse.
+- [x] **R3.1 (M) Sin restos pequeños.** (v2.8: el núcleo de una punta se apoya contra la fachada cuando deja una franja demasiado chica para una vivienda, si llega a la fachada y la evacuación lo permite) Los tramos menores que el ancho mínimo se suman a la unidad vecina en vez de descartarse.
   *Hecho cuando:* "Sin usar" baja en los ejemplos L y T de `samples/` sin empeorar el match score.
 - [ ] **R3.2 (M) Codos más eficientes.** Unidad de esquina en el codo interior (en L) en lugar de hueco.
 - [ ] **R3.3 (L) Cruces en X** entre polilíneas sin solapes.
