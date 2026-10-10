@@ -42,7 +42,7 @@ Leyenda de esfuerzo: S = pequeño, M = mediano, L = grande (dividir antes de emp
 ## Fase 4 — Edición en la web
 - [x] **R4.1 (M) Guardar y abrir proyectos** (v2.16: «Guardar proyecto» y «Abrir proyecto…» en la web; el archivo `.trazo.json` es el pedido al motor más nombre, versión y fecha, con solo las medidas cambiadas; también abre masas sueltas) (JSON con masa, líneas, núcleos, mix y parámetros).
 - [x] **R4.2 (S) Deshacer/rehacer** (v2.17: botones ↶ ↷ y Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z o Ctrl+Y; también medianeras y patios) para líneas y núcleos.
-- [ ] **R4.3 (M) Arrastrar núcleos** con el ratón (como los vértices).
+- [x] **R4.3 (M) Arrastrar núcleos** (v2.18: vista previa punteada; al soltar pasa a manual, el motor lo ajusta al pasillo del lado donde quedó; se deshace con Ctrl+Z) con el ratón (como los vértices).
 - [ ] **R4.4 (L) Editar unidades:** mover el tabique entre dos unidades vecinas, fusionar y dividir; métricas se actualizan.
 - [ ] **R4.5 (M) Variantes:** guardar varias soluciones y compararlas en una tabla (unidades, eficiencia, match, circulación).
 

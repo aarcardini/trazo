@@ -19,7 +19,7 @@ from .units import (_bisect_x, _chain_union, _is_rect, _segments, generate_unit_
                     unit_rooms, sin_solapes)  # noqa: F401
 from .patios import (auto_patios, _anillo, split_blocks, make_patio_dark, _block_of, _block_of_line)  # noqa: F401
 
-VERSION = "2.17"
+VERSION = "2.18"
 
 DEFAULT_PARAMS = {
     # Masa

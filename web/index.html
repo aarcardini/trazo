@@ -74,7 +74,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:3px 4px;b
  <label>Modo <select id="cores_mode" onchange="coresModeChanged()"><option value="auto">automático</option><option value="manual">manual</option></select></label>
  <button class="s" id="btnAddCore" onclick="setTool('addcore')">+ Añadir núcleo</button>
  <button class="s" id="btnDelCore" onclick="setTool('delcore')">Quitar núcleo</button>
- <div class="hint" id="coreInfo">Al añadir o quitar un núcleo se pasa a modo manual. Se ajusta al pasillo más cercano y se coloca en el lado donde haces clic.</div>
+ <div class="hint" id="coreInfo">Al añadir, quitar o arrastrar un núcleo se pasa a modo manual. Se ajusta al pasillo más cercano y se coloca en el lado donde haces clic o lo sueltas.</div>
  <button onclick="run('corridor')">Generar pasillo y núcleos</button>
 
  <h2>3 · Mix de unidades</h2>
@@ -221,7 +221,7 @@ function draw(){ const gb=$('gb'); gb.innerHTML='';
     const e=el('line',{x1:X(l[0]),y1:Y(l[0]),x2:X(l[1]),y2:Y(l[1]),stroke:EVAC[k],'stroke-width':6,'stroke-linecap':'round',opacity:.75}); e.appendChild(el('title',{},t)); gb.appendChild(e); })); }
   drawShapes2D(gb,coreShapes());
   (result.cores||[]).forEach((c,i)=>{ if(i===selCore) gb.appendChild(el('polygon',{points:pts(c.poly),fill:'none',stroke:'#2f6fed','stroke-width':3,'pointer-events':'none'}));
-   const t=el('polygon',{points:pts(c.poly),fill:'transparent','data-core':i,style:'cursor:pointer'}); t.appendChild(el('title',{},'Núcleo '+(i+1)+': clic para cambiar sus medidas o girarlo')); gb.appendChild(t); });
+   const t=el('polygon',{points:pts(c.poly),fill:'transparent','data-core':i,style:'cursor:move'}); t.appendChild(el('title',{},'Núcleo '+(i+1)+': arrástralo para moverlo; clic para cambiar sus medidas o girarlo')); gb.appendChild(t); });
  }
  drawDims(gb); drawOverlay(); }
 /* ---------- cotas y escala gráfica ---------- */
@@ -254,6 +254,8 @@ function drawDims(g){ if(!showDims||!view||!footprint.length) return;
  [0,1].forEach(i=>g.appendChild(el('rect',{x:x+i*px/2,y:y-5,width:px/2,height:5,fill:i?'#fff':'#344054',stroke:'#344054','stroke-width':1,'pointer-events':'none'})));
  [[0,'0'],[px/2,String(m/2)],[px,m+' m']].forEach(([dx,t])=>g.appendChild(el('text',{x:x+dx,y:y-9,'text-anchor':'middle','font-size':10,fill:'#344054','pointer-events':'none'},t))); }
 function drawOverlay(){ const go=$('go'); go.innerHTML=''; if(!view) return; drawMeds(go);
+ if(dragCore&&dragCore.moved&&result&&result.cores&&result.cores[dragCore.i]){ const d=dragCore.d;   // núcleo arrastrado: dónde va a quedar (el motor lo ajusta al pasillo)
+  go.appendChild(el('polygon',{points:pts(result.cores[dragCore.i].poly.map(p=>[p[0]+d[0],p[1]+d[1]])),fill:'rgba(47,111,237,.15)',stroke:'#2f6fed','stroke-width':2,'stroke-dasharray':'5 3','pointer-events':'none'})); }
  const line=(a,b,dash)=>go.appendChild(el('line',{x1:X(a),y1:Y(a),x2:X(b),y2:Y(b),stroke:'#2f6fed','stroke-width':2,'stroke-dasharray':dash||'6 3'}));
  centerlines.forEach((pl,li)=>{ for(let i=0;i<pl.length-1;i++) line(pl[i],pl[i+1]);
   pl.forEach((p,vi)=>{ const c=el('circle',{cx:X(p),cy:Y(p),r:6,fill:'#fff',stroke:'#2f6fed','stroke-width':2,style:'cursor:grab'});
@@ -410,7 +412,7 @@ function undoLine(){ if(curLine.length){curLine.pop();} else { if(centerlines.le
 function clearLines(){ if(centerlines.length) recordar('volver al pasillo automático'); centerlines=[]; curLine=[]; lineInfo(); drawOverlay(); if(lastStage) runCirc(); }
 function lineInfo(){ $('lineInfo').textContent=centerlines.length?centerlines.length+' polilínea(s), '+centerlines.reduce((a,p)=>a+p.length,0)+' vértices':'Pasillo automático'; }
 function coresModeChanged(){ recordar('modo de núcleos',{cores_mode:$('cores_mode').value==='manual'?'auto':'manual'}); if($('cores_mode').value==='manual'){ coresManual=(result&&result.cores?result.cores.map(c=>c.center):[]); } coreInfo(); if(lastStage) runCirc(); }
-function coreInfo(){ $('coreInfo').textContent=$('cores_mode').value==='manual'?coresManual.length+' núcleo(s) manual(es)':'Al añadir o quitar un núcleo se pasa a modo manual. Se ajusta al pasillo más cercano y se coloca en el lado donde haces clic.'; }
+function coreInfo(){ $('coreInfo').textContent=$('cores_mode').value==='manual'?coresManual.length+' núcleo(s) manual(es)':'Al añadir, quitar o arrastrar un núcleo se pasa a modo manual. Se ajusta al pasillo más cercano y se coloca en el lado donde haces clic o lo sueltas.'; }
 function ensureManual(){ if($('cores_mode').value!=='manual'){ $('cores_mode').value='manual'; coresManual=(result&&result.cores?result.cores.map(c=>c.center):[]); } }
 
 const svg=$('svg');
@@ -432,8 +434,10 @@ svg.addEventListener('dblclick',e=>{ if(tool==='line'){ finishLine(); } });
 svg.addEventListener('wheel',e=>{ e.preventDefault(); const r=svg.getBoundingClientRect(); const mx=e.clientX-r.left, my=e.clientY-r.top;
  const f=e.deltaY<0?1.15:1/1.15; const nz=Math.max(0.5,Math.min(12,zoom*f)); const k=nz/zoom; const W=svg.clientWidth,H=svg.clientHeight;
  pan=[(mx-W/2)*(1-k)+pan[0]*k,(my-H/2)*(1-k)+pan[1]*k]; zoom=nz; draw(); },{passive:false});
-let panDrag=null;
-svg.addEventListener('pointerdown',e=>{ if(tool||drag) return; if(e.target.closest&&e.target.closest('circle')) return; panDrag={x:e.clientX,y:e.clientY,p:pan.slice(),moved:false}; });
+let panDrag=null, dragCore=null;
+svg.addEventListener('pointerdown',e=>{ if(tool||drag) return; if(e.target.closest&&e.target.closest('circle')) return;
+ const tc=e.target.closest&&e.target.closest('[data-core]'); if(tc&&result&&result.cores){ dragCore={i:+tc.getAttribute('data-core'),x:e.clientX,y:e.clientY,w:toWorld(e),d:[0,0],moved:false}; return; }   // R4.3: arrastrar un núcleo
+ panDrag={x:e.clientX,y:e.clientY,p:pan.slice(),moved:false}; });
 window.addEventListener('pointermove',e=>{ if(!panDrag) return; const dx=e.clientX-panDrag.x, dy=e.clientY-panDrag.y; if(Math.abs(dx)+Math.abs(dy)>4) panDrag.moved=true; if(panDrag.moved){ pan=[panDrag.p[0]+dx,panDrag.p[1]+dy]; draw(); } });
 window.addEventListener('pointerup',e=>{ if(panDrag&&panDrag.moved){ svg._skipClick=true; setTimeout(()=>svg._skipClick=false,0); } panDrag=null; });
 svg.addEventListener('mousemove',e=>{ if(!view) return; const w=toWorld(e);
@@ -442,6 +446,13 @@ svg.addEventListener('mousemove',e=>{ if(!view) return; const w=toWorld(e);
  if(tool==='line'||tool==='addcore') { mouse=tool==='line'?snap(w,curLine[curLine.length-1]):w; drawOverlay(); } });
 svg.addEventListener('pointermove',e=>{ if(!drag||!view) return; if(!drag.moved) recordar('mover vértice'); const pl=centerlines[drag.li]; const prev=pl[drag.vi-1]||pl[drag.vi+1]; pl[drag.vi]=snap(toWorld(e),null); drag.moved=true; drawOverlay(); });
 svg.addEventListener('pointerup',e=>{ if(drag){ const d=drag; drag=null; if(d.moved&&lastStage) runCirc(); } });
+svg.addEventListener('pointermove',e=>{ if(!dragCore||!view) return; if(!dragCore.moved){ if(Math.abs(e.clientX-dragCore.x)+Math.abs(e.clientY-dragCore.y)<5) return; svg.setPointerCapture(e.pointerId); }   // se captura al moverse: un clic sigue abriendo la ficha
+ const w=toWorld(e); dragCore.moved=true; dragCore.d=[w[0]-dragCore.w[0],w[1]-dragCore.w[1]]; drawOverlay(); });
+svg.addEventListener('pointerup',e=>{ if(!dragCore) return; const g=dragCore; dragCore=null; if(!g.moved) return;   // sin mover es un clic: abre la ficha
+ svg._skipClick=true; setTimeout(()=>svg._skipClick=false,0); const k=result.cores[g.i]; if(!k) return drawOverlay();
+ recordar('mover núcleo'); const i=k.spec!=null?k.spec:result.cores.indexOf(k);   // en automático pasa a manual con los núcleos en el mismo orden
+ ensureManual(); const o=coresManual[i], c=[Math.round((k.center[0]+g.d[0])*10)/10,Math.round((k.center[1]+g.d[1])*10)/10];
+ coresManual[i]=Array.isArray(o)?c:Object.assign({},o,{p:c}); if(selCore===g.i) selSpec=i; coreInfo(); $('tag').textContent='Núcleo movido'; runCirc(); });
 window.addEventListener('keydown',e=>{ const t=e.target, texto=t.tagName==='TEXTAREA'||(t.tagName==='INPUT'&&!/^(checkbox|radio|button|file|range|color)$/.test(t.type));   // en un campo de texto, su propio deshacer
  if((e.ctrlKey||e.metaKey)&&!texto){ const k=e.key.toLowerCase();
   if(k==='z'&&!e.shiftKey){ e.preventDefault(); deshacer(); return; } if((k==='z'&&e.shiftKey)||k==='y'){ e.preventDefault(); rehacer(); return; } }

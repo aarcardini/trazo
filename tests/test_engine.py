@@ -803,3 +803,30 @@ def test_deshacer():
 
 if __name__ == "__main__":
     test_deshacer(); print("OK27")
+
+
+def test_arrastrar_nucleos():
+    """R4.3: un núcleo se arrastra en la planta. Al soltarlo, la web pasa a modo manual con el centro del núcleo corrido
+    lo que se arrastró; el motor lo ajusta al pasillo más cercano, del lado donde quedó (si cruza el pasillo, cambia de
+    lado). Los demás núcleos no se mueven, y arrastrar se puede deshacer."""
+    barra = [[0, 0], [60, 0], [60, 16], [0, 16]]
+    orden = lambda r: sorted(r["cores"], key=lambda c: c["spec"])
+    c0 = orden(run(barra, cores_mode="manual", cores=[[15, 9], [45, 9]]))
+    (x, y), otro = c0[0]["center"], c0[1]["center"]
+    c1 = orden(run(barra, cores_mode="manual", cores=[[x + 6, y + 0.4], otro]))       # arrastrado 6 m a lo largo
+    assert abs(c1[0]["center"][0] - (x + 6)) < 0.6 and c1[0]["side"] == c0[0]["side"], (c0[0], c1[0])
+    assert abs(c1[0]["center"][1] - y) < 0.05, "se ajusta al pasillo: no se corre de costado"
+    assert c1[1]["center"] == otro and c1[1]["side"] == c0[1]["side"]                  # el otro, igual
+    c2 = orden(run(barra, cores_mode="manual", cores=[[x, 16 - y], otro]))            # arrastrado al otro lado del pasillo
+    assert c2[0]["side"] == -c0[0]["side"], (c0[0]["side"], c2[0]["side"])
+    # web: se toma del núcleo, se ve dónde queda y al soltar se registra para deshacer, pasa a manual y recalcula
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    js = html.split("<script>", 1)[1]
+    assert "dragCore={i:+tc.getAttribute('data-core')" in js
+    assert "dragCore&&dragCore.moved" in js.split("function drawOverlay(){", 1)[1].split("\nfunction ", 1)[0]
+    suelta = js.split("svg.addEventListener('pointerup',e=>{ if(!dragCore) return;", 1)[1].split("\nsvg.addEventListener(", 1)[0].split("\nwindow.", 1)[0]
+    for t in ("if(!g.moved) return", "svg._skipClick=true", "recordar('mover núcleo')", "ensureManual()", "k.center[0]+g.d[0]", "runCirc()"):
+        assert t in suelta, t
+
+if __name__ == "__main__":
+    test_arrastrar_nucleos(); print("OK28")
