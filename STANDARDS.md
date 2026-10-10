@@ -65,6 +65,20 @@ Cada mueble es un módulo con su paso libre. Ninguno va delante de las aberturas
 
 Reglas del motor: el dormitorio principal lleva la cama doble (mejor con la cabecera contra una pared sin ventana ni puerta) y su placard; los demás, dos camas individuales o, si no entran, una (aviso informativo). Si el placard no entra entero, se prueba más corto (de a 0,30 m, hasta 0,90 m) antes que dejarlo afuera. En el estar, el rack va contra una pared maciza sin ventana y el sofá enfrente, contra la pared opuesta o suelto a la distancia de la TV; la mesa va cerca de la cocina. Si la mesa no entra con todos los asientos, se prueba una más chica y se avisa (para un dormitorio, una mesa más chica es aceptable y el aviso es informativo). El comedor y el estar contiguos se amueblan juntos. En una estancia que ya no llega a su lado o área mínima no se suma el aviso de lo que no entra.
 
+## Vivienda accesible (F5)
+
+Para los tipos del mix marcados «Acc.». Editables en «Medidas y normativa → Equipamiento y muebles».
+
+| Elemento | Valor por defecto | Referencia |
+|---|---|---|
+| Puertas de dormitorios y baño | 0,82 m | Criterio indicado por el usuario (paso de la silla de ruedas) |
+| Círculo de giro en el baño | Ø 1,50 m, libre de artefactos (puede pisar la ducha a nivel) | Criterio habitual de accesibilidad (UNIT 200, ISO 21542) |
+| Espacio de transferencia junto al inodoro | 0,80 m de ancho a un costado, del fondo del inodoro más su paso | Ídem |
+| Ducha a nivel (sin plato) | 1,20 × 0,90 m, con asiento rebatible | Ídem |
+| Baño de la vivienda accesible | 2,20 m de frente (el fondo lo da la planta; la comprobación es el giro) | Criterio de proyecto |
+
+Reglas del motor: el baño principal abre hacia afuera (el barrido de la hoja no quita lugar al giro); no lleva bidé; el costado del inodoro sin transferencia va, si se puede, contra la pared (barra de apoyo). Si el baño no llega, se dibuja el baño común y la ficha avisa. Pendiente: círculos de giro en cocina y dormitorios.
+
 ## Núcleo de circulación vertical
 
 | Elemento | Valor | Referencia |

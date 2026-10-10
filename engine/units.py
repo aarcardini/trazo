@@ -384,7 +384,7 @@ def unit_rooms(u, params, pc=None, plate=None):
                     return False
             return True
     S = ST.merged(params.get("standards"))
-    res = P.layout_unit(poly, nb, is_fac, S["vivienda"], S["equipamiento"])
+    res = P.layout_unit(poly, nb, is_fac, S["vivienda"], S["equipamiento"], bool(spec.get("accesible")))
 
     def back_poly(pl):
         out = [back(p) for p in pl]

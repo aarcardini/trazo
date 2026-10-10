@@ -1131,3 +1131,80 @@ def test_muebles():
 
 if __name__ == "__main__":
     test_muebles(); print("OK33")
+
+
+def test_accesible():
+    """F5 (R5.6, tercera parte): vivienda accesible por tipo del mix. Puertas de dormitorios y baño de 0,82 m; la del baño
+    abre hacia afuera; el baño lleva ducha a nivel, inodoro con su transferencia al costado, lavatorio y un círculo de
+    giro de 1,50 m libre (puede pisar la ducha), sin bidé. Si no entra, se avisa. Solo los tipos marcados."""
+    import math
+    from engine import geometry as G, plans as P, standards as ST
+    rect = lambda w, d: [(0.0, 0.0), (w, 0.0), (w, d), (0.0, d)]
+    caja = lambda pl: (min(p[0] for p in pl), min(p[1] for p in pl), max(p[0] for p in pl), max(p[1] for p in pl))
+    largo = lambda d: round(math.hypot(d["q"][0] - d["p"][0], d["q"][1] - d["p"][1]), 2)
+    for w, d, nb in ((9.5, 8.0, 2), (12.5, 8.5, 3), (9.5, 6.5, 2), (6.0, 7.0, 0)):
+        res = P.layout_unit(rect(w, d), nb, accesible=True)
+        assert res["accesible"] and not any(not c["ok"] and "Baño" in c["msg"] for c in res["checks"]), res["checks"]
+        salas = {x["id"]: x["poly"] for x in res["rooms"]}
+        bano = [q for q in res["equipamiento"] if q["room"] == "bath1"]
+        assert sorted(q["kind"] for q in bano) == ["ducha_nivel", "giro", "inodoro", "lavatorio"], bano
+        giro = next(q for q in bano if q["kind"] == "giro")
+        g = caja(giro["poly"])
+        c, R = ((g[0] + g[2]) / 2, (g[1] + g[3]) / 2), (g[2] - g[0]) / 2
+        b = caja(salas["bath1"])
+        assert abs(2 * R - 1.5) < 0.01, R                               # dentro del baño (rectangular)
+        assert b[0] - 1e-6 <= c[0] - R and c[0] + R <= b[2] + 1e-6 and b[1] - 1e-6 <= c[1] - R and c[1] + R <= b[3] + 1e-6
+        for q in bano:                                                  # el giro, libre (salvo la ducha, a nivel)
+            if q["kind"] in ("inodoro", "lavatorio"):
+                k = caja(q["poly"])
+                assert math.hypot(max(k[0] - c[0], 0, c[0] - k[2]), max(k[1] - c[1], 0, c[1] - k[3])) >= R - 1e-3, q["kind"]
+        ino = caja(next(q["poly"] for q in bano if q["kind"] == "inodoro"))
+        otros = [caja(q["poly"]) for q in bano if q["kind"] in ("lavatorio", "ducha_nivel")]
+        lados = ((ino[0] - 0.8, ino[1], ino[0], ino[3]), (ino[2], ino[1], ino[2] + 0.8, ino[3]),
+                 (ino[0], ino[1] - 0.8, ino[2], ino[1]), (ino[0], ino[3], ino[2], ino[3] + 0.8))
+        libre = lambda z: b[0] - 1e-6 <= z[0] and z[2] <= b[2] + 1e-6 and b[1] - 1e-6 <= z[1] and z[3] <= b[3] + 1e-6 and \
+            not any(z[0] < o[2] - 1e-6 and o[0] < z[2] - 1e-6 and z[1] < o[3] - 1e-6 and o[1] < z[3] - 1e-6 for o in otros)
+        assert any(libre(z) for z in lados), (ino, otros)                 # 0,80 libres a un costado del inodoro
+        puerta = next(x for x in res["doors"] if "bath1" in (x["a"], x["b"]))
+        assert largo(puerta) == 0.82 and puerta["a"] == "bath1", puerta                 # abre hacia afuera (hacia b)
+        for x in res["doors"]:
+            if x["b"].startswith("bed"):
+                assert largo(x) == 0.82, x
+            elif x["b"] in ("bath2", "laundry", "closet", "storage"):
+                assert largo(x) == 0.70, x
+    # un baño de 3,00 × 2,20 con la puerta en la esquina: el lavatorio y la ducha no le quitan la transferencia al inodoro
+    from engine import equipamiento as EQ
+    S0 = ST.merged(None)["equipamiento"]
+    pz, ch = EQ.equipar([{"id": "bath1", "kind": "bath", "name": "Baño", "rect": (0.0, 0.0, 3.0, 2.2)}],
+                        [{"p": (0.1, 0.0), "q": (0.92, 0.0), "a": "bath1", "b": "hallway", "ancho": 0.82}], {}, S0, 2, acc=True)
+    ino = caja(next(q["poly"] for q in pz if q["kind"] == "inodoro"))
+    otros = [caja(q["poly"]) for q in pz if q["kind"] in ("lavatorio", "ducha_nivel")]
+    b = (0.0, 0.0, 3.0, 2.2)
+    lados = ((ino[0] - 0.8, ino[1], ino[0], ino[3]), (ino[2], ino[1], ino[2] + 0.8, ino[3]),
+             (ino[0], ino[1] - 0.8, ino[2], ino[1]), (ino[0], ino[3], ino[2], ino[3] + 0.8))
+    assert not ch and "giro" in {q["kind"] for q in pz} and any(libre(z) for z in lados), (pz, ch)
+    # una vivienda común no cambia: puertas de 0,70, baño con bidé, sin giro
+    comun = P.layout_unit(rect(9.5, 8.0), 2)
+    assert not comun["accesible"] and "giro" not in {q["kind"] for q in comun["equipamiento"]}
+    assert {largo(x) for x in comun["doors"] if not x.get("entry")} == {0.7}
+    # un baño que no llega: se avisa y queda el baño común
+    S = ST.merged({"equipamiento": {"giro": 2.4}})["equipamiento"]
+    chico = P.layout_unit(rect(9.5, 8.0), 2, equip=S, accesible=True)
+    assert any(not c["ok"] and c["msg"].startswith("Baño: no entra el baño accesible (círculo de giro de 2.40 m")
+               for c in chico["checks"]), chico["checks"]
+    assert {"ducha", "inodoro", "lavatorio"} <= {q["kind"] for q in chico["equipamiento"] if q["room"] == "bath1"}
+    # por tipo del mix: solo las viviendas del tipo marcado
+    mix = [{"name": "2 dorm", "area": 75, "percent": 50, "dorms": 2, "accesible": True},
+           {"name": "3 dorm", "area": 95, "percent": 50, "dorms": 3}]
+    r = run([[0, 0], [60, 0], [60, 16], [0, 16]], unit_mix=mix)
+    for u in r["units"]:
+        acc = u["type"] == "2 dorm"
+        assert bool(u.get("accesible")) == acc, u["id"]
+        assert ("giro" in {q["kind"] for q in u["equipamiento"]}) == acc, u["id"]
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    for t in ("data-acc=", "mix[${i}].accesible=this.checked", "u.accesible?' · ♿ accesible'", "q.kind==='giro'",
+              "puerta_accesible:'Accesible: puertas de dormitorios y baño (m)'"):
+        assert t in html, t
+
+if __name__ == "__main__":
+    test_accesible(); print("OK34")
