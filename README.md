@@ -142,6 +142,13 @@ Si algo falla en Rhino, ejecuta el script y elige **Diagnostico**. Si no se resu
 - **Mix**: tipos con m² objetivo y %, ancho mínimo, muro medianero; métricas Match Score, Fit y Unidades únicas.
 - **Planos**: distribución día/noche con pasillo interno, puertas y grafo de conexiones verificado.
 
+## Novedades v2.35
+- **Terreno rectangular sin Rhino:** en «1 · Masa → Terreno rectangular» se cargan el frente y el fondo del terreno, qué linderos son medianeras (izquierdo, derecho, de fondo) y los retiros de cada lado y del frente. «Crear masa del terreno» arma la masa:
+  - los linderos sin medianera y el frente se descuentan de la masa;
+  - las medianeras van con su retiro: sin retiro son ciegas y con retiro de 3 m o más pasan a ser fachada.
+
+  La planta muestra el contorno del terreno (raya y punto) y las cotas de los retiros. El terreno se guarda en el proyecto y en las variantes, y vuelve a la lista de ejemplos como «Terreno 10 × 30 m».
+
 ## Novedades v2.34
 - **El pasillo común termina en la última puerta (R3.7):**
   - **Punta de un pasillo de borde sin núcleo** (por ejemplo, un predio con una sola medianera y el núcleo atrás, puesto a mano): la vivienda del extremo toma todo el ancho del frente, entra por la punta del pasillo y las viviendas se reparten parejas. Al frente va el tipo de menos dormitorios del tramo, con un fondo de hasta 9,25 m (el que el plano aprovecha sin dejar una tira sin uso). En el predio de 10 × 28 con 100 % de «2 dorm», el pasillo deja de llegar a la fachada (10 m² menos por planta) y las dos viviendas quedan de 86 y 88 m², con calidad 100. La eficiencia pasa de 60,7 a 68,5 % y el fondo de saco de la última, de 19 a 15 m.
