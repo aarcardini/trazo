@@ -533,11 +533,11 @@ def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None, accesible=F
                             for k in ("bath", "kitchen", "bedroom", "laundry", "living")]
     elegido = None                                     # se comparan sin los cambios a mano: la elección no depende
     if lateral:                                        # de ellos. El dormitorio al costado, solo si el plano mejora y
-        con, sin = plano(espejar, True, None), plano(lado == 1, False, None)   # no pierde estancias (solo el baño 2)
-        lat = next((r for r in con["rooms"] if r["id"] == "bed%d" % nb), None)
-        pc, ps = programa(con), programa(sin)
+        con, sin = plano(espejar, True, None), plano(lado == 1, False, None)   # no pierde estancias (el baño 2, solo
+        lat = next((r for r in con["rooms"] if r["id"] == "bed%d" % nb), None)  # con hasta 2 dormitorios: criterio
+        pc, ps = programa(con), programa(sin)                                    # del usuario)
         if lat and lat["area"] >= V["dorm_secundario"]["min_area"] - 1e-6 and con["score"] > sin["score"] and \
-                pc[0] >= 1 and all(a >= b for a, b in zip(pc[1:], ps[1:])):
+                pc[0] >= (1 if nb <= 2 else max(1, ps[0])) and all(a >= b for a, b in zip(pc[1:], ps[1:])):
             elegido = con
         else:
             espejar, lateral, elegido = lado == 1, False, sin

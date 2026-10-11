@@ -22,7 +22,7 @@ Verificar siempre con la normativa vigente del departamento y del organismo corr
 
 Las medidas mínimas se cumplen en cualquier dirección: la parte de un local que no llega al lado mínimo no cuenta para su área (NNE, arts. 7 y 10).
 
-Superficie de la vivienda: la NNE (art. 3) pide 32 m² con un dormitorio, 44 con dos, 56 con tres y 68 con cuatro, medidos con los muros exteriores hasta su cara exterior y hasta el eje de los muros divisorios. El art. 2 pide estar, cocina, dormitorio y baño, con el dormitorio y el baño como locales independientes: un monoambiente no lo cumple. Trazo todavía no comprueba estos dos artículos (ROADMAP R10.8).
+Superficie de la vivienda: la NNE (art. 3) pide 32 m² con un dormitorio, 44 con dos, 56 con tres y 68 con cuatro, medidos con los muros exteriores hasta su cara exterior y hasta el eje de los muros divisorios. El art. 2 pide estar, cocina, dormitorio y baño, con el dormitorio y el baño como locales independientes: un monoambiente no lo cumple, pero se acepta si tiene al menos 32 m² (criterio del usuario). Trazo todavía no comprueba estos dos artículos (ROADMAP R10.8).
 Rango de referencia ANV según dormitorios: monoambiente 25–40 m², 1 dorm. 35–50, 2 dorm. 50–75, 3 dorm. 65–100, 4 dorm. 80–125.
 Ley 13.728, art. 18: mínimo 25 m²; 35 m² para 1 dormitorio y +15 m² por dormitorio adicional.
 
@@ -108,7 +108,7 @@ Lo que la NNE pide y Trazo todavía no comprueba (ROADMAP R10.8 y R11.3):
 
 Para viviendas con fachada en todo el fondo y en un solo costado (de esquina o de extremo). No usa medidas nuevas: las de la vivienda y las ventanas.
 
-Reglas del motor: si el frente alcanza para el estar y los dormitorios al fondo, el estar va al costado con fachada (en la esquina: luz y ventana por dos fachadas). Si no alcanza y entre el pasillo común y el pasillo interno hay fondo para un dormitorio (3,00 m), el último dormitorio va a ese costado, con su ventana; Trazo compara los dos planos y lo hace solo si mejora la calidad del plano y no pierde estancias (cocina, lavadero, estar, dormitorios; puede perder el segundo baño). En una vivienda irregular, el plano al revés se usa solo si no es peor. Si el fondo no es todo fachada, o la vivienda da a los dos costados, el plano no cambia. Pendiente: viviendas sin fachada al fondo con luz solo por un costado.
+Reglas del motor: si el frente alcanza para el estar y los dormitorios al fondo, el estar va al costado con fachada (en la esquina: luz y ventana por dos fachadas). Si no alcanza y entre el pasillo común y el pasillo interno hay fondo para un dormitorio (3,00 m), el último dormitorio va a ese costado, con su ventana; Trazo compara los dos planos y lo hace solo si mejora la calidad del plano y no pierde estancias (cocina, lavadero, estar, dormitorios; el segundo baño, solo con hasta 2 dormitorios: criterio del usuario). En una vivienda irregular, el plano al revés se usa solo si no es peor. Si el fondo no es todo fachada, o la vivienda da a los dos costados, el plano no cambia. Pendiente: viviendas sin fachada al fondo con luz solo por un costado.
 
 ## Núcleo de circulación vertical
 
@@ -196,4 +196,4 @@ Pendiente: rampas, plazas accesibles y radios de giro (ver ROADMAP).
 - [Decreto 406/988 — Reglamento de seguridad e higiene ocupacional (IMPO)](https://www.impo.com.uy/bases/decretos-reglamento/406-1988)
 - [Digesto de Montevideo — De los locales habitables](https://normativa.montevideo.gub.uy/articulos/82820) y [D.3318](https://normativa.montevideo.gub.uy/content/d3318) (iluminación de locales habitables; D.3319 sobre la parte móvil). Consultados a través de un buscador: el texto no se pudo abrir desde aquí
 
-Nota: desde v2.27 los mínimos de la vivienda siguen la Normativa Nacional de Edificación (2016). Verificar que rige en el departamento del proyecto y si su normativa agrega diferencias. El Digesto de Montevideo (normativa.montevideo.gub.uy) no estaba disponible al consultar.
+Nota: desde v2.27 los mínimos de la vivienda siguen la Normativa Nacional de Edificación (2016), que rige en todos los departamentos (confirmado por el usuario). El Digesto de Montevideo (normativa.montevideo.gub.uy) no estaba disponible al consultar.

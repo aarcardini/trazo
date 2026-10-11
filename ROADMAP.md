@@ -9,14 +9,14 @@ Leyenda de esfuerzo: S = pequeño, M = mediano, L = grande (dividir antes de emp
 
 ## Orden de trabajo (propuesta, actualizada en v2.27)
 Lo decide el usuario; al terminar cada paso se actualiza esta lista.
-1. **Prueba del usuario** en Rhino (Mac y Windows), en el DXF y en la web de lo hecho de v2.21 a v2.26, y decisiones pendientes: puerta accesible (0,82 o 0,90 m), mesa del comedor (4 asientos + 2 por dormitorio extra), qué va en la esquina (estar o dormitorio principal), dormitorio al costado con un solo baño y tope de 0,60 m al arrastrar tabiques.
-2. **Correcciones chicas:** que la calidad de planos baje si a una vivienda le falta el baño o la cocina (R5.2 y R9.4 se apoyan en esa puntuación); R10.7 (ascensores por núcleo); el retiro de las medianeras parciales en el motor (primera parte de R11.6).
+1. **Prueba del usuario** en Rhino (Mac y Windows), en el DXF y en la web de lo hecho de v2.21 a v2.27. Decisiones tomadas: puerta accesible de 0,82 m, aviso cuando la mesa del comedor no entra completa, tope de 0,60 m al arrastrar tabiques, dormitorio al costado con un solo baño solo con hasta 2 dormitorios (v2.28) y en la esquina el estar o el dormitorio principal, según cómo se conecte por dentro (R5.2).
+2. **Correcciones chicas:** que el dormitorio principal conserve el ancho de su placard al repartir el frente; que la calidad de planos baje si a una vivienda le falta el baño o la cocina (R5.2 y R9.4 se apoyan en esa puntuación); el retiro de las medianeras parciales en el motor (primera parte de R11.6); R10.7 (ascensores por núcleo).
 3. **Norma nacional:** R10.8 (comprobaciones que faltan) → patios según la altura (R11.2).
 4. **Interfaz y dibujo:** R4.6 → R4.7 → edición de medianeras parciales en la web (resto de R11.6).
 5. **Planos de unidad:** cerrar R5.6 → R5.8 → R5.1 → R5.2 → R5.4.
 6. **Varias plantas:** R6.1 con R9.3 → R6.2 con lo que falta de R1.3.
 
-Normativa: desde v2.27 los mínimos siguen la Normativa Nacional de Edificación (higiene de la vivienda, 2016). Cuando se tenga el Digesto de Montevideo, confirmar si agrega diferencias (R10.1, R11.5).
+Normativa: desde v2.27 los mínimos siguen la Normativa Nacional de Edificación (higiene de la vivienda, 2016), que rige en todos los departamentos (confirmado por el usuario).
 
 ---
 
@@ -65,8 +65,8 @@ Normativa: desde v2.27 los mínimos siguen la Normativa Nacional de Edificación
 Hecho en v1.5: zonas día/noche, pasillo interno, puertas, grafo de conexiones (abierto/puerta) y comprobaciones por unidad.
 - [ ] **R5.1 (M) Programa de la vivienda editable:** tabla en la web por tipología con estancias (m² y ancho mínimos) y conexiones requeridas (abierta, puerta, en suite). El motor la usa en lugar de las reglas fijas de `plans.py`. Propuesta: las medidas mínimas por estancia ya se editan en «Medidas y normativa → Vivienda»; lo que falta es qué estancias lleva cada tipo (baño en suite, estudio, lavadero) y cómo se conectan.
   *Hecho cuando:* cambiar «cocina cerrada» (puerta) por «cocina integrada» (abierta) cambia el plano y su comprobación.
-- [ ] **R5.2 (M) Variantes de distribución por unidad:** generar 3-4 alternativas (cocina a fachada o interior, dormitorio en suite, baño compartido) y elegir con la mejor puntuación o a mano. Va después de R5.1 (las variantes son combinaciones de su programa) y de R5.8.
-- [x] **R5.3 (M) Segunda fachada:** unidades de esquina o extremo usan la fachada lateral (dormitorios o estar ahí) y se reconoce en la comprobación de luz. (v2.26: el estar a la esquina o, con frente corto, el último dormitorio al costado; ventana en las dos fachadas de una esquina. Pendiente: viviendas sin fachada al fondo que solo tienen luz por un costado.)
+- [ ] **R5.2 (M) Variantes de distribución por unidad:** generar 3-4 alternativas (cocina a fachada o interior, dormitorio en suite, baño compartido) y elegir con la mejor puntuación o a mano. Va después de R5.1 (las variantes son combinaciones de su programa) y de R5.8. En una vivienda de esquina, probar el estar o el dormitorio principal en la esquina y quedarse con el que mejor se conecta por dentro (criterio del usuario).
+- [x] **R5.3 (M) Segunda fachada:** unidades de esquina o extremo usan la fachada lateral (dormitorios o estar ahí) y se reconoce en la comprobación de luz. (v2.26: el estar a la esquina o, con frente corto, el último dormitorio al costado; ventana en las dos fachadas de una esquina; v2.28: con 3 dormitorios o más, el dormitorio al costado no deja la vivienda con un solo baño. Pendiente: viviendas sin fachada al fondo que solo tienen luz por un costado.)
 - [ ] **R5.4 (M) Biblioteca de plantas tipo** en JSON (estancias en proporciones relativas) con estiramiento al tamaño de la unidad y muros bloqueados, como la "adaptive plan library" de Finch. Propuesta: empezar por copiar a las viviendas del mismo tipo la distribución editada a mano en una (R5.7), y hacer la biblioteca después, sobre eso.
 - [x] **R5.5 (S) Ventanas** en fachada por estancia habitable, exportables a Rhino. (v2.25: una por estancia habitable, del ancho típico o del vano mínimo, en el muro exterior; aviso si no alcanza; capa `Trazo::Lnn::Ventanas` y DXF.)
 - [~] **R5.6 (L) Mobiliario básico** (v2.21: baños, cocina y lavadero con sus artefactos, paso libre y puertas de 0,70; v2.22: dormitorios, estar y comedor con camas, mesas de luz, placard, sofá, rack, butacas y mesa según dormitorios, y comprobación de que se llega a todo; también en Rhino y DXF; v2.23: vivienda accesible por tipo del mix, con puertas de 0,82 y baño con círculo de giro, transferencia y ducha a nivel; falta: círculos de giro en cocina y dormitorios) por estancia (bloques 2D) y comprobación de que cabe (círculo de giro, paso libre).
@@ -109,23 +109,23 @@ Segundo modo de la herramienta: subdividir un predio en calles, veredas, manzana
 - [ ] **R9.8 (S) Atajos de teclado** (W muro, D cotas, Shift para alinear) y cotas en la planta. Después de R4.7 (grilla y snap).
 
 ## Fase 10 — Medidas y programas (continúa v1.7)
-- [~] **R10.1 (S) Confirmar mínimos de Montevideo** (v2.27: los mínimos de la vivienda siguen la Normativa Nacional de Edificación, higiene de la vivienda, 2016; falta ver si el Digesto de Montevideo agrega diferencias) en el Digesto (Volumen XV) y ajustar `standards.py` si difieren de las ordenanzas usadas.
+- [x] **R10.1 (S) Confirmar mínimos de Montevideo** (v2.27: se adoptó la Normativa Nacional de Edificación, higiene de la vivienda, 2016, que rige en todos los departamentos) en el Digesto (Volumen XV) y ajustar `standards.py` si difieren de las ordenanzas usadas.
 - [ ] **R10.2 (M) Rampas de estacionamiento** (pendiente, ancho, radio de giro) y plazas accesibles; ubicación de la rampa junto a la calle transversal.
 - [ ] **R10.3 (M) Antecámara y presurización** de la escalera según altura (EP/PFP) dibujadas en el núcleo; segunda escalera cuando el recorrido lo exija.
 - [ ] **R10.4 (M) Locales comerciales** opcionales: dividir la planta libre en locales con frente a calle y tamaño objetivo.
 - [ ] **R10.5 (S) Exportar núcleo, baños y plazas** a Rhino y DXF con capas propias.
 - [x] **R10.6 (M) Muebles de referencia** en dormitorios, baños y cocina para validar que las medidas típicas funcionan. (Cubierta por R5.6, v2.21–v2.23: artefactos y muebles en cada estancia, con aviso si no entran.)
-- [ ] **R10.7 (M) Ascensores por núcleo:** hoy los ascensores se calculan con las viviendas de todo el edificio y esa cantidad se pone en cada núcleo: `samples/cruz_dos_lineas.json` (60 viviendas, 4 núcleos) lleva 8, y cada ascensor de más ensancha el núcleo 1,90 m en todos los pisos. Cada núcleo, con los ascensores que piden las viviendas que sirve; un campo «Ascensores» (automático, 0, 1, 2, 3…) en la ficha del núcleo y otro general; una escalera por núcleo, la de emergencia (su antecámara es R10.3); desde Rhino, el punto del núcleo con el nombre «ascensores=2», como «retiro=3» en las medianeras. Decide el usuario: si el mínimo de 2 ascensores desde 10 niveles es por núcleo o por edificio.
+- [ ] **R10.7 (M) Ascensores por núcleo:** hoy los ascensores se calculan con las viviendas de todo el edificio y esa cantidad se pone en cada núcleo: `samples/cruz_dos_lineas.json` (60 viviendas, 4 núcleos) lleva 8, y cada ascensor de más ensancha el núcleo 1,90 m en todos los pisos. Cada núcleo, con los ascensores que piden las viviendas que sirve; un campo «Ascensores» (automático, 0, 1, 2, 3…) en la ficha del núcleo y otro general; una escalera por núcleo, la de emergencia (su antecámara es R10.3); desde Rhino, el punto del núcleo con el nombre «ascensores=2», como «retiro=3» en las medianeras. Criterio del usuario: el mínimo de 2 ascensores desde 10 niveles es por edificio; se pueden poner más a mano (por comodidad o en edificios de mayor presupuesto).
   *Hecho cuando:* `samples/cruz_dos_lineas.json` lleva los ascensores que piden sus viviendas y un núcleo se puede fijar en 1, 2 o 3.
 - [ ] **R10.8 (M) Comprobaciones de la norma nacional de higiene de la vivienda** (artículos en `STANDARDS.md`), que hoy Trazo no hace:
   - superficie mínima de la vivienda según dormitorios, medida con muros (art. 3: 32, 44, 56 y 68 m²);
-  - dormitorio y baño como locales independientes (art. 2: un monoambiente no lo cumple);
+  - dormitorio y baño como locales independientes (art. 2), salvo en un monoambiente de 32 m² o más;
   - profundidad de cada local de hasta 3 veces su lado menor (art. 14);
   - cocina integrada al estar sin ventana propia, de 3 a 5 m², con el vano del estar para los dos locales (art. 27);
   - ancho del pasillo común según las viviendas que sirve y el largo del tramo (art. 35: 1,20, 1,40 o 1,60 m; 2,00 m si pasa de 15 m);
   - retiro de al menos 1 m si el edificio se separa de la divisoria (art. 53 e).
 
-  Decide el usuario: si un monoambiente se avisa o se acepta (su departamento puede admitirlo).
+  Criterio del usuario: un monoambiente se acepta si tiene al menos 32 m² con muros.
   *Hecho cuando:* una vivienda de un dormitorio de 30 m² con muros, una cocina integrada de 7 m² sin ventana y un pasillo de 1,40 m y 20 m de largo se avisan.
 
 ## Fase 11 — Predio y restricciones (continúa v1.8)
@@ -133,7 +133,7 @@ Segundo modo de la herramienta: subdividir un predio en calles, veredas, manzana
 - [~] **R11.2 (M) Patios de aire y luz:** (v2.4: patios entre bloques con ancho mínimo editable; las estancias que dan a ellos tienen luz; falta: lado y superficie según la altura, como pide la norma nacional, arts. 44 y 45: patio principal L = h/4, nunca menos de 2,85 m, y S = 2h; secundario L = h/10 + 1,20 y S = 3h/4) abrir patios interiores con medida mínima y que las estancias que dan al patio cuenten como iluminadas.
 - [ ] **R11.3 (S) Ventanas de baño y cocina a patio o ducto** según normativa (ventilación por ducto permitida para baños). Continúa R5.5; norma nacional, arts. 19, 24 y 38 a 40.
 - [ ] **R11.4 (M) Entre medianeras con más de dos viviendas por piso:** pasillo a lo largo contra una medianera y viviendas pasantes o con patio.
-- [~] **R11.5 (S) Confirmar con el Digesto de Montevideo** la regla de 3 m de retiro para abrir vanos hacia el lindero. (v2.27: la norma nacional pide 3 m desde el eje del muro divisorio para los espacios abiertos y los patios que iluminan, arts. 46, 48 y 52; falta el Digesto.)
+- [x] **R11.5 (S) Confirmar con el Digesto de Montevideo** la regla de 3 m de retiro para abrir vanos hacia el lindero. (v2.27: la norma nacional, que rige en todos los departamentos, pide 3 m desde el eje del muro divisorio para los espacios abiertos y los patios que iluminan, arts. 46, 48 y 52.)
 - [ ] **R11.6 (M) Medianeras parciales:** una medianera que ocupa solo parte de un borde, con su largo y su posición. Hoy la web marca el borde entero de la masa; desde Rhino ya se puede dibujar un tramo y el motor lo respeta si es ciega, pero si tiene retiro retira el lado entero (en un predio de 20 × 30 m, una medianera de 10 m con 3 m de retiro deja 510 m² en vez de 570). Motor: el retiro solo a lo largo de la medianera, con la huella escalonada. Web: arrastrar los extremos sobre el borde (con el snap de R4.7) o escribir «desde la esquina» y «largo»; varios tramos por lado (por ejemplo, 0–12 m ciega y 12–30 m con 3 m de retiro). El arreglo del motor va primero, porque es un error; la edición en la web, después de R4.7. Con R11.1, las medianeras pasan al borde del predio.
   *Hecho cuando:* el predio de 20 × 30 m de arriba da 570 m², y en la web se marca una medianera de 12 m en un lado de 30 m.
 
