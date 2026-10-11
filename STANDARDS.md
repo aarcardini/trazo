@@ -79,6 +79,19 @@ Para los tipos del mix marcados «Acc.». Editables en «Medidas y normativa →
 
 Reglas del motor: el baño principal abre hacia afuera (el barrido de la hoja no quita lugar al giro); no lleva bidé; el costado del inodoro sin transferencia va, si se puede, contra la pared (barra de apoyo). Si el baño no llega, se dibuja el baño común y la ficha avisa. Pendiente: círculos de giro en cocina y dormitorios.
 
+## Ventanas (R5.5)
+
+Una ventana por estancia habitable (dormitorios, estar, comedor y estudio) con fachada. Editables en «Medidas y normativa → Ventanas».
+
+| Elemento | Valor por defecto | Referencia |
+|---|---|---|
+| Vano mínimo de iluminación | 10 % de la superficie del local (1/10) | Digesto de Montevideo, «De los locales habitables»: vano de iluminación directa no menor a 1/10 de la superficie del piso; antepecho no mayor a 1,50 m. D.3319: al menos el 50 % del área mínima debe ser móvil (una ventana corrediza de dos hojas lo cumple). Confirmar en el Digesto |
+| Alto de la ventana | 1,20 m | Criterio de proyecto (con él se pasa del área al ancho) |
+| Ancho típico | 1,50 m en dormitorios y estudio; 2,00 m en el estar y el comedor | Criterio de proyecto: se agranda si el vano mínimo pide más |
+| Libre a una esquina o tabique | 0,20 m | Criterio de proyecto |
+
+Reglas del motor: la ventana va centrada en el tramo de fachada más largo de la estancia, primero en la fachada del fondo; si no llega al vano mínimo, se agrega otra en el tramo siguiente (por ejemplo, la fachada lateral de una esquina). El comedor sin fachada se ilumina por el estar: el vano del estar cuenta la superficie de los dos. La ventana va en el muro exterior y solo donde del otro lado hay aire: junto a una esquina entrante no se mete en el muro de la otra ala. Si no alcanza, o si no entra ninguna, la ficha lo avisa (salvo en una estancia ya avisada por no tener fachada o por no llegar a su medida mínima).
+
 ## Núcleo de circulación vertical
 
 | Elemento | Valor | Referencia |
@@ -160,5 +173,6 @@ Pendiente: rampas, plazas accesibles y radios de giro (ver ROADMAP).
 - [Ley 10.723, art. 16 (IMPO)](https://www.impo.com.uy/bases/leyes/10723-1946/16)
 - [Ley 18.308, art. 38 (IMPO)](https://www.impo.com.uy/bases/leyes/18308-2008/38)
 - [Decreto 406/988 — Reglamento de seguridad e higiene ocupacional (IMPO)](https://www.impo.com.uy/bases/decretos-reglamento/406-1988)
+- [Digesto de Montevideo — De los locales habitables](https://normativa.montevideo.gub.uy/articulos/82820) y [D.3318](https://normativa.montevideo.gub.uy/content/d3318) (iluminación de locales habitables; D.3319 sobre la parte móvil). Consultados a través de un buscador: el texto no se pudo abrir desde aquí
 
 Nota: el Digesto de Montevideo (normativa.montevideo.gub.uy) no estaba disponible al consultar; los mínimos de habitabilidad provienen de ordenanzas departamentales uruguayas que siguen el mismo modelo. Confirmar los valores de Montevideo cuando el servicio esté disponible.

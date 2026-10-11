@@ -15,6 +15,8 @@ Fuentes principales (ver STANDARDS.md):
   de la mesa según dormitorios: 4 y 2 más por cada dormitorio después del primero (criterio del usuario).
 - Vivienda accesible: puertas de 0,82 (criterio del usuario: la silla de ruedas); círculo de giro de 1,50 m, espacio de
   transferencia de 0,80 m junto al inodoro y ducha a nivel (criterios habituales de accesibilidad: UNIT 200, ISO 21542).
+- Ventanas: vano de iluminación directa de al menos 1/10 de la superficie del local (Digesto de Montevideo, «De los
+  locales habitables»); alto de 1,20 m y anchos típicos de 1,50 (dormitorios) y 2,00 (estar): criterios de proyecto.
 Las medidas "típicas" son criterios de proyecto (no normativos) y pueden ajustarse.
 """
 import copy
@@ -134,6 +136,13 @@ DEFAULTS = {
         "transferencia": 0.80,           # libre al costado del inodoro para pasar desde la silla
         "ducha_nivel": [1.20, 0.90],     # ducha a nivel del piso (sin plato ni escalón)
         "bano_accesible": [2.20, 2.20],  # frente y fondo con que se dibuja el baño de una vivienda accesible
+    },
+    "ventanas": {                        # R5.5: una ventana por estancia habitable, en su fachada (engine/plans.py)
+        "iluminacion": 0.10,             # vano mínimo / superficie del local (Digesto de Montevideo: iluminación directa)
+        "alto": 1.20,                    # alto de la ventana: con él se pasa del área al ancho (criterio de proyecto)
+        "ancho_dormitorio": 1.50,        # ancho típico (criterio de proyecto); más ancha si la norma pide más
+        "ancho_estar": 2.00,
+        "mocheta": 0.20,                 # libre entre la ventana y una esquina o un tabique (criterio de proyecto)
     },
 }
 

@@ -313,6 +313,7 @@ LAYER_COLORS = {
     "kitchen": SD.Color.FromArgb(110, 180, 100),
     "bath": SD.Color.FromArgb(60, 170, 200),
     "Equipamiento": SD.Color.FromArgb(90, 95, 105),
+    "Ventanas": SD.Color.FromArgb(40, 120, 200),
 }
 
 
@@ -454,6 +455,11 @@ def receive_result():
                     add_poly(q["poly"], z, lq, inv, q["name"])
                     for ln in q.get("lines", []):
                         add_poly(ln, z, lq, inv, cerrar=False)
+                for w in u.get("ventanas", []):          # ventanas en el muro exterior (hueco y vidrio)
+                    lw = layer(tag + "::Ventanas", LAYER_COLORS["Ventanas"])
+                    add_poly(w["poly"], z, lw, inv, "Ventana %.2f x %.2f" % (w["ancho"], w["alto"]))
+                    for ln in w.get("lines", []):
+                        add_poly(ln, z, lw, inv, cerrar=False)
         if viejos and modo == "reemplazar":      # el anterior se borra después: si algo falla, no se pierde
             quedan = borrar(viejos)
             quitar_niveles_sobrantes({"L%02d" % s["index"] for s in stories})

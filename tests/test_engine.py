@@ -1324,3 +1324,94 @@ def test_editar_interior():
 
 if __name__ == "__main__":
     test_editar_interior(); print("OK35")
+
+def test_ventanas():
+    """R5.5: una ventana por estancia habitable (dormitorios, estar, comedor y estudio con fachada), centrada en su
+    tramo de fachada (primero el fondo), del ancho típico o del que pida el vano mínimo (10 % de la superficie, con
+    1,20 m de alto), a 0,20 m de las esquinas; si no alcanza, otra en el tramo siguiente o un aviso. El comedor interior
+    se ilumina por el estar. La ventana va en el muro exterior, donde del otro lado hay aire (no junto a una esquina
+    entrante), y se dibuja en la web, en Rhino (Trazo::L00::Ventanas) y en el DXF."""
+    import math
+    from engine import plans as P, standards as ST, dxf as DXF
+    rect = lambda w, d: [(0.0, 0.0), (w, 0.0), (w, d), (0.0, d)]
+    caja = lambda pl: (min(p[0] for p in pl), min(p[1] for p in pl), max(p[0] for p in pl), max(p[1] for p in pl))
+    S = ST.DEFAULTS["ventanas"]
+    por = lambda res: {i: [w for w in res["ventanas"] if w["room"] == i] for i in {w["room"] for w in res["ventanas"]}}
+    malos = lambda res: [c["msg"] for c in res["checks"] if not c["ok"]]
+    # 9,50 × 8,00 con 2 dormitorios: una en cada dormitorio y otra en el estar, en el fondo; ninguna en baños o cocina
+    res = P.layout_unit(rect(9.5, 8.0), 2)
+    R, V = {r["id"]: r for r in res["rooms"]}, por(res)
+    assert set(V) == {"bed1", "bed2", "living"}, V.keys()
+    for i, (w,) in V.items():
+        b = caja(R[i]["poly"])
+        assert w["p"][1] == w["q"][1] == 8.0 and w["n"] == (0.0, 1.0), w                  # en la fachada, hacia afuera
+        x0, x1 = sorted((w["p"][0], w["q"][0]))
+        assert abs((x0 + x1) / 2 - (b[0] + b[2]) / 2) < 1e-6 and x0 >= b[0] + S["mocheta"] - 1e-6 and x1 <= b[2] - S["mocheta"] + 1e-6
+        tip = S["ancho_estar"] if i == "living" else S["ancho_dormitorio"]
+        assert abs(w["ancho"] - max(tip, S["iluminacion"] * R[i]["area"] / S["alto"])) < 0.01 and w["alto"] == S["alto"]
+        assert abs(w["minimo"] - S["iluminacion"] * R[i]["area"]) < 0.01 and w["area"] >= w["minimo"] - 0.01
+    assert not any("ventana" in m for m in malos(res))
+    # un estar grande pide una ventana más ancha que la típica
+    w, = por(P.layout_unit(rect(6.0, 7.0), 0))["living"]
+    assert w["ancho"] > S["ancho_estar"] + 0.1 and abs(w["area"] - w["minimo"]) < 0.01, w
+    # comedor interior: no lleva ventana; la del estar ilumina los dos
+    res = P.layout_unit(rect(9.5, 12.0), 2)
+    R, V = {r["id"]: r for r in res["rooms"]}, por(res)
+    assert "dining" in R and "dining" not in V and abs(V["living"][0]["minimo"] - S["iluminacion"] * (R["living"]["area"] + R["dining"]["area"])) < 0.01
+    # en una esquina: primero el fondo; si no alcanza, otra en la fachada lateral
+    esquina = lambda p, q: (abs(p[1] - 12) < 0.05 and abs(q[1] - 12) < 0.05) or (abs(p[0]) < 0.05 and abs(q[0]) < 0.05)
+    res = P.layout_unit(rect(9.5, 12.0), 2, is_facade=esquina, ventanas=dict(S, iluminacion=0.25))
+    est = por(res)["living"]
+    assert [w["n"] for w in est] == [(0.0, 1.0), (-1.0, -0.0)] and sum(w["area"] for w in est) >= est[0]["minimo"] - 0.01, est
+    # si no alcanza: aviso con lo que falta; si no entra ninguna, otro aviso (no en una estancia ya avisada)
+    res = P.layout_unit(rect(9.5, 8.0), 2, ventanas=dict(S, iluminacion=0.5))
+    assert any(m.startswith("Dormitorio principal: ventana de 3.36 m² < 7.20 m² (50 % de la superficie)") for m in malos(res)), malos(res)
+    fondo = lambda p, q: abs(p[1] - 8) < 0.05 and abs(q[1] - 8) < 0.05            # con fachada, pero la ventana
+    fondo.ventana = lambda p, q: fondo(p, q) and (max(p[0], q[0]) <= 6.0 or min(p[0], q[0]) >= 8.4)   # solo da 1,1 m
+    res = P.layout_unit(rect(9.5, 8.0), 2, is_facade=fondo)
+    assert "bed2" not in por(res) and any(m.startswith("Dormitorio 2: no entra una ventana en su fachada") for m in malos(res)), malos(res)
+    nada = P.layout_unit(rect(12, 8), 2, is_facade=lambda p, q: False)
+    assert not nada["ventanas"] and not any("ventana" in m for m in malos(nada))       # ya dice «sin fachada»
+    # en el edificio: en el muro exterior (de la planta a la huella), sobre el borde de su estancia
+    def borde(p, pl):
+        d = 1e9
+        for i in range(len(pl)):
+            a, b = pl[i], pl[(i + 1) % len(pl)]
+            dx, dy = b[0] - a[0], b[1] - a[1]
+            t = max(0.0, min(1.0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / (dx * dx + dy * dy)))
+            d = min(d, math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy))
+        return d
+    barra = [[0, 0], [60, 0], [60, 16], [0, 16]]
+    for muro in (0.35, 0.5):
+        r = run(barra, outer_wall=muro)
+        n = 0
+        for u in r["units"]:
+            R = {x["id"]: x for x in u["rooms"]}
+            for w in u["ventanas"]:
+                d = sorted(borde(p, barra) for p in w["poly"])
+                assert d[0] < 1e-6 and d[1] < 1e-6 and abs(d[2] - muro) < 1e-6 and abs(d[3] - muro) < 1e-6, d
+                assert max(borde(p, R[w["room"]]["poly"]) for p in w["seg"]) < 0.01 and len(w["lines"]) == 2
+                n += 1
+        assert n >= 3 * len(r["units"]), n
+    # en una L, junto a la esquina entrante, la ventana no entra en el muro de la otra ala
+    L = [[4, 0], [50, 0], [50, 16], [16, 16], [16, 40], [0, 40], [0, 4]]
+    r = run(L)
+    for u in r["units"]:
+        for w in u["ventanas"]:
+            d = sorted(borde(p, L) for p in w["poly"])
+            assert d[0] < 1e-6 and d[1] < 1e-6 and abs(d[2] - 0.35) < 1e-6 and abs(d[3] - 0.35) < 1e-6, (u["id"], w["room"], d)
+    # medidas de la web: más bajas, más anchas
+    r = run(barra, standards={"ventanas": {"alto": 1.0}})
+    w = next(w for w in r["units"][0]["ventanas"] if w["room"] == "living")
+    assert w["alto"] == 1.0 and w["ancho"] >= S["ancho_estar"]
+    dxf = DXF.result_to_dxf(r)                       # cada ventana: su hueco (cerrado) y dos líneas de vidrio
+    nv = sum(len(u["ventanas"]) for u in r["units"])
+    assert dxf.count("POLYLINE\n8\nTrazo_L00_Ventanas\n66\n1\n70\n1\n") == nv and \
+        dxf.count("POLYLINE\n8\nTrazo_L00_Ventanas\n66\n1\n70\n0\n") == 2 * nv, nv
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    for t in ("function drawWindows", "drawWindows(gb,u)", "'equipamiento','ventanas','nucleo'", "ventanas:'Ventanas'",
+              "iluminacion:'Vano mínimo / superficie del local'", "function ventanasDe", "${ventanasDe(u)}"):
+        assert t in html, t
+
+if __name__ == "__main__":
+    test_ventanas(); print("OK36")

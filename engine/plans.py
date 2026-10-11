@@ -200,6 +200,78 @@ def _dist_seg(p, a, b):
     return ((p[0] - a[0] - t * dx) ** 2 + (p[1] - a[1] - t * dy) ** 2) ** 0.5
 
 
+def _tramos_fachada(poly, borde, is_facade, v1, paso=0.25):
+    """R5.5: tramos de los bordes de una estancia (polígono antihorario) que dan a la fachada: [(a, b, n)], con n la
+    normal hacia afuera. borde: contorno de la vivienda (la ventana va en él, no en un tabique). Sin is_facade, la
+    fachada es el fondo (v = v1); si is_facade trae una prueba estricta (is_facade.ventana), se usa esa: junto a una
+    esquina entrante, la tolerancia de la prueba común tomaría como fachada un tramo que da al interior."""
+    is_facade = getattr(is_facade, "ventana", is_facade)
+    out = []
+    for i in range(len(poly)):
+        p, q = poly[i], poly[(i + 1) % len(poly)]
+        L = ((q[0] - p[0]) ** 2 + (q[1] - p[1]) ** 2) ** 0.5
+        if L < 1.0:
+            continue
+        n = ((q[1] - p[1]) / L, -(q[0] - p[0]) / L)
+        m = ((p[0] + q[0]) / 2, (p[1] + q[1]) / 2)
+        if min(_dist_seg(m, borde[j], borde[(j + 1) % len(borde)]) for j in range(len(borde))) > 0.05:
+            continue
+        if is_facade is None:
+            if abs(p[1] - v1) < 0.05 and abs(q[1] - v1) < 0.05:
+                out.append((p, q, n))
+            continue
+        k = max(1, int(round(L / paso)))
+        pt = lambda j: (p[0] + (q[0] - p[0]) * j / k, p[1] + (q[1] - p[1]) * j / k)
+        tramo = None
+        for j in range(k):
+            if is_facade(pt(j), pt(j + 1)):
+                tramo = (tramo[0] if tramo else pt(j), pt(j + 1))
+            elif tramo:
+                out.append(tramo + (n,))
+                tramo = None
+        if tramo:
+            out.append(tramo + (n,))
+    return out
+
+
+def _ventanas(rooms, borde, is_facade, v1, S):
+    """R5.5: una ventana por estancia habitable, centrada en su tramo de fachada (primero el del fondo, después el más
+    largo), del ancho típico o del que pide el vano mínimo (S["iluminacion"] de su superficie), sin pasar de la mocheta;
+    si no alcanza, otra en el tramo siguiente. El comedor sin fachada se ilumina por el estar: su superficie se suma a la del estar. Devuelve
+    (ventanas en el marco de la vivienda, comprobaciones con la estancia en "room")."""
+    largo = lambda t: ((t[1][0] - t[0][0]) ** 2 + (t[1][1] - t[0][1]) ** 2) ** 0.5
+    habit = [r for r in rooms if r["kind"] in ("bedroom", "living", "dining", "study")]
+    tramos = {r["id"]: sorted(_tramos_fachada(r["poly"], borde, is_facade, v1),     # primero la fachada del fondo
+                              key=lambda t: (t[2][1] < 0.7, -largo(t))) for r in habit}
+    comedor = [r for r in habit if r["kind"] == "dining" and not tramos[r["id"]]]
+    out, checks = [], []
+    for r in habit:
+        if r in comedor:                               # el comedor interior se ilumina por el estar
+            continue
+        area = r["area"] + (sum(c["area"] for c in comedor) if r["kind"] == "living" else 0.0)
+        req = S["iluminacion"] * area
+        tip = S["ancho_estar"] if r["kind"] in ("living", "dining") else S["ancho_dormitorio"]
+        hecho, n_ = 0.0, 0
+        for a, b, n in tramos[r["id"]]:
+            L = largo((a, b))
+            if hecho >= req - 1e-6 or L - 2 * S["mocheta"] < 0.5 * S["ancho_dormitorio"]:
+                continue                               # ya alcanza, o el tramo no da para una ventana
+            w = min(max((req - hecho) / S["alto"], tip), L - 2 * S["mocheta"])
+            c, u = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2), ((b[0] - a[0]) / L, (b[1] - a[1]) / L)
+            out.append({"room": r["id"], "p": (c[0] - u[0] * w / 2, c[1] - u[1] * w / 2),
+                        "q": (c[0] + u[0] * w / 2, c[1] + u[1] * w / 2), "n": n, "ancho": round(w, 2),
+                        "alto": S["alto"], "area": round(w * S["alto"], 2), "minimo": round(req, 2)})
+            hecho, n_ = hecho + w * S["alto"], n_ + 1
+        if not n_:
+            checks.append({"ok": False, "room": r["id"], "msg": "%s: no entra una ventana en su fachada (vano mínimo "
+                                                                "%.2f m²)" % (r["name"], req)})
+        elif hecho < req - 1e-6:
+            checks.append({"ok": False, "room": r["id"], "msg": "%s: ventana%s de %.2f m² < %.2f m² (%.0f %% de la "
+                           "superficie%s)" % (r["name"], "s" if n_ > 1 else "", hecho, req, 100 * S["iluminacion"],
+                                              " del estar y el comedor" if r["kind"] == "living" and comedor else "")})
+    return out, checks
+
+
 def _plan_rects(x0, v0, x1, v1, nb, warnings, acc=None):
     """Rectángulos de estancias y conexiones con puerta (las abiertas de la zona de día se deducen después). acc: frente
     y fondo del baño de una vivienda accesible (None si no lo es)."""
@@ -414,12 +486,14 @@ def _std_for(r, nb):
             "bath": V["bano"] if i == "bath1" else V["bano_aux"]}.get(k)
 
 
-def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None, accesible=False, ediciones=None):
+def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None, accesible=False, ediciones=None, ventanas=None):
     """Distribuye una unidad. poly en el marco de la unidad. Devuelve dict con estancias, puertas, grafo, equipamiento y
     comprobaciones. is_facade(p, q): opcional, dice si el segmento p-q (marco de la unidad) está sobre la fachada.
     accesible: puertas de dormitorios y baño de DOOR_ACC, el baño abre hacia afuera y se equipa para silla de ruedas.
     ediciones (R5.7): [(k, {"op": "pared", "p", "a"} | {"op": "puerta", "p", "entre"?, "a"?, "ancho"?, "abre"?})] en el
-    marco de la unidad, en orden; el resultado trae en "ediciones" las k aplicadas y en "paredes" los tabiques interiores."""
+    marco de la unidad, en orden; el resultado trae en "ediciones" las k aplicadas y en "paredes" los tabiques interiores.
+    ventanas (R5.5): medidas de standards["ventanas"]; el resultado trae "ventanas" [{room, p, q, n, ancho, alto, area,
+    minimo}] (p-q sobre la fachada, n hacia afuera)."""
     equip = equip or ST.DEFAULTS["equipamiento"]
     configure(vivienda or ST.DEFAULTS["vivienda"], equip, accesible)
     poly = G.ensure_ccw(poly)
@@ -465,7 +539,7 @@ def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None, accesible=F
             ids[i] = len(rooms)
             rooms.append({"id": i, "name": name, "kind": kind, "poly": p, "area": abs(G.area(p)), "rect": rect})
 
-    def ventanas(rect):
+    def en_fachada(rect):
         """Tramos de las paredes de la estancia sobre la fachada (con ventana): ahí no van el placard ni el rack de TV."""
         rx0, rv0, rx1, rv1 = rect
         out = []
@@ -490,7 +564,8 @@ def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None, accesible=F
             corto = lambda t: p[1] != q[1] and abs(t[1][1] - t[0][1]) < 1.0    # junto a la esquina de la fachada: no es ventana
             out += [t for t in tramos if not corto(t)]
         return out
-    fachadas = {r["id"]: ventanas(r["rect"]) for r in rooms if r["kind"] in ("bedroom", "living", "dining")}
+    fachadas = {r["id"]: en_fachada(r["rect"]) for r in rooms if r["kind"] in ("bedroom", "living", "dining")}
+    vent, sin_luz = _ventanas(rooms, poly, is_facade, v1, ventanas or ST.DEFAULTS["ventanas"])   # R5.5
     # conexiones y puertas
     doors, edges = [], []
     for a, b, typ in E:
@@ -559,7 +634,7 @@ def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None, accesible=F
     unreached = [rooms[ids[i]]["name"] for i in ids if i not in seen]
     checks.append({"ok": not unreached, "msg": "Todas las estancias se alcanzan desde la entrada" if not unreached
                    else "Sin acceso desde la entrada: " + ", ".join(unreached)})
-    below, chicas = [], set()                          # chicas: ya avisadas por su medida (no se suma lo que no entra)
+    below, chicas, oscuras = [], set(), set()          # chicas: ya avisadas por su medida (no se suma lo que no entra)
     for r in rooms:
         if r["kind"] in ("bedroom", "living", "study"):
             rx0, rv0, rx1, rv1 = r["rect"]
@@ -571,6 +646,7 @@ def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None, accesible=F
                 fac = abs(rv1 - v1) < 0.05
             if not fac:
                 checks.append({"ok": False, "msg": "%s sin fachada (sin luz natural)" % r["name"]})
+                oscuras.add(r["id"])
         w = min(r["rect"][2] - r["rect"][0], r["rect"][3] - r["rect"][1])
         sd = _std_for(r, nb)
         if sd:
@@ -596,6 +672,8 @@ def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None, accesible=F
             seg = _shared(rooms[ids[e["a"]]]["rect"], rooms[ids[e["b"]]]["rect"])
             for i, otra in ((e["a"], e["b"]), (e["b"], e["a"])):
                 aberturas.setdefault(i, []).append((seg[0], seg[1], otra))
+    checks += [{"ok": False, "msg": c["msg"]} for c in sin_luz           # R5.5: vano mínimo (no en una estancia ya
+               if c["room"] not in oscuras and c["room"] not in chicas]       # avisada por su fachada o su medida)
     equipo, faltan = EQ.equipar(rooms, doors, aberturas, equip, nb, fachadas, chicas, accesible)  # F5: artefactos y muebles
     checks += faltan
     for w in warnings:
@@ -622,4 +700,4 @@ def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None, accesible=F
     return {"rooms": rooms, "doors": doors, "graph": {"nodes": nodes, "edges": edges}, "equipamiento": equipo,
             "checks": checks, "score": score, "bedrooms": nb, "facade": round(x1 - x0, 2),
             "facade_min": round(facade_min(nb), 2), "accesible": bool(accesible), "paredes": muros,
-            "ediciones": sorted(hechas)}
+            "ediciones": sorted(hechas), "ventanas": vent}

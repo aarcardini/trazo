@@ -32,4 +32,8 @@ def result_to_dxf(res):
                 out += _poly("Trazo_%s_Equipamiento" % tag, q["poly"], z)
                 for ln in q.get("lines", []):
                     out += _poly("Trazo_%s_Equipamiento" % tag, ln, z, closed=False)
+            for w in u.get("ventanas", []):
+                out += _poly("Trazo_%s_Ventanas" % tag, w["poly"], z)
+                for ln in w.get("lines", []):
+                    out += _poly("Trazo_%s_Ventanas" % tag, ln, z, closed=False)
     return out + "0\nENDSEC\n0\nEOF\n"
