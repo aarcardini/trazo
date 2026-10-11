@@ -142,6 +142,9 @@ Si algo falla en Rhino, ejecuta el script y elige **Diagnostico**. Si no se resu
 - **Mix**: tipos con m² objetivo y %, ancho mínimo, muro medianero; métricas Match Score, Fit y Unidades únicas.
 - **Planos**: distribución día/noche con pasillo interno, puertas y grafo de conexiones verificado.
 
+## Novedades v2.31
+- **Medianeras parciales (R11.6, primera parte):** una medianera que ocupa solo parte de un borde retira la huella solo a lo largo de su tramo, y la huella queda escalonada. Antes, una medianera parcial con retiro retiraba el lado entero: en un predio de 20 × 30 m, una de 10 m con 3 m de retiro dejaba 510 m² en vez de 570. Hoy las medianeras parciales se dibujan en Rhino (capa `Trazo::Medianeras`); marcarlas en la web es la segunda parte de R11.6. Los ejemplos no cambian.
+
 ## Novedades v2.30
 - **Baño y cocina:** una vivienda sin baño o sin cocina baja su calidad de planos y la ficha lo avisa («Sin cocina: toda vivienda lleva una»). La cocina dentro del hall cuenta. Antes, una vivienda chica sin lugar para la cocina podía sacar 100. En los ejemplos, «Entre medianeras 30 × 45 con patio central» baja de 100 a 94: su vivienda U08, de 3 dormitorios, no tiene cocina.
 
