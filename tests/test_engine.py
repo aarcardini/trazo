@@ -1822,3 +1822,42 @@ def test_pasillo_sin_puntas():
 
 if __name__ == "__main__":
     test_pasillo_sin_puntas(); print("OK44")
+
+
+def test_terreno_rectangular():
+    """Pedido del usuario: la masa de un terreno rectangular sin Rhino ni AutoCAD («1 · Masa → Terreno rectangular»):
+    frente × fondo, qué linderos son medianeras y los retiros. Los linderos sin medianera (y el frente) se descuentan en
+    la web; las medianeras van con su retiro y las recorta el motor. El terreno se guarda en el proyecto."""
+    import re
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    for i in ("ter_frente", "ter_fondo", "ter_m_i", "ter_m_d", "ter_m_b", "ter_r_i", "ter_r_d", "ter_r_b", "ter_r_f"):
+        assert re.search(r'<input[^>]*\bid="%s"' % i, html), i
+    cuerpo = lambda f: html.split(f, 1)[1].split("\nfunction ", 1)[0].split("\nasync function ", 1)[0]
+    masa = cuerpo("function masaDelTerreno(")
+    for t in ("x0=m.i?0:r.i", "x1=W-(m.d?0:r.d)", "y0=r.f", "y1=D-(m.b?0:r.b)", "retiro:r.d", "retiro:r.b", "retiro:r.i"):
+        assert t in masa, t
+    assert "terrenoRectangular()" in html and "selLabel('__terreno'" in cuerpo("function terrenoRectangular(")
+    assert "p.terreno=terreno" in cuerpo("function proyecto(){") and "terreno:p.terreno" in cuerpo("function abrirProyecto(")
+    assert "terreno=m.terreno||null" in cuerpo("function setMass(") and "terreno=null" in cuerpo("async function nuevo(")
+    assert "lote()" in cuerpo("function drawDims(") and "lote()" in cuerpo("function fit(")
+    # lo que arma la web para 10 x 30 con medianeras a los costados, retiro frontal de 3 m y medianera de fondo con
+    # retiro de 4 m: la masa va de y = 3 a y = 26 (el motor descuenta los 4 m del fondo)
+    fp = [[0, 3], [10, 3], [10, 30], [0, 30]]
+    meds = [{"a": [10, 3], "b": [10, 30], "retiro": 0}, {"a": [10, 30], "b": [0, 30], "retiro": 4},
+            {"a": [0, 30], "b": [0, 3], "retiro": 0}]
+    proyecto = {"trazo": "proyecto", "formato": 1, "name": "Terreno 10 × 30 m", "footprint": fp, "height": 15,
+                "stage": "plans", "params": {"medianeras": meds},
+                "terreno": {"frente": 10, "fondo": 30, "medianeras": {"i": True, "d": True, "b": True},
+                            "retiros": {"i": 0, "d": 0, "b": 4, "f": 3}}}
+    r = generate(json.loads(json.dumps(proyecto)))              # el motor no lee el terreno: es solo para la web
+    ys = [p[1] for p in r["footprint"]]
+    assert abs(min(ys) - 3) < 1e-6 and abs(max(ys) - 26) < 1e-6 and r["units"], r["footprint"]
+    assert r["metrics"].get("between")                          # entre medianeras: franja central con el núcleo
+    # 20 x 35, lindero izquierdo sin medianera con retiro de 4 m, medianera a la derecha, retiros de 5 m al frente y al
+    # fondo (sin medianera): la web ya descuenta los retiros; el motor deja la masa como está
+    r = run([[4, 5], [20, 5], [20, 30], [4, 30]], medianeras=[{"a": [20, 5], "b": [20, 30], "retiro": 0}])
+    xs, ys = [p[0] for p in r["footprint"]], [p[1] for p in r["footprint"]]
+    assert (min(xs), max(xs), min(ys), max(ys)) == (4, 20, 5, 30) and r["units"]
+
+if __name__ == "__main__":
+    test_terreno_rectangular(); print("OK45")
