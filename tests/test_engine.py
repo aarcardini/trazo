@@ -1935,3 +1935,96 @@ def test_interfaz_grupos():
 
 if __name__ == "__main__":
     test_interfaz_grupos(); print("OK47")
+
+
+def test_vestidor():
+    """R5.10 (criterio del usuario): vestidor opcional por tipo del mix («Vest.»), apagado por defecto, junto al dormitorio
+    principal, que ya no lleva placard. Con la suite va entre el dormitorio y su baño: toma lo que el dormitorio tenía
+    detrás del pasillo interno, se entra a él desde el pasillo y desde él al baño (el dormitorio, abierto al vestidor);
+    sin ella, a la entrada del dormitorio (pasillo → vestidor → dormitorio). El dormitorio conserva su medida mínima y la
+    cama con su paso; el vestidor, de su fondo típico hasta su mínimo. Si no entra, o si el plano empeora, no se agrega y
+    se avisa."""
+    from engine import plans as P, standards as ST, geometry as G, dxf
+    rect = lambda w, d: [(0.0, 0.0), (w, 0.0), (w, d), (0.0, d)]
+    fondo = lambda D: (lambda p, q: abs(p[1] - D) < 0.05 and abs(q[1] - D) < 0.05)
+    caja = lambda res: {r["id"]: G.bbox(r["poly"]) for r in res["rooms"]}
+    largo = lambda q: max(G.bbox(q["poly"])[2] - G.bbox(q["poly"])[0], G.bbox(q["poly"])[3] - G.bbox(q["poly"])[1])
+    puertas = lambda res: {frozenset((d["a"], d["b"])) for d in res["doors"] if not d.get("entry")}
+    muebles = lambda res, rid: [q for q in res["equipamiento"] if q["room"] == rid]
+    V0, E0 = ST.DEFAULTS["vivienda"], ST.DEFAULTS["equipamiento"]
+    # apagado por defecto: el plano no cambia
+    base = P.layout_unit(rect(16.27, 6.5), 3, fondo(6.5))
+    assert base == P.layout_unit(rect(16.27, 6.5), 3, fondo(6.5), vestidor=False) and "vest" not in caja(base)
+    # 3 dormitorios de 16,27 × 6,50 (en suite): dormitorio → vestidor → baño, de todo el ancho del dormitorio
+    res = P.layout_unit(rect(16.27, 6.5), 3, fondo(6.5), vestidor=True)
+    B, B0 = caja(res), caja(base)
+    vest = next(r for r in res["rooms"] if r["id"] == "vest")
+    assert vest["name"] == "Vestidor" and vest["kind"] == "vestidor" and res["score"] == 100, res["checks"]
+    assert abs(B["vest"][3] - B["bed1"][1]) < 1e-6 and abs(B["vest"][1] - B["bath2"][3]) < 1e-6, B
+    assert abs(B["vest"][0] - B["bed1"][0]) < 1e-6 and abs(B["vest"][2] - B["bed1"][2]) < 1e-6
+    assert B["vest"][3] - B["vest"][1] >= V0["vestidor"]["min_side"] - 1e-6 and B["vest"][3] >= B["hallway"][3] - 1e-6
+    assert all(B[k] == B0[k] for k in ("bed2", "bed3", "bath1", "kitchen", "living"))      # lo demás no cambia
+    p = puertas(res)
+    assert {frozenset(("hallway", "vest")), frozenset(("vest", "bath2"))} <= p, p
+    assert not {frozenset(("hallway", "bed1")), frozenset(("bed1", "bath2"))} & p, p
+    assert any({e["a"], e["b"]} == {"vest", "bed1"} and e["type"] == "abierto" and e["ok"] for e in res["graph"]["edges"])
+    est = muebles(res, "vest")                         # estantes: más que el placard que reemplazan
+    assert est and {q["kind"] for q in est} == {"placard"} and sum(map(largo, est)) >= E0["placard_largo"][0], est
+    assert "cama_doble" in {q["kind"] for q in muebles(res, "bed1")} and "placard" not in {q["kind"] for q in muebles(res, "bed1")}
+    assert "placard" in {q["kind"] for q in muebles(res, "bed2")}
+    assert {"ducha", "inodoro", "lavatorio"} <= {q["kind"] for q in muebles(res, "bath2")}
+    # 2 dormitorios de 9,50 × 8,00 (sin suite): pasillo → vestidor → dormitorio
+    res = P.layout_unit(rect(9.5, 8.0), 2, fondo(8.0), vestidor=True)
+    B = caja(res)
+    assert abs(B["vest"][3] - B["bed1"][1]) < 1e-6 and abs(B["vest"][1] - B["hallway"][3]) < 1e-6 and res["score"] == 100
+    assert frozenset(("hallway", "vest")) in puertas(res) and frozenset(("hallway", "bed1")) not in puertas(res)
+    assert abs(B["vest"][3] - B["vest"][1] - V0["vestidor"]["typ"][1]) < 1e-6 and sum(map(largo, muebles(res, "vest"))) >= 1.8
+    # 2 dormitorios de 12,00 × 7,00: el vestidor, menos profundo (hasta su mínimo), y el dormitorio, con su medida mínima
+    res = P.layout_unit(rect(12.0, 7.0), 2, fondo(7.0), vestidor=True)
+    B = caja(res)
+    dv, d1 = B["vest"][3] - B["vest"][1], B["bed1"][3] - B["bed1"][1]
+    assert V0["vestidor"]["min_side"] - 1e-6 <= dv < V0["vestidor"]["typ"][1] and res["score"] == 100, (dv, res["checks"])
+    bed1 = next(r for r in res["rooms"] if r["id"] == "bed1")
+    assert d1 >= V0["dorm_principal"]["min_side"] and bed1["area"] >= V0["dorm_principal"]["min_area"] - 1e-6
+    assert "cama_doble" in {q["kind"] for q in muebles(res, "bed1")}
+    # no entra (dormitorios de 3,50 m de fondo): se avisa (no baja la calidad) y el plano no cambia
+    base = P.layout_unit(rect(11.73, 6.5), 2, fondo(6.5))
+    res = P.layout_unit(rect(11.73, 6.5), 2, fondo(6.5), vestidor=True)
+    assert "vest" not in caja(res) and caja(res) == caja(base) and res["score"] == base["score"] == 100
+    assert {"ok": True, "info": True, "msg": "Vestidor: no entra (el dormitorio principal tiene 3.50 m de fondo y necesita "
+            "3.86 m: 1.20 m de vestidor y 2.66 m de dormitorio)"} in res["checks"], res["checks"]
+    res = P.layout_unit(rect(6.0, 7.0), 0, vestidor=True)
+    assert any(c.get("info") and c["msg"].startswith("Vestidor: un monoambiente no lo lleva") for c in res["checks"])
+    # por tipo del mix, en los ejemplos: solo los tipos marcados; ningún plano empeora ni pierde estancias (el depósito
+    # sí: el vestidor guarda); donde empeoraría (en la planta a 45°, sus estantes no entran), sin vestidor y con aviso
+    mix = lambda v: [{"name": "1 dorm", "area": 55, "percent": 20, "dorms": 1},
+                     {"name": "2 dorm", "area": 75, "percent": 40, "dorms": 2, "vestidor": v},
+                     {"name": "3 dorm", "area": 95, "percent": 40, "dorms": 3, "vestidor": v}]
+    programa = lambda u: [sum(1 for r in u["rooms"] if r["kind"] == k) for k in ("bath", "kitchen", "bedroom", "laundry",
+                                                                                   "living")]
+    con, avisos = 0, []
+    for nombre in ("L_ochava", "barra", "quiebre_45"):
+        s = json.load(open(os.path.join(os.path.dirname(__file__), "..", "samples", nombre + ".json"), encoding="utf-8"))
+        a, b = (run(s["footprint"], h=s["height"], **dict(s.get("params") or {}, unit_mix=mix(v))) for v in (None, True))
+        for ua, ub in zip(a["units"], b["units"]):
+            assert ua["id"] == ub["id"] and abs(ua["area"] - ub["area"]) < 1e-6
+            tiene = any(r["kind"] == "vestidor" for r in ub["rooms"])
+            assert bool(ub.get("vestidor")) == (ub["type"] != "1 dorm") and (not tiene or ub.get("vestidor")), ub["id"]
+            assert ub["plan_score"] >= ua["plan_score"] and programa(ub) == programa(ua), (nombre, ub["id"])
+            con += tiene
+            if ub.get("vestidor") and not tiene:          # por qué no, en la ficha
+                m = [c["msg"] for c in ub["checks"] if c.get("info") and c["msg"].startswith("Vestidor: no")]
+                assert m, (nombre, ub["id"])
+                avisos += m
+        if nombre == "barra":
+            assert "Trazo_L00_Rooms_vestidor" in dxf.result_to_dxf(b)
+    assert con >= 10 and any("porque empeora el plano" in m for m in avisos), (con, avisos)
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    for t in ("data-vest=", "mix[${i}].vestidor=this.checked", "vestidor:'Vestidor (tipos del mix con «Vest.»)'",
+              "vestidor:0.54", "vestidor:'Vestidor'}", "r.kind==='vestidor')?' · con vestidor'"):
+        assert t in html, t
+    rh = open(os.path.join(os.path.dirname(__file__), "..", "rhino", "trazo_rhino.py"), encoding="utf-8").read()
+    assert '"vestidor": SD.Color.FromArgb(' in rh
+
+if __name__ == "__main__":
+    test_vestidor(); print("OK48")

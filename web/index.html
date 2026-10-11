@@ -154,7 +154,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}
   <div class="pie"><button onclick="run('corridor')">Generar pasillo y núcleos</button></div>
  </div>
  <div class="grupo" data-grupo="viviendas" hidden>
-  <header><b>Viviendas</b><small>Mix y accesibles, medidas de la unidad y planos.</small><button class="x" onclick="grupo(null)" title="Cerrar (Esc)">×</button></header>
+  <header><b>Viviendas</b><small>Mix, accesibles y vestidores, medidas de la unidad y planos.</small><button class="x" onclick="grupo(null)" title="Cerrar (Esc)">×</button></header>
   <div class="cuerpo">
    <h2>Mix de unidades</h2>
    <div id="mix"></div><button class="s" onclick="addMix()">+ tipo</button>
@@ -254,18 +254,19 @@ function hexToHsl(hex){ const n=parseInt(hex.slice(1),16); let r=(n>>16&255)/255
  if(mx!==mn){ const d=mx-mn; s=l>0.5?d/(2-mx-mn):d/(mx+mn); h=mx===r?(g-b)/d+(g<b?6:0):mx===g?(b-r)/d+2:(r-g)/d+4; h/=6; } return [h,s,l]; }
 function hslToHex(h,s,l){ const f=n=>{ const k=(n+h*12)%12, a=s*Math.min(l,1-l); const c=l-a*Math.max(-1,Math.min(k-3,9-k,1)); return Math.round(c*255).toString(16).padStart(2,'0'); }; return '#'+f(0)+f(8)+f(4); }
 function tone(hex,L){ const [h,s]=hexToHsl(hex); return hslToHex(h,Math.min(1,s*(L>0.85?0.65:L>0.75?0.85:1)),L); }
-const ROOM_L={bedroom:0.46,study:0.52,kitchen:0.56,living:0.63,dining:0.70,bath:0.77,hall:0.81,laundry:0.85,hallway:0.89,storage:0.93};
-const KIND_ORDER=['living','dining','kitchen','hall','hallway','bedroom','study','bath','laundry','storage'];
+const ROOM_L={bedroom:0.46,study:0.52,vestidor:0.54,kitchen:0.56,living:0.63,dining:0.70,bath:0.77,hall:0.81,laundry:0.85,hallway:0.89,storage:0.93};
+const KIND_ORDER=['living','dining','kitchen','hall','hallway','bedroom','vestidor','study','bath','laundry','storage'];
 const UNIT_L=[0.58,0.72,0.46,0.82,0.38,0.88];
 const roomColor=(kind,prog)=>tone(progColor(prog||'Residential'),ROOM_L[kind]??0.7);
 const COL=new Proxy({},{get:(t,k)=>roomColor(k)});
-const KLABEL={bedroom:'Dormitorio',living:'Estar',dining:'Comedor',kitchen:'Cocina',bath:'Baño',hall:'Hall',hallway:'Pasillo',laundry:'Lavadero',storage:'Depósito',study:'Estudio'};
+const KLABEL={bedroom:'Dormitorio',living:'Estar',dining:'Comedor',kitchen:'Cocina',bath:'Baño',hall:'Hall',hallway:'Pasillo',laundry:'Lavadero',storage:'Depósito',study:'Estudio',vestidor:'Vestidor'};
 let selUnit=null, selCore=null, selSpec=null, showGraph=true, showDims=true, showEvac=true, showEquip=true, showTip=true;
 const EVAC={ok:'#1a9d5b',saco:'#e8890c',fail:'#d63b3b'};   // puerta de cada vivienda: cumple, fondo de saco largo, recorrido largo
 
 /* ---------- paneles de entrada ---------- */
 const ACC_TIT='Vivienda accesible: puertas de dormitorios y baño de 0,82 m y baño con círculo de giro de 1,50 m, inodoro con transferencia y ducha a nivel';
-function renderMix(){ $('mix').innerHTML='<div class="mixrow" style="grid-template-columns:1fr 46px 46px 40px 28px 20px;color:var(--mut);font-size:11px"><span>Tipo</span><span>m²</span><span>%</span><span>Dorm.</span><span title="'+ACC_TIT+'">Acc.</span><span></span></div>'+mix.map((m,i)=>`<div class="mixrow" style="grid-template-columns:1fr 46px 46px 40px 28px 20px"><input value="${m.name}" onchange="mix[${i}].name=this.value"><input type="number" value="${m.area}" title="m²" onchange="mix[${i}].area=+this.value"><input type="number" value="${m.percent}" title="%" onchange="mix[${i}].percent=+this.value"><input type="number" min="0" max="5" value="${m.dorms??''}" placeholder="auto" title="Dormitorios (vacío = según m²)" onchange="mix[${i}].dorms=this.value===''?null:+this.value"><input type="checkbox" data-acc="${i}" ${m.accesible?'checked':''} title="${ACC_TIT}" onchange="mix[${i}].accesible=this.checked||undefined"><button class="s" style="padding:0" onclick="mix.splice(${i},1);renderMix()">×</button></div>`).join(''); }
+const VEST_TIT='Vestidor (opcional): a la entrada del dormitorio principal, de 1,20 a 1,50 m de fondo y con estantes; con la suite, entre el dormitorio y su baño. El principal ya no lleva placard. Si no entra, la ficha dice por qué';
+function renderMix(){ const col='grid-template-columns:1fr 46px 46px 40px 28px 30px 20px'; $('mix').innerHTML='<div class="mixrow" style="'+col+';color:var(--mut);font-size:11px"><span>Tipo</span><span>m²</span><span>%</span><span>Dorm.</span><span title="'+ACC_TIT+'">Acc.</span><span title="'+VEST_TIT+'">Vest.</span><span></span></div>'+mix.map((m,i)=>`<div class="mixrow" style="${col}"><input value="${m.name}" onchange="mix[${i}].name=this.value"><input type="number" value="${m.area}" title="m²" onchange="mix[${i}].area=+this.value"><input type="number" value="${m.percent}" title="%" onchange="mix[${i}].percent=+this.value"><input type="number" min="0" max="5" value="${m.dorms??''}" placeholder="auto" title="Dormitorios (vacío = según m²)" onchange="mix[${i}].dorms=this.value===''?null:+this.value"><input type="checkbox" data-acc="${i}" ${m.accesible?'checked':''} title="${ACC_TIT}" onchange="mix[${i}].accesible=this.checked||undefined"><input type="checkbox" data-vest="${i}" ${m.vestidor?'checked':''} title="${VEST_TIT}" onchange="mix[${i}].vestidor=this.checked||undefined"><button class="s" style="padding:0" onclick="mix.splice(${i},1);renderMix()">×</button></div>`).join(''); }
 function addMix(){ mix.push({name:'Nuevo',area:60,percent:10}); renderMix(); legend(); }
 function renderStories(){ if(!stories){ $('storyTable').innerHTML='<div class="w" style="color:var(--mut)">Todas Residential. Calcula la masa para editar.</div>'; return;}
  $('storyTable').innerHTML=stories.map((s,i)=>`<div class="mixrow" style="grid-template-columns:30px 1fr 60px"><span>${i}</span><select onchange="stories[${i}].program=this.value">${PROGS.map(p=>`<option value="${p.key}" ${p.key==s.program?'selected':''}>${p.label}</option>`).join('')}</select><input type="number" step="0.1" value="${s.height}" onchange="stories[${i}].height=+this.value"></div>`).join('');}
@@ -403,7 +404,7 @@ function drawOverlay(){ const go=$('go'); go.innerHTML=''; if(!view) return; dra
 
 /* ---------- medidas y normativa ---------- */
 const STD_LABELS={predio:'Predio',retiro_ventanas:'Retiro de medianera para ventanas (m)',patio_min:'Ancho mínimo de patio para iluminar (m)',vivienda:'Vivienda',nucleo:'Núcleo',oficinas:'Oficinas',comercial:'Comercial',estacionamiento:'Estacionamiento',equipamiento:'Equipamiento y muebles',ventanas:'Ventanas',
- dorm_principal:'Dormitorio principal',dorm_secundario:'Dormitorio secundario',estar_comedor:'Estar-comedor',cocina:'Cocina',bano:'Baño',bano_aux:'Baño auxiliar',lavadero:'Lavadero',pasillo:'Pasillo interno',hall:'Hall de entrada',estudio:'Estudio',deposito:'Depósito (0 = sin depósito)',franja_servicios:'Franja de baños, lavadero y depósito (fondo)',max_area:'máx. m²',max_side:'lado máx.',
+ dorm_principal:'Dormitorio principal',dorm_secundario:'Dormitorio secundario',estar_comedor:'Estar-comedor',cocina:'Cocina',bano:'Baño',bano_aux:'Baño auxiliar',lavadero:'Lavadero',pasillo:'Pasillo interno',hall:'Hall de entrada',estudio:'Estudio',deposito:'Depósito (0 = sin depósito)',franja_servicios:'Franja de baños, lavadero y depósito (fondo)',vestidor:'Vestidor (tipos del mix con «Vest.»)',max_area:'máx. m²',max_side:'lado máx.',
  min_area:'mín. m²',min_side:'lado mín.',typ_area:'típ. m²',typ:'típ. frente × fondo',typ_side:'típico',escalera_ancho:'Ancho de tramo (m)',contrahuella:'Contrahuella máx. (m)',huella:'Huella (m)',ojo:'Ojo (m)',muro:'Muro (m)',ascensor_ducto:'Ducto ascensor (m)',ascensor_cabina:'Cabina (m)',palier:'Palier (m)',ducto_instalaciones:'Ducto instalaciones (m)',unidades_por_ascensor:'Unidades por ascensor',altura_sin_ascensor:'Altura máx. sin ascensor (m)',pisos_dos_ascensores:'Niveles para 2 ascensores',
  m2_por_persona:'m² por persona',trabajadores_por_inodoro:'Personas por inodoro',cubiculo:'Cubículo inodoro (m)',zona_lavabos:'Zona lavabos (m)',bano_accesible:'Baño accesible (m)',hall_extra:'Hall extra (m)',plaza:'Plaza (m)',calle:'Calle (m)',
  puerta_interior:'Puerta interior (m)',puerta_entrada:'Puerta de entrada (m)',inodoro:'Inodoro (largo × fondo, m)',bide:'Bidé (m)',lavatorio:'Lavatorio (m)',ducha:'Ducha (m)',paso_bano:'Paso delante de los artefactos (m)',mesada_fondo:'Fondo de mesada (m)',heladera:'Heladera (m)',bacha_cocina:'Bacha de cocina, largo (m)',cocina_horno:'Cocina y horno, largo (m)',mesada_trabajo:'Mesada entre bacha y cocina (m)',paso_cocina:'Paso delante de la mesada (m)',lavarropas:'Lavarropas (m)',pileta_lavar:'Pileta de lavar (m)',paso_lavadero:'Paso en el lavadero (m)',
@@ -472,7 +473,7 @@ function unitPanel(){ const c=$('ctx'); if(selCore!=null&&result&&result.cores&&
  const u=result&&result.units?result.units.find(x=>x.id===selUnit):null; if(!u){ c.style.display='none'; return; }
  const real=(u.checks||[]).filter(x=>!x.info), ok=real.filter(x=>x.ok).length, n=real.length;
  const ev=result.evacuacion||{}, evok=u.egress_status==='ok';
- c.innerHTML=`<b>${u.id} · ${u.type} · ${u.area} m²${u.accesible?' · ♿ accesible':''}</b><div class="hint">Frente ${u.facade??'-'} m (mín. ${u.facade_min??'-'} m) · fondo ${u.depth} m · ${u.bedrooms??'-'} dorm.</div>
+ c.innerHTML=`<b>${u.id} · ${u.type} · ${u.area} m²${u.accesible?' · ♿ accesible':''}${(u.rooms||[]).some(r=>r.kind==='vestidor')?' · con vestidor':''}</b><div class="hint">Frente ${u.facade??'-'} m (mín. ${u.facade_min??'-'} m) · fondo ${u.depth} m · ${u.bedrooms??'-'} dorm.</div>
   <div class="${evok?'hint':'w'}">${evok?'✓':'⚠'} Evacuación: ${u.egress} m hasta el núcleo más cercano${ev.recorrido_max!=null?' (máx. '+ev.recorrido_max+' m)':''}${u.saco?' · fondo de saco '+u.saco+' m'+(ev.fondo_saco_max!=null?' (máx. '+ev.fondo_saco_max+' m)':''):' · dos salidas'}</div>
   <table>${(u.rooms||[]).map(r=>`<tr><td><span class="sw" style="background:${roomColor(r.kind)}"></span> ${r.name}</td><td style="text-align:right">${r.area} m²</td></tr>`).join('')}</table>${ventanasDe(u)}
   <h2 style="margin:10px 0 4px">Conexiones</h2>

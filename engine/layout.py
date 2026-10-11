@@ -22,7 +22,7 @@ from .units import (_bisect_x, _chain_union, _is_rect, _segments, generate_unit_
                     unit_rooms, sin_solapes, editar_unidades, vecinas, formar_frentes, entradas)  # noqa: F401
 from .patios import (auto_patios, _anillo, split_blocks, make_patio_dark, _block_of, _block_of_line)  # noqa: F401
 
-VERSION = "2.37"
+VERSION = "2.38"
 
 DEFAULT_PARAMS = {
     # Masa
@@ -404,6 +404,8 @@ def generate(data):
             item["al_frente"] = True                        # R3.7: todo el ancho en la punta del pasillo, que entra por ahí
         if any(m.get("accesible") and m.get("name") == u["type"] for m in params["unit_mix"]):
             item["accesible"] = True                        # tipo del mix marcado «accesible» (F5)
+        if any(m.get("vestidor") and m.get("name") == u["type"] for m in params["unit_mix"]):
+            item["vestidor"] = True                         # R5.10: tipo del mix con vestidor
         if stage == "plans":
             pl = unit_rooms(u, u["_pb"], pc, u["_plate"], [(k, e) for k, e in interiores if k not in hechos_dentro])
             hechos_dentro.update(pl["ediciones"])
