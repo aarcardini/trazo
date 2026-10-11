@@ -1652,7 +1652,7 @@ def test_ascensores_por_nucleo():
     automático todos los núcleos son iguales (los del más cargado). Desde 10 niveles, el edificio lleva al menos 2 en
     total: el mínimo es por edificio (criterio del usuario). Un núcleo manual puede fijar los suyos y su frente toma las
     medidas de la normativa para esa cantidad; «ascensores» fija la misma cantidad en todos. Antes, la cantidad del
-    edificio entero se ponía en cada núcleo (la cruz de 60 viviendas y 4 núcleos llevaba 8)."""
+    edificio entero se ponía en cada núcleo (la cruz de 70 viviendas y 4 núcleos llevaba 8)."""
     from engine import standards as ST
     asc = lambda r: [c["ascensores"] for c in r["cores"]]
     s = json.load(open(os.path.join(os.path.dirname(__file__), "..", "samples", "cruz_dos_lineas.json"), encoding="utf-8"))
