@@ -840,7 +840,73 @@ def _propagate_core_blocks(pieces, params):
 def generate_circulation(plate, params):
     pieces = _generate_circulation(plate, params)
     _propagate_core_blocks(pieces, params)
+    for pc in pieces:
+        pc["_planta"] = plate                           # la planta del bloque (R3.7: ¿del otro lado del pasillo hay planta?)
+    _puntas_tras_cruce(pieces, params)
     return pieces
+
+
+def _puntas_tras_cruce(pieces, params):
+    """R3.7: punta del pasillo de un ala después de su última unión o núcleo (como en una L, donde el pasillo sigue más
+    allá del cruce hasta la fachada sin servir a ninguna puerta). Si la franja de viviendas de otra ala llega justo hasta
+    ese tramo (de la fachada al pasillo que llega: los codos de R3.2), la franja lo cruza y el pasillo termina en la
+    unión (q["tramo"]). Las viviendas del otro lado entran por lo que queda (q["puntas"], ver units.entradas)."""
+    cw, pw = params["corridor_width"], params["party_wall"]
+    lin = cw / 2 + pw / 2
+    for q in pieces:
+        if q.get("user") or q.get("between"):
+            continue
+        anclas = [(j["x"] - cw / 2, j["x"] + cw / 2) for j in q["junctions"]] + \
+            [(c["box"][0], c["box"][2]) for c in q["cores"]]
+        if not anclas:
+            continue
+        for e in (0, 1):
+            t = list(q.get("tramo") or (q["xa"], q["xb"]))
+            if not q["free"][e]:
+                continue
+            s0, s1 = (t[0], min(a for a, _ in anclas)) if e == 0 else (max(b for _, b in anclas), t[1])
+            if s1 - s0 < 1.0:
+                continue
+            for pc in pieces:
+                if pc is q or pc.get("user") or pc.get("between") or abs(math.cos(pc["angle"] - q["angle"])) > 0.05:
+                    continue
+                sr = pc.get("side_region")
+                hecho = False
+                for sd in ((1,) if pc.get("single") else (1, -1)):
+                    reg = sr.get(sd) if sr else pc["loc_plate"]
+                    franja = (G.clip_rect(reg, None, None, lin, None) if sd > 0 else
+                              G.clip_rect(reg, None, None, None, -lin)) if reg else []
+                    if not franja:
+                        continue
+                    bx0, by0, bx1, by1 = G.bbox(G.to_local(G.to_world(franja, pc["origin"], pc["angle"]),
+                                                           q["origin"], q["angle"]))
+                    lado = 1 if abs(by0 - lin) < 0.05 else -1 if abs(by1 + lin) < 0.05 else 0
+                    if not lado or abs(bx0 - s0) > pw + 0.05 or abs(bx1 - s1) > pw + 0.05:
+                        continue
+                    otro = q.get("side_region", {}).get(-lado) if q.get("side_region") else q["loc_plate"]
+                    del_otro = otro and not (q.get("single") and -lado < 0) and G.strip_area(
+                        otro, s0, s1, lin if -lado > 0 else None, None if -lado > 0 else -lin) > 1.0
+                    borde = (cw / 2 - pw / 2) if del_otro else cw / 2     # cruza hasta el tabique con las del otro lado
+                    ya, yb = (-borde, lin) if lado > 0 else (-lin, borde)
+                    rect = G.to_local(G.to_world([(bx0, ya), (bx1, ya), (bx1, yb), (bx0, yb)], q["origin"], q["angle"]),
+                                      pc["origin"], pc["angle"])
+                    partes = G.union_parts([reg, rect])
+                    if len(partes) != 1 or partes[0][1]:
+                        continue
+                    nuevo = partes[0][0]
+                    if (G.area(nuevo) > 0) != (G.area(reg) > 0):
+                        nuevo = nuevo[::-1]
+                    if not sr:
+                        pc["side_region"] = sr = {1: pc["loc_plate"], -1: pc["loc_plate"]}
+                    sr[sd] = nuevo
+                    t[e] = s0 if e == 1 else s1
+                    q["tramo"] = t
+                    if del_otro:
+                        q.setdefault("puntas", []).append({"e": e, "s0": s0, "s1": s1, "lado": -lado})
+                    hecho = True
+                    break
+                if hecho:
+                    break
 
 
 def is_between(plate, params):

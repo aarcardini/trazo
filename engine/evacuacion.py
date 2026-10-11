@@ -13,6 +13,8 @@ def _red(pieces):
     pos = {i: set() for i in range(len(pieces))}
     for i, pc in enumerate(pieces):
         a, b = pc.get("eje", (pc["xa"], pc["xb"]))
+        if pc.get("tramo"):                                # R3.7: el pasillo termina en la última puerta
+            a, b = max(a, pc["tramo"][0]), min(b, pc["tramo"][1])
         pos[i] |= {a, b}
         pos[i] |= {j["x"] for j in pc["junctions"]}
         pos[i] |= {c["x"] for c in pc["cores"]}
