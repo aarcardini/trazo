@@ -22,6 +22,20 @@ def _bisect_x(poly, x0, y0, y1, target, xmax, dir_=1):
     return (lo + hi) / 2.0
 
 
+def _bisect_f(f, x0, xmax, target):
+    """x1 tal que f(x1) = target (f creciente desde x0), o None si no se llega."""
+    lo, hi = x0, xmax
+    if f(hi) < target:
+        return None
+    for _ in range(50):
+        mid = (lo + hi) / 2.0
+        if f(mid) < target:
+            lo = mid
+        else:
+            hi = mid
+    return (lo + hi) / 2.0
+
+
 def _chain_union(rects):
     """Unión de rectángulos contiguos (ordenados por x) que comparten bordes verticales."""
     pts = []
@@ -115,6 +129,7 @@ def generate_unit_mix(circ, params, state=None):
     for m in mix:
         m["_p"] = m["percent"] / tot
     segs = _segments(loc, circ, params)
+    frentes = extremos_al_frente(circ, params)              # R3.7
     state = state if state is not None else {}
     placed = state.setdefault("placed", {m["name"]: 0 for m in mix})
     n_placed = state.get("n", 0)
@@ -131,7 +146,6 @@ def generate_unit_mix(circ, params, state=None):
             continue
         avg = sum(m["_p"] * m["area"] for m in mix)
         n_max = max(1, int(length // max(params["min_unit_width"], 1.0)))
-        n0 = max(1, int(round(A_seg / avg)))
 
         def plan(n):
             pl, cnt = dict(placed), n_placed
@@ -143,28 +157,96 @@ def generate_unit_mix(circ, params, state=None):
                 cnt += 1
             return seq
 
-        best = None
-        cands = sorted({min(max(1, n), n_max) for n in (n0 - 1, n0, n0 + 1)})
-        for n in cands:
-            seq = plan(n)
-            k = A_seg / sum(m["area"] for m in seq)
-            sc = abs(math.log(k))
-            if best is None or sc < best[0]:
-                best = (sc, seq, k)
-        if best is None:
-            seq = plan(1)
-            best = (0, seq, A_seg / seq[0]["area"])
-        _, seq, k = best
+        def elegir(A):
+            n0 = max(1, int(round(A / avg)))
+            best = None
+            cands = sorted({min(max(1, n), n_max) for n in (n0 - 1, n0, n0 + 1)})
+            for n in cands:
+                seq = plan(n)
+                k = A / sum(m["area"] for m in seq)
+                sc = abs(math.log(k))
+                if best is None or sc < best[0]:
+                    best = (sc, seq, k)
+            if best is None:
+                seq = plan(1)
+                best = (0, seq, A / seq[0]["area"])
+            return best[1], best[2]
+
+        def cortes(seq, k, ext, corte=None):
+            """[(xs0, xe)] de cada vivienda; con ext = (e, franja), la de la punta e suma la franja del pasillo. corte:
+            el tabique de esa vivienda en un lugar fijo (no pasa de su fondo) y las demás se reparten lo que queda."""
+            n = len(seq)
+            out, x, kk = [], xmin, k
+            if corte is not None:
+                resto = sum(m["area"] for m in (seq[:-1] if ext[0] == 1 else seq[1:]))
+                if resto:
+                    kk = (G.strip_area(region, xmin, corte) if ext[0] == 1 else G.strip_area(region, corte, xmax)) / resto
+            for idx, m in enumerate(seq):
+                last = idx == n - 1
+                if last:
+                    x1 = xmax
+                elif corte is not None and idx == (n - 2 if ext[0] == 1 else 0):
+                    x1 = corte
+                elif ext and ext[0] == 0 and idx == 0:
+                    f = lambda t, x=x: G.strip_area(region, x, t) + G.strip_area(ext[1], x, t - pw / 2)
+                    x1 = _bisect_f(f, x, xmax, m["area"] * k) or xmax
+                else:
+                    x1 = _bisect_x(region, x, None, None, m["area"] * kk, xmax) or xmax
+                out.append((x + (pw / 2 if idx > 0 else 0), x1 - (0 if last else pw / 2)))
+                x = x1
+            return out
+
+        # R3.7: en una punta libre de un pasillo de borde, la última vivienda suma la franja del pasillo (llega a todo el
+        # ancho y el pasillo termina en su puerta): el reparto la cuenta para que las viviendas queden parejas. Esa
+        # vivienda es la de menos dormitorios del tramo (su frente es el ancho de la planta) y su fondo no pasa del que
+        # el plano aprovecha entero (P.fondo_sin_tira): lo demás va a las otras
+        ext = None
+        if side > 0:
+            for e, (xe_, banda) in frentes.items():
+                if (seg["x1"] >= xe_ - 0.05) if e == 1 else (seg["x0"] <= xe_ + 0.05):
+                    ext = (e, banda)
+        extra = 0.0
+        for _ in range(12 if ext else 1):
+            seq, k = elegir(A_seg + extra)
+            if ext and len(seq) > 1:
+                dorms = lambda m: int(m["dorms"]) if m.get("dorms") is not None else P.bedrooms_for(m["area"])
+                j = min(range(len(seq)), key=lambda i: (dorms(seq[i]), i if ext[0] == 0 else -i))
+                otras = seq[:j] + seq[j + 1:]
+                seq = otras + [seq[j]] if ext[0] == 1 else [seq[j]] + otras
+            cuts = cortes(seq, k, ext)
+            if not ext:
+                break
+            a_, b_ = cuts[-1] if ext[0] == 1 else cuts[0]
+            if b_ - a_ < fondo_frente() or (b_ - a_ > P.fondo_sin_tira() and len(seq) == 1):
+                ext, extra = None, 0.0                       # no da para una vivienda al frente: reparto de siempre
+                seq, k = elegir(A_seg)
+                cuts = cortes(seq, k, None)
+                break
+            if b_ - a_ > P.fondo_sin_tira():               # la del frente, con el fondo que el plano aprovecha
+                corte = xmax - P.fondo_sin_tira() - pw / 2 if ext[0] == 1 else xmin + P.fondo_sin_tira() + pw / 2
+                cuts = cortes(seq, k, ext, corte)
+                break
+            nuevo = G.strip_area(ext[1], a_, b_)
+            if abs(nuevo - extra) < 0.01:
+                break
+            extra = nuevo
+        L_min = P.HALL_W + 0.3                           # R3.7: lo que la última necesita del pasillo que queda
+        for pt in circ.get("puntas", []):
+            if pt["lado"] != side or len(cuts) < 2:
+                continue
+            if pt["e"] == 1 and cuts[-1][1] > pt["s0"] and pt["s0"] - cuts[-1][0] < L_min:
+                c = pt["s0"] - L_min
+                if c - pw - cuts[-2][0] >= 0.5 * params["min_unit_width"]:
+                    cuts[-2], cuts[-1] = (cuts[-2][0], c - pw), (c, cuts[-1][1])
+            elif pt["e"] == 0 and cuts[0][0] < pt["s1"] and cuts[0][1] - pt["s1"] < L_min:
+                c = pt["s1"] + L_min
+                if cuts[1][1] - (c + pw) >= 0.5 * params["min_unit_width"]:
+                    cuts[0], cuts[1] = (cuts[0][0], c), (c + pw, cuts[1][1])
         for m in seq:
             placed[m["name"]] += 1
             n_placed += 1
         state["n"] = n_placed
-        x = xmin
-        for idx, m in enumerate(seq):
-            last = idx == len(seq) - 1
-            x1 = xmax if last else (_bisect_x(region, x, None, None, m["area"] * k, xmax) or xmax)
-            xe = x1 - (0 if last else pw / 2)
-            xs0 = x + (pw / 2 if idx > 0 else 0)
+        for (xs0, xe), m in zip(cuts, seq):
             poly = G.largest_part(G.clip_rect(region, xs0, xe))      # una unidad es una sola figura
             if poly:
                 a_ = abs(G.area(poly))
@@ -173,7 +255,6 @@ def generate_unit_mix(circ, params, state=None):
                               "side": side, "x0": xs0, "x1": xe, "poly_local": poly, "_region": region})
                 if w < params["min_unit_width"]:
                     warnings.append("Unidad con ancho %.2f m < mínimo %.2f m" % (w, params["min_unit_width"]))   # con 1 decimal, 4.98 < 5 se leía «5.0 < 5.0»
-            x = x1
     # puertas, evacuación y profundidad
     for i, u in enumerate(units):
         xd = (u["x0"] + u["x1"]) / 2.0
@@ -186,6 +267,85 @@ def generate_unit_mix(circ, params, state=None):
             warnings.append("Unidad %s de %.0f m² tiene profundidad %.1f m (> %.1f m): poca luz natural" %
                             (u["type"], u["area"], u["depth"], params["max_unit_depth"]))
     return units, warnings
+
+
+# ---------------------------------------------------------------- pasillo sin puntas muertas (R3.7)
+def fondo_frente():
+    """Largo mínimo (a lo largo del pasillo) de una vivienda al frente: su fondo, desde la punta del pasillo."""
+    return P.fondo_min() + 0.5
+
+
+def extremos_al_frente(pc, params):
+    """R3.7: puntas del pasillo de la pieza pc que pueden terminar en una vivienda «al frente», que ocupa todo el ancho
+    de la planta en esa punta: punta libre (sin unión) que llega a la fachada, con el pasillo apoyado en el borde de la
+    planta (del otro lado no hay viviendas). Devuelve {e: (x de la punta, franja)}: franja, la del pasillo con el medio
+    tabique hacia las viviendas, de todo el largo (marco de la pieza)."""
+    if pc.get("between") or pc.get("puntas") or not pc.get("corridor_local"):
+        return {}
+    cw, pw = params["corridor_width"], params["party_wall"]
+    loc = pc["loc_plate"]
+    planta = pc.get("_planta") or G.to_world(loc, pc["origin"], pc["angle"])
+    huecos = params.get("_huecos") or []
+    en_planta = lambda x, y: (lambda w: G.point_in_poly(w, planta) and not any(G.point_in_poly(w, h) for h in huecos))(
+        G.to_world([(x, y)], pc["origin"], pc["angle"])[0])
+    n = max(2, int(pc["xb"] - pc["xa"]))
+    if any(en_planta(pc["xa"] + (pc["xb"] - pc["xa"]) * k / n, -cw / 2 - 0.3) for k in range(n + 1)):
+        return {}                                      # del otro lado del pasillo hay planta (otra ala, viviendas)
+    out = {}
+    for e, xe in ((0, pc["xa"]), (1, pc["xb"])):
+        if pc["free"][e] and not en_planta(xe - 0.2 if e == 0 else xe + 0.2, 0.0):
+            banda = G.clip_rect(loc, None, None, -cw / 2, cw / 2 + pw / 2)
+            if banda:
+                out[e] = (xe, banda)
+    return out
+
+
+def formar_frentes(units, pieces, params):
+    """R3.7: en cada punta libre de un pasillo de borde (ver extremos_al_frente), la vivienda del extremo suma la franja
+    del pasillo y llega a todo el ancho; el pasillo termina en su puerta, en la punta (pc["tramo"]). La vivienda
+    guarda «frente»: {e, x (donde termina el pasillo), a, b (su largo a lo largo del pasillo)}."""
+    cw, pw = params["corridor_width"], params["party_wall"]
+    for pc in pieces:
+        for e, (xe, banda) in extremos_al_frente(pc, params).items():
+            fin = [u for u in units if u.get("_pc") is pc and u["side"] > 0 and
+                   ((u["x1"] >= xe - 0.05) if e == 1 else (u["x0"] <= xe + 0.05))]
+            if len(fin) != 1:
+                continue
+            u = fin[0]
+            a, b = (u["x0"], xe) if e == 1 else (xe, u["x1"])
+            if not fondo_frente() - 1e-6 <= b - a <= P.fondo_sin_tira() + 1.0:
+                continue                                   # muy corta, o muy honda (unida a mano): sigue el pasillo
+            ys = [q[1] for q in u["poly_local"]]
+            poly = G.largest_part(G.clip_rect(pc["loc_plate"], a, b, -cw / 2, max(ys)))
+            if not poly or not u["area"] + 0.9 * cw * (b - a) <= abs(G.area(poly)) <= \
+                    u["area"] + (cw + pw) * (b - a) + 0.5:
+                continue
+            if (G.area(poly) > 0) != (G.area(u["poly_local"]) > 0):
+                poly = poly[::-1]
+            vecina = any(v is not u and v.get("_pc") is pc and v["side"] > 0 and
+                         abs((v["x1"] + pw - a) if e == 1 else (b + pw - v["x0"])) < 0.05 for v in units)
+            x_pas = (a - pw if vecina else a) if e == 1 else (b + pw if vecina else b)
+            u.update({"poly_local": poly, "area": abs(G.area(poly)), "width": max(ys) + cw / 2, "depth": b - a,
+                      "door_local": (x_pas, 0.0), "frente": {"e": e, "x": x_pas, "a": a, "b": b}})
+            t = pc.setdefault("tramo", [pc["xa"], pc["xb"]])
+            t[e] = x_pas
+
+
+def entradas(units, pieces, params):
+    """R3.7: donde el pasillo se cortó después de la última unión (circulation._puntas_tras_cruce), las viviendas del
+    otro lado entran por el pasillo que queda: «entrada» = (lo, hi) del borde sobre el pasillo (marco de la pieza) y la
+    puerta (door_local) ahí."""
+    for pc in pieces:
+        for pt in pc.get("puntas", []):
+            for u in units:
+                if u.get("_pc") is not pc or u["side"] != pt["lado"] or u.get("frente") or \
+                        min(u["x1"], pt["s1"]) - max(u["x0"], pt["s0"]) < 0.05:
+                    continue
+                lo, hi = (u["x0"], pt["s0"]) if pt["e"] == 1 else (pt["s1"], u["x1"])
+                u["entrada"] = (lo, hi)
+                xd = min(max(u["door_local"][0], lo + P.HALL_W / 2), hi - P.HALL_W / 2) if hi - lo > P.HALL_W else \
+                    (lo + hi) / 2.0
+                u["door_local"] = (xd, u["door_local"][1])
 
 
 # ---------------------------------------------------------------- viviendas editadas (R4.4)
@@ -366,12 +526,23 @@ def unit_rooms(u, params, pc=None, plate=None, ediciones=None):
     cw = params["corridor_width"]
     pw = params["party_wall"]
     y_in = cw / 2 + pw / 2
-    poly = [(x, side * y - y_in) for x, y in u["poly_local"]]   # unidad en v>=0, v=0 junto al pasillo
-    if side < 0:
+    fr = u.get("frente")
+    if fr:                                     # R3.7: al frente, v desde la punta del pasillo; la puerta, en 0 <= x <= cw
+        xh, sg = (fr["a"], 1) if fr["e"] == 1 else (fr["b"], -1)
+        ida = lambda pt: (pt[1] + cw / 2, sg * (pt[0] - xh))
+        back = lambda pt: (xh + sg * pt[1], pt[0] - cw / 2)
+        refleja = sg > 0
+        entrada = (0.0, cw)
+    else:
+        ida = lambda pt: (pt[0], side * pt[1] - y_in)            # unidad en v>=0, v=0 junto al pasillo
+        back = lambda pt: (pt[0], side * (pt[1] + y_in))
+        refleja = side < 0
+        entrada = u.get("entrada")
+    poly = [ida(p) for p in u["poly_local"]]
+    if refleja:
         poly = poly[::-1]
     spec = next((m for m in params["unit_mix"] if m.get("name") == u["type"]), {})
     nb = int(spec["dorms"]) if spec.get("dorms") is not None else P.bedrooms_for(u.get("target") or u["area"])
-    back = lambda pt: (pt[0], side * (pt[1] + y_in))
     is_fac = None
     if pc is not None and plate:
         bl, pd = params.get("_blind"), params.get("_patio_dark")
@@ -405,19 +576,18 @@ def unit_rooms(u, params, pc=None, plate=None, ediciones=None):
     mias = []
     if ediciones and pc is not None:                # R5.7: los cambios cuyo punto cae en esta vivienda, en su marco
         def marco(w):
-            x, y = G.to_local([w], pc["origin"], pc["angle"])[0]
-            return (x, side * y - y_in)
+            return ida(G.to_local([w], pc["origin"], pc["angle"])[0])
         for k, e in ediciones:
             q = marco(e["p"])
             if G.point_in_poly(q, poly) or _dist_to_boundary(q, poly) < 0.05:
                 mias.append((k, dict(e, p=q, a=marco(e["a"]) if e.get("a") else None)))
     S = ST.merged(params.get("standards"))
     res = P.layout_unit(poly, nb, is_fac, S["vivienda"], S["equipamiento"], bool(spec.get("accesible")), mias,
-                        S["ventanas"])
+                        S["ventanas"], entrada)
 
     def back_poly(pl):
         out = [back(p) for p in pl]
-        return out[::-1] if side < 0 else out
+        return out[::-1] if refleja else out
     for r in res["rooms"]:
         r["poly_local"] = back_poly(r.pop("poly"))
     for q in res["equipamiento"]:

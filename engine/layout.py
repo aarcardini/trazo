@@ -9,6 +9,7 @@ from . import geometry as G
 from . import standards as ST
 from . import programs as PR
 from . import evacuacion as EV
+from . import plans as P
 # el motor está repartido en módulos; layout reexporta sus funciones (las usan las pruebas y el servidor)
 from .massing import (_inward, apply_setbacks, make_blind, build_massing, _dominant_angle, _is_rectilinear, _slabs,
                       decompose_wings, _lado_ciego, _dist_point_segment, _dist_to_boundary)  # noqa: F401
@@ -18,10 +19,10 @@ from .circulation import (pick_frame, core_positions, side_for, _frame_for_poly,
                           _add_core, _propagate_core_blocks, generate_circulation, is_between, _between_depth,
                           _generate_circulation, nucleo_punto, medidas_nucleo)  # noqa: F401
 from .units import (_bisect_x, _chain_union, _is_rect, _segments, generate_unit_mix, metrics_mix, bedrooms_for,
-                    unit_rooms, sin_solapes, editar_unidades, vecinas)  # noqa: F401
+                    unit_rooms, sin_solapes, editar_unidades, vecinas, formar_frentes, entradas)  # noqa: F401
 from .patios import (auto_patios, _anillo, split_blocks, make_patio_dark, _block_of, _block_of_line)  # noqa: F401
 
-VERSION = "2.33"
+VERSION = "2.34"
 
 DEFAULT_PARAMS = {
     # Masa
@@ -106,6 +107,7 @@ def generate(data):
     params = merge_params(data.get("params"))
     S0 = ST.merged(params.get("standards"))
     params["_blind"] = make_blind(params.get("medianeras"), S0["predio"]["retiro_ventanas"])
+    P.configure(S0["vivienda"], S0["equipamiento"])         # medidas de los planos (frentes y fondos de las viviendas)
     stage = data.get("stage", "plans")
     footprint = data["footprint"]
     height = float(data.get("height") or params["floor_height"] * 5)
@@ -192,8 +194,9 @@ def generate(data):
     W = lambda pc, pl: G.pol_to_list(G.to_world(pl, pc["origin"], pc["angle"]))
     manual = params.get("cores_mode") == "manual"
     res["corridors"], res["cores"], res["dark_zones"] = [], [], []
-    bloques_pc = []                                          # por bloque: (piezas, parámetros, planta, núcleos)
+    bloques_pc = []                                          # por bloque: (piezas, parámetros, planta, núcleos, viviendas)
     emax = area_codos = 0.0
+    state, hechos, avisos_u = {}, set(), []                  # mix compartido entre bloques, cambios R4.4 aplicados
     for bi, (pl_b, ph_b) in enumerate(plantas):
         pb = dict(params)
         mapa = None
@@ -222,10 +225,6 @@ def generate(data):
                             "angle": round(p0["angle"], 6), "xa": p0["xa"], "xb": p0["xb"]}
         cpolys = []
         for pc in pieces:
-            for parte in G.split_parts(pc["corridor_local"]):   # un pasillo que cruza una muesca: varias partes
-                res["corridors"].append(W(pc, parte))
-            for ext in pc["corridor_ext"]:
-                res["corridors"].append(G.pol_to_list(ext))
             for c in pc["cores"]:
                 if c["poly_local"]:
                     cen = G.to_world([G.centroid(c["poly_local"])], pc["origin"], pc["angle"])[0]
@@ -252,6 +251,27 @@ def generate(data):
                                                len(res["cores"]))
         if len(plantas) > 1 and not cpolys:
             res["warnings"].append("El bloque %d no tiene núcleo: añade uno (en modo manual cada bloque necesita el suyo)" % (bi + 1))
+        # viviendas del bloque, antes de dibujar el pasillo: R3.7, el pasillo termina en la última puerta
+        del_bloque = []
+        for i, pc in enumerate(pieces):
+            us, warns = generate_unit_mix(pc, pb, state)
+            avisos_u += warns
+            for u in us:
+                u["_pc"], u["_pb"], u["_plate"], u["_i"] = pc, pb, pl_b, i
+            del_bloque += us
+        editar_unidades(del_bloque, params.get("unit_edits"), pb, hechos)   # R4.4: tabiques movidos, viviendas unidas o divididas
+        del_bloque, warns = sin_solapes(del_bloque, pieces, cpolys, pb)
+        avisos_u += warns
+        formar_frentes(del_bloque, pieces, pb)           # R3.7: vivienda al frente en la punta de un pasillo de borde
+        entradas(del_bloque, pieces, pb)                 # R3.7: entrada por el pasillo que queda tras cortar una punta
+        for pc in pieces:
+            t = pc.get("tramo")                          # R3.7: solo se corta la punta que ya no hace falta
+            pasillo = G.clip_rect(pc["corridor_local"], t[0] if t[0] > pc["xa"] + 1e-6 else None,
+                                  t[1] if t[1] < pc["xb"] - 1e-6 else None) if t else pc["corridor_local"]
+            for parte in G.split_parts(pasillo):           # un pasillo que cruza una muesca: varias partes
+                res["corridors"].append(W(pc, parte))
+            for ext in pc["corridor_ext"]:
+                res["corridors"].append(G.pol_to_list(ext))
         res["dark_zones"] += [G.pol_to_list(d_) for pc in pieces for d_ in pc.get("dark", [])]
         codos = [G.pol_to_list(d_) for pc in pieces for d_ in pc.get("codos", [])]
         res["dark_zones"] += codos
@@ -259,9 +279,10 @@ def generate(data):
             res.setdefault("dark_corners", []).extend(codos)  # cuáles de las zonas sin luz son esquinas (codos)
         area_codos += sum(abs(G.area(d_)) for d_ in codos)
         for i, pc in enumerate(pieces):
-            n = max(2, int((pc["xb"] - pc["xa"])))
+            a_, b_ = pc.get("tramo") or (pc["xa"], pc["xb"])
+            n = max(2, int(b_ - a_))
             for k in range(n + 1):
-                emax = max(emax, egress_at(pieces, i, pc["xa"] + (pc["xb"] - pc["xa"]) * k / n))
+                emax = max(emax, egress_at(pieces, i, a_ + (b_ - a_) * k / n))
         # evacuación (R3.6): tramos del pasillo con un fondo de saco o un recorrido más largos que lo permitido
         pb["_evac"] = EV.analizar(pieces)
         ev = res.setdefault("evacuacion", {"saco": [], "recorrido": [], "fondo_saco_max": params["egress_single"],
@@ -269,7 +290,7 @@ def generate(data):
         ev["saco"] += EV.tramos(pieces, pb["_evac"], params["egress_single"], "saco")
         ev["recorrido"] += EV.tramos(pieces, pb["_evac"], params["egress_multi"], "recorrido")
         pb["_neta"] = neta((pl_b, ph_b))
-        bloques_pc.append((pieces, pb, pl_b, cpolys))
+        bloques_pc.append((pieces, pb, pl_b, cpolys, del_bloque))
     res["metrics"]["wings"] = sum(len(b[0]) for b in bloques_pc)
     if res["dark_zones"]:
         dz_area = sum(abs(G.area(d_)) for d_ in res["dark_zones"])
@@ -291,7 +312,7 @@ def generate(data):
         if prog in ("Office", "Retail", "Amenities"):
             P_ = S["oficinas"] if prog == "Office" else S["comercial"]
             acc = None
-            for pieces, pb, pl_b, cpolys in bloques_pc:
+            for pieces, pb, pl_b, cpolys, _ in bloques_pc:
                 fp_ = PR.free_plan(pieces, pb["_neta"], sum(abs(G.area(c)) for c in cpolys), pb["corridor_width"], P_)
                 if fp_:
                     if acc is None:
@@ -309,7 +330,7 @@ def generate(data):
                     d["workers"] = acc["workers"] * d["stories"]
         elif prog == "Parking":
             acc = {"kind": "parking", "count": 0, "stalls": [], "aisles": []}
-            for pieces, pb, pl_b, cpolys in bloques_pc:
+            for pieces, pb, pl_b, cpolys, _ in bloques_pc:
                 huecos = pb.get("_huecos") or []
                 pk = PR.parking(pl_b, cpolys + huecos, S["estacionamiento"])      # sin plazas en los patios
                 acc["count"] += pk["count"]
@@ -326,21 +347,11 @@ def generate(data):
         if pide is not None and pide != n_elev and params.get("_ascensores") is None and not fijo.isdigit():
             return otra_pasada(pide)
         return res
-    state = {}
-    units, hechos = [], set()
-    for pieces, pb, pl_b, cpolys in bloques_pc:
-        del_bloque = []
-        for i, pc in enumerate(pieces):
-            us, warns = generate_unit_mix(pc, pb, state)
-            res["warnings"] += warns
-            for u in us:
-                u["_pc"], u["_pb"], u["_plate"], u["_i"] = pc, pb, pl_b, i
-            del_bloque += us
-        editar_unidades(del_bloque, params.get("unit_edits"), pb, hechos)   # R4.4: tabiques movidos, viviendas unidas o divididas
-        del_bloque, warns = sin_solapes(del_bloque, pieces, cpolys, pb)
-        res["warnings"] += warns
+    res["warnings"] += avisos_u
+    units = []
+    for pieces, pb, pl_b, cpolys, del_bloque in bloques_pc:
         for u in del_bloque:                               # desde la puerta: hasta el núcleo y hasta tener dos salidas
-            pc, xd = u["_pc"], (u["x0"] + u["x1"]) / 2.0
+            pc, xd = u["_pc"], u["door_local"][0]
             extra = pc.get("egress_extra", {}).get(u["side"], 0.0)
             u["egress"] = min(1e9, EV.recorrido(pb["_evac"], u["_i"], xd) + extra)
             u["saco"] = min(1e9, EV.saco(pb["_evac"], u["_i"], xd) + extra)
@@ -389,6 +400,8 @@ def generate(data):
                 "door": [round(v, 3) for v in G.to_world([u["door_local"]], pc["origin"], pc["angle"])[0]]}
         if u.get("editada"):
             item["editada"] = True
+        if u.get("frente"):
+            item["al_frente"] = True                        # R3.7: todo el ancho en la punta del pasillo, que entra por ahí
         if any(m.get("accesible") and m.get("name") == u["type"] for m in params["unit_mix"]):
             item["accesible"] = True                        # tipo del mix marcado «accesible» (F5)
         if stage == "plans":

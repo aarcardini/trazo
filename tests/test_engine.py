@@ -1753,3 +1753,72 @@ def test_sin_placards():
 
 if __name__ == "__main__":
     test_sin_placards(); print("OK43")
+
+
+def test_pasillo_sin_puntas():
+    """R3.7 (pedido del usuario): el pasillo común termina en la última puerta. En la punta libre de un pasillo de borde
+    (núcleo manual atrás y una sola medianera, como en la captura del predio de 10 x 28), la vivienda del extremo toma
+    todo el ancho, entra por la punta del pasillo y las viviendas se reparten parejas. Después de un cruce (las L), la
+    franja del ala vecina cruza la punta y la vivienda del otro lado entra por el pasillo que queda."""
+    from engine import plans as P
+    d = json.load(open(os.path.join(os.path.dirname(__file__), "..", "samples", "entre_medianeras.json"), encoding="utf-8"))
+    base = dict(medianeras=[d["medianeras"][1]], cores_mode="manual", cores=[[5, 25]])
+    dos = [{"name": "2 dorm", "area": 75, "percent": 100, "dorms": 2}]
+    r = run(d["footprint"], h=18, unit_mix=dos, **base)       # antes: el pasillo llegaba a la fachada (y = 0,35)
+    (pas,) = r["corridors"]
+    y0 = min(p[1] for p in pas)
+    assert 9.5 < y0 < 10.5, pas
+    u1, u2 = r["units"]
+    xs, ys = [p[0] for p in u2["poly"]], [p[1] for p in u2["poly"]]
+    assert abs(min(xs) - 0.35) < 1e-6 and abs(max(xs) - 9.65) < 1e-6 and abs(min(ys) - 0.35) < 1e-6   # al frente, todo el ancho
+    assert u2.get("al_frente") and not u1.get("al_frente") and abs(max(ys) + 0.3 - y0) < 0.01         # y el tabique
+    assert abs(u1["area"] - u2["area"]) < 3 and u1["plan_score"] == 100 and u2["plan_score"] == 100
+    ent = next(x for x in u2["doors"] if x["entry"])            # la entrada, en la punta del pasillo
+    assert all(0.35 - 1e-6 <= p[0] <= 2.35 + 1e-6 and abs(p[1] - max(ys)) < 0.01 for p in (ent["p"], ent["q"])), ent
+    assert max(ys) - min(ys) <= P.fondo_sin_tira() + 1e-6       # no más honda que lo que el plano aprovecha entero
+    assert not any("Fondo de saco" in w for w in r["warnings"]) and u2["saco"] < 18 and r["metrics"]["efficiency"] > 67
+    # con 3 y 2 dormitorios, al frente va la de menos dormitorios: su frente es el ancho del predio
+    r3 = run(d["footprint"], h=18, **base)
+    assert [u["type"] for u in r3["units"]] == ["3 dorm", "2 dorm"] and all(u["plan_score"] == 100 for u in r3["units"])
+    # la etapa «pasillo y núcleos» ya muestra el pasillo corto
+    rc = generate({"footprint": d["footprint"], "height": 18, "stage": "corridor", "params": dict(base, unit_mix=dos)})
+    assert rc["corridors"] == r["corridors"]
+    # el tabique entre las dos se arrastra (R4.4) y el pasillo lo sigue; unidas a mano, el pasillo vuelve a la fachada
+    t = max(ys) + 0.15
+    rt = run(d["footprint"], h=18, unit_mix=dos, unit_edits=[{"op": "tabique", "p": [6, t], "a": [6, 8.5]}], **base)
+    assert abs(min(p[1] for p in rt["corridors"][0]) - 8.65) < 0.01
+    rf = run(d["footprint"], h=18, unit_mix=dos, unit_edits=[{"op": "fusionar", "p": [6, t]}], **base)
+    assert len(rf["units"]) == 1 and abs(min(p[1] for p in rf["corridors"][0]) - 0.35) < 0.01
+    # en automático las dos puntas llevan núcleo: nada cambia
+    ra = run(d["footprint"], h=18, unit_mix=dos, medianeras=[d["medianeras"][1]])
+    assert len(ra["cores"]) == 2 and abs(min(p[1] for p in ra["corridors"][0]) - 0.35) < 0.01
+    assert not any(u.get("al_frente") for u in ra["units"])
+    # el plano con la entrada en un tramo del borde: el hall va a ese extremo (derecho o al revés); si no entra, se avisa
+    rect = [(0, 0), (12, 0), (12, 6.5), (0, 6.5)]
+    fac = lambda p, q: abs(p[1] - 6.5) < 1e-6 and abs(q[1] - 6.5) < 1e-6
+    for tramo in ((0.0, 2.0), (10.0, 12.0)):
+        res = P.layout_unit(rect, 2, fac, entrada=tramo)
+        e = next(x for x in res["doors"] if x.get("entry"))
+        assert tramo[0] - 0.05 <= min(e["p"][0], e["q"][0]) and max(e["p"][0], e["q"][0]) <= tramo[1] + 0.05, (tramo, e)
+        assert res["score"] == 100, res["checks"]
+    res = P.layout_unit(rect, 2, fac, entrada=(5.0, 5.5))
+    assert any(c["msg"] == "La puerta de entrada no da al pasillo común" for c in res["checks"]) and res["score"] < 100
+    # la L: el pasillo del ala larga termina en el cruce (antes seguía 6,65 m hasta la fachada oeste); la franja del ala
+    # oeste baja hasta el tabique con U03, que entra por el pasillo que queda
+    s = json.load(open(os.path.join(os.path.dirname(__file__), "..", "samples", "L.json"), encoding="utf-8"))
+    r = run(s["footprint"], h=s["height"])
+    ew = max(r["corridors"], key=lambda c: max(p[0] for p in c) - min(p[0] for p in c))
+    assert abs(min(p[0] for p in ew) - 7.0) < 0.01, ew
+    oeste = next(u for u in r["units"] if max(p[0] for p in u["poly"]) < 7 and min(p[1] for p in u["poly"]) < 7)
+    assert abs(min(p[1] for p in oeste["poly"]) - 6.15) < 0.01 and oeste["plan_score"] == 100
+    u03 = next(u for u in r["units"] if min(p[0] for p in u["poly"]) < 1 and max(p[1] for p in u["poly"]) < 6)
+    e = next(x for x in u03["doors"] if x["entry"])
+    assert min(e["p"][0], e["q"][0]) >= 7.0 - 1e-6 and u03["door"][0] >= 7.0 and u03["plan_score"] == 100
+    assert r["metrics"]["mix"]["count"] == 10 and r["metrics"]["mix"]["match_score"] == 100     # antes, 9 y 94,4
+    # el patio central: en las esquinas del anillo, del otro lado del pasillo hay otra ala: no hay vivienda al frente
+    s = json.load(open(os.path.join(os.path.dirname(__file__), "..", "samples", "patio_central.json"), encoding="utf-8"))
+    r = run(s["footprint"], h=s["height"], **({"patios_mode": "manual", "patios": s["patios"]} if s.get("patios") else {}))
+    assert not any(u.get("al_frente") for u in r["units"])
+
+if __name__ == "__main__":
+    test_pasillo_sin_puntas(); print("OK44")
