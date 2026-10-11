@@ -324,6 +324,7 @@ LAYER_COLORS = {
     "living": SD.Color.FromArgb(230, 170, 50),
     "kitchen": SD.Color.FromArgb(110, 180, 100),
     "bath": SD.Color.FromArgb(60, 170, 200),
+    "vestidor": SD.Color.FromArgb(120, 100, 200),
     "Equipamiento": SD.Color.FromArgb(90, 95, 105),
     "Ventanas": SD.Color.FromArgb(40, 120, 200),
     "SinUso": SD.Color.FromArgb(150, 150, 150),

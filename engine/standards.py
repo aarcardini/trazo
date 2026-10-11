@@ -44,6 +44,10 @@ DEFAULTS = {
         # franja sin luz entre el pasillo interno y el pasillo común (baños, lavadero, depósito): fondo mínimo y máximo;
         # toma el menor con el que entran, y lo demás va a los dormitorios (criterio de proyecto)
         "franja_servicios": {"min_side": 1.80, "max_side": 2.80},
+        # R5.10 (criterio del usuario): vestidor opcional por tipo del mix, junto al dormitorio principal. La NNE no lo
+        # regula; Neufert: módulo de 0,60 m con su paso delante, de 0,60 m (mínimo: 1,20 m) a 0,90 m (típico: 1,50 m).
+        # typ: [frente, fondo]
+        "vestidor": {"min_area": 3.0, "min_side": 1.20, "typ": [2.00, 1.50]},
         # estar-comedor típico según dormitorios (m²)
         "estar_por_dorms": [18.0, 18.0, 20.0, 24.0, 27.0],
         # rangos de superficie de la vivienda según dormitorios (ANV): [mín, máx]

@@ -363,15 +363,17 @@ def _tipo(rm):
     k = rm["kind"]
     if k == "kitchen" or (k == "hall" and "Cocina" in rm["name"]):
         return "cocina"
-    return {"bath": "bath", "laundry": "laundry", "bedroom": "dormitorio", "living": "estar", "dining": "comedor"}.get(k)
+    return {"bath": "bath", "laundry": "laundry", "bedroom": "dormitorio", "living": "estar", "dining": "comedor",
+            "vestidor": "vestidor"}.get(k)
 
 
-def resolver(rm, puertas, aberturas, S, fachada=(), nb=1, mesa=True, ids=None, acc=False):
+def resolver(rm, puertas, aberturas, S, fachada=(), nb=1, mesa=True, ids=None, acc=False, placard=True):
     """Equipamiento de una estancia (con memoria: estancias iguales se resuelven una vez). puertas: [{p, q, a, b, ancho}];
     aberturas: {id: [(p, q[, id de la otra estancia])]}; fachada: tramos de pared con ventana [(p, q)]; nb: dormitorios
     (los asientos de la mesa); mesa: si el estar lleva la mesa del comedor; ids: estancias que se amueblan juntas (el
-    estar y el comedor); acc: vivienda accesible (el baño principal, para silla de ruedas). Devuelve (piezas en el marco
-    de la estancia trasladada al origen, lo que no entra, avisos)."""
+    estar y el comedor); acc: vivienda accesible (el baño principal, para silla de ruedas); placard: un dormitorio sin
+    placard (R5.10: el principal con vestidor). Devuelve (piezas en el marco de la estancia trasladada al origen, lo que
+    no entra, avisos)."""
     ids = tuple(ids or (rm["id"],))
     x0, v0, x1, v1 = rm["rect"]
     rel = lambda pt: (round(pt[0] - x0, 4), round(pt[1] - v0, 4))
@@ -388,12 +390,13 @@ def resolver(rm, puertas, aberturas, S, fachada=(), nb=1, mesa=True, ids=None, a
              tuple(sorted((rel(p), rel(q)) for p, q in fachada)) if mueble else (),
              nb if tipo in ("estar", "comedor") else None, mesa if tipo == "estar" else None,
              bool(acc) and tipo == "bath" and rm["id"] == "bath1",
-             tuple(sorted((k, tuple(v) if isinstance(v, list) else v) for k, v in S.items())))
+             tuple(sorted((k, tuple(v) if isinstance(v, list) else v) for k, v in S.items())),
+             bool(placard) or tipo != "dormitorio")
     if clave not in _memo:
         if len(_memo) > 4000:
             _memo.clear()
         r = _estancia(x1 - x0, v1 - v0, forma)
-        _memo[clave] = _equipar_estancia(tipo, clave[1], r, pts, abre, S, clave[7], nb, mesa, clave[10])
+        _memo[clave] = _equipar_estancia(tipo, clave[1], r, pts, abre, S, clave[7], nb, mesa, clave[10], clave[12])
     return _memo[clave]
 
 
@@ -406,12 +409,12 @@ def _contiguos(a, b):
     return abs(a[0] - b[0]) < 0.05 and abs(a[2] - b[2]) < 0.05 and (abs(a[3] - b[1]) < 0.05 or abs(b[3] - a[1]) < 0.05)
 
 
-def equipar(rooms, puertas, aberturas, S, nb, fachadas=None, chicas=(), acc=False):
+def equipar(rooms, puertas, aberturas, S, nb, fachadas=None, chicas=(), acc=False, sin_placard=()):
     """Artefactos y muebles de la vivienda. rooms: [{id, kind, name, rect[, poly]}]; puertas: [{p, q, a, b, ancho}] (la
     hoja abre hacia b); aberturas: {id: [(p, q[, id de la otra estancia])]} bordes abiertos a otra estancia; fachadas:
     {id: [(p, q)]} tramos de pared con ventana; chicas: estancias ya avisadas por no llegar a su medida mínima (se equipan
-    igual, pero no se avisa además lo que no entra); acc: vivienda accesible. El comedor y el estar contiguos se amueblan
-    juntos. Devuelve (piezas, comprobaciones)."""
+    igual, pero no se avisa además lo que no entra); acc: vivienda accesible; sin_placard: dormitorios sin placard (R5.10:
+    el principal con vestidor). El comedor y el estar contiguos se amueblan juntos. Devuelve (piezas, comprobaciones)."""
     fachadas = fachadas or {}
     piezas, checks = [], []
     por_id = {rm["id"]: rm for rm in rooms}
@@ -431,7 +434,7 @@ def equipar(rooms, puertas, aberturas, S, nb, fachadas=None, chicas=(), acc=Fals
             ids, nombre = ("living", "dining"), {"mesa": com["name"]}
         x0, v0 = sala["rect"][0], sala["rect"][1]
         hechas, faltan, info = resolver(sala, puertas, aberturas, S, [s for i in ids for s in fachadas.get(i, [])], nb,
-                                        junto or com is None, ids, acc)
+                                        junto or com is None, ids, acc, rm["id"] not in sin_placard)
         for k, o, es, en, w, d in hechas:
             pz = _pieza(k, (o[0] + x0, o[1] + v0), es, en, w, d, rm["id"])
             if junto and rm is est:                       # cada mueble, en la estancia donde cae su centro
@@ -449,12 +452,14 @@ def equipar(rooms, puertas, aberturas, S, nb, fachadas=None, chicas=(), acc=Fals
     return piezas, checks
 
 
-def _equipar_estancia(tipo, principal, r, puertas, aberturas, S, fachada=(), nb=1, mesa=True, acc=False):
+def _equipar_estancia(tipo, principal, r, puertas, aberturas, S, fachada=(), nb=1, mesa=True, acc=False, placard=True):
     """Una estancia en su propio origen (para reusar el resultado en estancias iguales). Devuelve (piezas
     [(kind, esquina, dirección, frente, largo, fondo)], lo que no entra, avisos)."""
     libres, zonas = _paredes(r, aberturas, [(p, q, ancho, adentro) for p, q, ancho, adentro in puertas])
     if tipo in MUEBLES:
-        return _amueblar(tipo, principal, r, libres, zonas, puertas, aberturas, S, fachada, nb, mesa)
+        return _amueblar(tipo, principal, r, libres, zonas, puertas, aberturas, S, fachada, nb, mesa, placard)
+    if tipo == "vestidor":                            # R5.10: estantes a lo largo de su pared más larga
+        return _vestidor(r, libres, zonas, S)
     if acc:
         hechas = _bano_accesible(r, libres, zonas, [(p, q) for p, q, _, _ in puertas], S)
         if hechas:
@@ -805,7 +810,27 @@ def _camas(S, principal):
     return [(dos, 2, True), (una, 1, True)]
 
 
-def _amueblar(tipo, principal, r, libres, zonas, puertas, aberturas, S, fachada, nb, mesa):
+def _vestidor(r, libres, zonas, S):
+    """R5.10: estantes y percheros (placards abiertos, del fondo de un placard) a lo largo de las paredes libres del
+    vestidor, de la más larga a la más corta: en cada una, el más largo que entre con su paso delante (los pasos se
+    comparten)."""
+    f, paso = S["placard_fondo"], S["paso_cama"]
+    puestos = []
+    for largo, i, a, b in sorted(((b - a, i, a, b) for i, (_, tr) in enumerate(libres) for a, b in tr), reverse=True):
+        for k in range(int(largo / 0.1) + 1):
+            L = round(largo - 0.1 * k, 2)
+            if L < 0.9 - TOL:
+                break
+            nuevo, _ = _colocar(r, [(libres[i][0], [(a, b)])], zonas, [("placard", L, f, paso)], lambda *_: 0.0, puestos)
+            if nuevo:
+                puestos += nuevo
+                break
+    if not puestos:
+        return [], ["el estante (%.2f m de fondo con %.2f m de paso delante)" % (f, paso)], []
+    return [(o[0],) + _marco(o[1], o[2]) + (o[3], o[4]) for o in puestos], [], []
+
+
+def _amueblar(tipo, principal, r, libres, zonas, puertas, aberturas, S, fachada, nb, mesa, placard=True):
     """Muebles de un dormitorio, del estar (con la mesa del comedor si va ahí) o del comedor."""
     lados = _lados(r)
     fach = [[tr for tr in (_en_lado(p, q, ld) for p, q in fachada) if tr] for ld in lados]
@@ -814,6 +839,8 @@ def _amueblar(tipo, principal, r, libres, zonas, puertas, aberturas, S, fachada,
     zonas, entrada, cocina = list(zonas), None, None
     for p, q, otro in aberturas:
         m = ((p[0] + q[0]) / 2, (p[1] + q[1]) / 2)
+        # R5.10: delante de la abertura al vestidor, de todo el ancho del dormitorio, alcanza el paso de la cama (lo
+        # comprueba _primero)
         if otro in ("hall", "hallway", "kitchen"):          # delante de las aberturas de paso no va ningún mueble
             for ld in lados:
                 tr = _en_lado(p, q, ld)
@@ -828,16 +855,18 @@ def _amueblar(tipo, principal, r, libres, zonas, puertas, aberturas, S, fachada,
         entrada = ((accesos[0][0][0] + accesos[0][1][0]) / 2, (accesos[0][0][1] + accesos[0][1][1]) / 2) if accesos \
             else _centro(r)
     if tipo == "dormitorio":
-        cols, faltan, info = _dormitorio(r, libres, sin_ventana, zonas, accesos, entrada, fach, con_puerta, S, principal)
+        cols, faltan, info = _dormitorio(r, libres, sin_ventana, zonas, accesos, entrada, fach, con_puerta, S, principal,
+                                         placard)
     else:
         cols, faltan, info = _estar(tipo, r, libres, sin_ventana, zonas, accesos, entrada, cocina or entrada, fach, S, nb,
                                     mesa)
     return [pz for col in cols for pz in _dibujar(col)], faltan, info
 
 
-def _dormitorio(r, libres, sin_ventana, zonas, accesos, puerta, fach, con_puerta, S, principal):
-    """Cama (doble en el principal; dos individuales o una en los demás) con mesas de luz y paso, y placard. La cabecera,
-    mejor contra una pared sin ventana ni puerta; el placard, contra una pared sin ventana, cerca de la puerta."""
+def _dormitorio(r, libres, sin_ventana, zonas, accesos, puerta, fach, con_puerta, S, principal, placard=True):
+    """Cama (doble en el principal; dos individuales o una en los demás) con mesas de luz y paso, y placard (sin él, si
+    el dormitorio tiene vestidor: R5.10). La cabecera, mejor contra una pared sin ventana ni puerta; el placard, contra
+    una pared sin ventana, cerca de la puerta."""
     p, f = S["paso_cama"], S["placard_fondo"]
     largo = S["placard_largo"][0 if principal else 1]
     largos = [largo] + [round(largo - 0.3 * k, 2) for k in range(1, 20) if largo - 0.3 * k >= 0.9 - TOL]
@@ -873,6 +902,10 @@ def _dormitorio(r, libres, sin_ventana, zonas, accesos, puerta, fach, con_puerta
     corto = lambda L: [] if L == largo else ["placard de %.2f m (no entra el de %.2f m)" % (L, largo)]
     sin_placard = ("placard", "el placard (%.2f × %.2f m con %.2f m de paso delante)" % (largos[-1], f, p))
     intentos = []
+    if not placard:                                    # R5.10: con vestidor, solo la cama
+        intentos = [([cama], [], una if n == 1 and g > 0 else []) for g, (cama, n) in enumerate(grupos)]
+        intentos.append(([], [sin_cama], []))
+        return _primero(r, accesos, intentos)
     for g, (cama, n) in enumerate(grupos):
         extra = una if n == 1 and g > 0 else []
         intentos += [([cama, pls[L]], [], extra + corto(L)) for L in largos]
