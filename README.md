@@ -142,6 +142,9 @@ Si algo falla en Rhino, ejecuta el script y elige **Diagnostico**. Si no se resu
 - **Mix**: tipos con m² objetivo y %, ancho mínimo, muro medianero; métricas Match Score, Fit y Unidades únicas.
 - **Planos**: distribución día/noche con pasillo interno, puertas y grafo de conexiones verificado.
 
+## Novedades v2.36
+- **Datos al pasar el mouse:** sobre la planta aparece, sin hacer clic, un recuadro con el nombre y la superficie de lo que está debajo. Muestra la estancia y su vivienda («Dormitorio principal · 11.2 m²», «U03 · 2 dorm · 84.1 m²»), lo sin uso, cada parte de un núcleo (escalera, ascensor) con sus ascensores, el pasillo común, las zonas sin luz y los patios. En los niveles de oficinas, comercio o estacionamiento muestra sus partes, por ejemplo una plaza. Se apaga con «Datos al pasar», en la barra de la planta, y no aparece mientras se dibuja o se arrastra. El clic sigue abriendo la ficha.
+
 ## Novedades v2.35
 - **Terreno rectangular sin Rhino:** en «1 · Masa → Terreno rectangular» se cargan el frente y el fondo del terreno, qué linderos son medianeras (izquierdo, derecho, de fondo) y los retiros de cada lado y del frente. «Crear masa del terreno» arma la masa:
   - los linderos sin medianera y el frente se descuentan de la masa;

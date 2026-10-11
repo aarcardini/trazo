@@ -20,6 +20,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:3px 4px;b
 .viewbar{position:absolute;left:10px;right:10px;top:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;z-index:2}
 .viewbar button{margin:0}.viewbar .grp{display:inline-flex;gap:8px;align-items:center;background:var(--pan);border:1px solid var(--line);border-radius:6px;padding:3px 8px;font-size:12px;color:var(--mut)}
 .viewbar input[type=range]{width:90px}
+.dato{position:absolute;pointer-events:none;background:var(--pan);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:5px 8px;box-shadow:0 3px 10px rgba(0,0,0,.14);z-index:4;font-size:12px;line-height:1.35;white-space:nowrap}.dato span{color:var(--mut)}
 .ctx{position:absolute;right:10px;top:52px;background:var(--pan);border:1px solid var(--line);border-radius:8px;padding:10px;width:250px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:3;font-size:13px}
 .ctx label{margin:6px 0}.prow{display:grid;grid-template-columns:24px 1fr auto;gap:6px;align-items:center;padding:3px 4px;border-radius:5px;cursor:pointer;font-size:12px}
 .prow:hover{background:var(--bg)}.sw{width:12px;height:12px;border-radius:3px;display:inline-block}
@@ -113,6 +114,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:3px 4px;b
    <label style="margin:0;gap:4px" title="Artefactos de baños, cocina y lavadero, y muebles"><input type="checkbox" id="showEquip" checked onchange="showEquip=this.checked;draw()">Equipamiento</label>
    <label style="margin:0;gap:4px" title="Medidas totales por fuera de la planta y escala gráfica"><input type="checkbox" id="showDims" checked onchange="showDims=this.checked;draw()">Cotas</label>
    <label style="margin:0;gap:4px" title="Tramos de pasillo y viviendas que no cumplen el fondo de saco (naranja) o el recorrido máximo (rojo)"><input type="checkbox" id="showEvac" checked onchange="showEvac=this.checked;draw()">Evacuación</label>
+   <label style="margin:0;gap:4px" title="Al pasar el mouse por la planta: nombre y superficie de cada estancia, vivienda, núcleo, pasillo o patio"><input type="checkbox" id="showTip" checked onchange="showTip=this.checked;ocultarDato()">Datos al pasar</label>
    <button class="s" style="padding:2px 7px" title="Encuadrar" onclick="zoom=1;pan=[0,0];draw()">⤢</button></span>
   <span class="grp" id="axoCtl" style="display:none">
    <button class="s" style="padding:2px 7px" title="Girar 45°" onclick="view3.az-=Math.PI/4;drawAxo()">⟲</button><button class="s" style="padding:2px 7px" title="Girar 45°" onclick="view3.az+=Math.PI/4;drawAxo()">⟳</button>
@@ -123,6 +125,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:3px 4px;b
   </span>
  </div>
  <div class="ctx" id="ctx" style="display:none"></div>
+ <div class="dato" id="dato" style="display:none"></div>
  <div class="ctx" id="varPanel" style="display:none;left:10px;width:auto;top:auto;bottom:40px;max-height:60%;overflow:auto"></div>
  <div class="tag" id="tag">Listo</div>
  <svg id="svg"><defs><pattern id="hatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="8" height="8" fill="rgba(120,120,130,.12)"/><line x1="0" y1="0" x2="0" y2="8" stroke="#8a8f99" stroke-width="1.2"/></pattern></defs><g id="gb"></g><g id="go"></g></svg>
@@ -164,7 +167,7 @@ const UNIT_L=[0.58,0.72,0.46,0.82,0.38,0.88];
 const roomColor=(kind,prog)=>tone(progColor(prog||'Residential'),ROOM_L[kind]??0.7);
 const COL=new Proxy({},{get:(t,k)=>roomColor(k)});
 const KLABEL={bedroom:'Dormitorio',living:'Estar',dining:'Comedor',kitchen:'Cocina',bath:'Baño',hall:'Hall',hallway:'Pasillo',laundry:'Lavadero',storage:'Depósito',study:'Estudio'};
-let selUnit=null, selCore=null, selSpec=null, showGraph=true, showDims=true, showEvac=true, showEquip=true;
+let selUnit=null, selCore=null, selSpec=null, showGraph=true, showDims=true, showEvac=true, showEquip=true, showTip=true;
 const EVAC={ok:'#1a9d5b',saco:'#e8890c',fail:'#d63b3b'};   // puerta de cada vivienda: cumple, fondo de saco largo, recorrido largo
 
 /* ---------- paneles de entrada ---------- */
@@ -533,6 +536,37 @@ svg.addEventListener('mousemove',e=>{ if(!view) return; const w=toWorld(e);
  if(tool==='medianera'){ const h=edgeAt(e); if(h!==medHover){ medHover=h; drawOverlay(); } return; }
  if(tool==='patio'){ mouse=snap(w,null); drawOverlay(); return; }
  if(tool==='line'||tool==='addcore') { mouse=tool==='line'?snap(w,curLine[curLine.length-1]):w; drawOverlay(); } });
+/* ---------- datos al pasar el mouse: nombre y superficie de lo que está debajo (sin clic) ---------- */
+function enPoly(p,poly){ let d=false; for(let i=0,j=poly.length-1;i<poly.length;j=i++){ const a=poly[i],b=poly[j];
+  if((a[1]>p[1])!==(b[1]>p[1])&&p[0]<(b[0]-a[0])*(p[1]-a[1])/(b[1]-a[1])+a[0]) d=!d; } return d; }
+function areaPoly(poly){ let s=0; poly.forEach((p,i)=>{ const q=poly[(i+1)%poly.length]; s+=p[0]*q[1]-q[0]*p[1]; }); return Math.abs(s)/2; }
+function datoEn(w){ if(!result||!footprint.length) return null; const m2=v=>(Math.round(v*10)/10).toFixed(1)+' m²';   // [qué es, de qué es parte]
+ const st=result.stories&&planStory!=null?result.stories[planStory]:null;
+ if(st&&st.program!=='Residential'){ const sh=progShapes(st.program).concat(coreShapes()).find(x=>x.title&&enPoly(w,x.poly));
+  return sh?[sh.title+' · '+m2(areaPoly(sh.poly)),'Nivel '+planStory+' · '+progLabel(st.program)]:null; }
+ for(const u of result.units||[]){ if(!enPoly(w,u.poly)) continue;
+  const viv=u.id+' · '+u.type+' · '+u.area+' m²'+(u.al_frente?' · al frente':''), su=(u.sin_uso||[]).find(x=>enPoly(w,x.poly)), r=(u.rooms||[]).find(x=>enPoly(w,x.poly));
+  if(su) return ['Sin uso · '+m2(su.area),viv];
+  if(r) return [r.name+' · '+m2(r.area),viv];
+  return [viv,(u.bedrooms!=null?u.bedrooms+' dorm. · ':'')+'frente '+u.width+' m · fondo '+u.depth+' m']; }
+ const ci=(result.cores||[]).findIndex(c=>enPoly(w,c.poly));
+ if(ci>=0){ const c=result.cores[ci], p=(c.parts||[]).find(x=>enPoly(w,x.poly)), n=c.ascensores;
+  const nuc='Núcleo '+(ci+1)+' · frente '+c.frente+' m'+(n!=null?' · '+(n?n+' ascensor'+(n>1?'es':''):'solo escalera'):'');
+  return p?[p.name+' · '+m2(areaPoly(p.poly)),nuc]:[nuc,m2(areaPoly(c.poly))]; }
+ const pc=(result.corridors||[]).find(c=>enPoly(w,c)); if(pc) return ['Pasillo común · '+m2(areaPoly(pc)),'ancho '+$('corridor_width').value+' m'];
+ const dz=(result.dark_zones||[]).find(d=>enPoly(w,d)); if(dz) return ['Sin luz natural · '+m2(areaPoly(dz)),'sin fachada: no lleva viviendas'];
+ const pa=(result.patios||[]).find(x=>enPoly(w,x)); if(pa){ const d=patioDims(pa); return ['Patio · '+m2(areaPoly(pa)),d[0].toFixed(2)+' × '+d[1].toFixed(2)+' m']; }
+ return null; }
+function ocultarDato(){ $('dato').style.display='none'; }
+svg.addEventListener('mousemove',e=>{ const t=$('dato');
+ if(!showTip||!view||tool||drag||dragCore||dragTab||dragIn||(panDrag&&panDrag.moved)||viewMode!=='plan') return ocultarDato();
+ const d=datoEn(toWorld(e)); if(!d) return ocultarDato();
+ t.innerHTML='<b>'+esc(d[0])+'</b><br><span>'+esc(d[1])+'</span>'; t.style.display='block';
+ const r=svg.parentNode.getBoundingClientRect(); let x=e.clientX-r.left+14, y=e.clientY-r.top+16;   // junto al cursor, sin salirse de la planta
+ if(x+t.offsetWidth>r.width-6) x=e.clientX-r.left-t.offsetWidth-12; if(y+t.offsetHeight>r.height-6) y=e.clientY-r.top-t.offsetHeight-12;
+ t.style.left=Math.max(4,x)+'px'; t.style.top=Math.max(4,y)+'px'; });
+svg.addEventListener('mouseleave',ocultarDato);
+svg.addEventListener('wheel',ocultarDato,{passive:true});
 svg.addEventListener('pointermove',e=>{ if(!drag||!view) return; if(!drag.moved) recordar('mover vértice'); const pl=centerlines[drag.li]; const prev=pl[drag.vi-1]||pl[drag.vi+1]; pl[drag.vi]=snap(toWorld(e),null); drag.moved=true; drawOverlay(); });
 svg.addEventListener('pointerup',e=>{ if(drag){ const d=drag; drag=null; if(d.moved&&lastStage) runCirc(); } });
 svg.addEventListener('pointermove',e=>{ if(!dragTab||!view) return; if(!dragTab.moved){ if(Math.abs(e.clientX-dragTab.x)+Math.abs(e.clientY-dragTab.y)<5) return; svg.setPointerCapture(e.pointerId); }
