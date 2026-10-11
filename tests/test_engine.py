@@ -1558,3 +1558,34 @@ def test_normativa_nacional():
 
 if __name__ == "__main__":
     test_normativa_nacional(); print("OK38")
+
+
+def test_dormitorio_placard():
+    """v2.29: al repartir el frente entre los dormitorios, el principal conserva el ancho de su cama doble con el placard
+    al costado (paso + cama + paso + placard: 3,20 m con las medidas por defecto) cuando el fondo no deja ponerlo al pie
+    de la cama, mientras los demás dormitorios lleguen a su mínimo (criterio del usuario). Si el frente no alcanza, los
+    demás no bajan de su mínimo y la ficha avisa que el placard no entra. Las medidas salen de «Equipamiento y muebles»."""
+    import copy
+    from engine import plans as P, standards as ST
+    rect = lambda w, d: [(0.0, 0.0), (w, 0.0), (w, d), (0.0, d)]          # dormitorios de 3,00 m de fondo
+
+    def dorms(W, eq=None):
+        res = P.layout_unit(rect(W, 4.0), 2, equip=eq)
+        R = {r["id"]: r for r in res["rooms"]}
+        ancho = lambda i: max(p[0] for p in R[i]["poly"]) - min(p[0] for p in R[i]["poly"])
+        placard = any(e["room"] == "bed1" and e.get("name") == "Placard" for e in res["equipamiento"])
+        fallas = [c["msg"] for c in res["checks"] if not c.get("ok") and not c.get("info") and "ormitorio" in c["msg"]]
+        return ancho("bed1"), R["bed2"]["area"], placard, fallas
+    for W in (9.0, 9.4):
+        b1, a2, placard, fallas = dorms(W)
+        assert abs(b1 - 3.20) < 1e-6 and placard and a2 >= 7.0 - 1e-6 and not fallas, (W, b1, a2, fallas)
+    b1, a2, placard, fallas = dorms(8.8)            # no alcanza: el segundo conserva su mínimo y se avisa el placard
+    assert b1 < 3.2 and a2 >= 7.0 - 1e-6 and not placard, (b1, a2)
+    assert fallas == ["Dormitorio principal: no entra el placard (0.90 × 0.60 m con 0.60 m de paso delante)"], fallas
+    eq = copy.deepcopy(ST.DEFAULTS["equipamiento"])
+    eq["placard_fondo"] = 0.80
+    b1, a2, placard, fallas = dorms(9.6, eq)        # un placard más profundo pide más ancho
+    assert abs(b1 - 3.40) < 1e-6 and placard and not fallas, (b1, fallas)
+
+if __name__ == "__main__":
+    test_dormitorio_placard(); print("OK39")

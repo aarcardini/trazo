@@ -29,12 +29,24 @@ BATH_W1, BATH_W2, HALL_W, KITCH_D, LAV_W, BATH2_D = 1.7, 1.3, 1.4, 2.9, 1.2, 2.0
 V = ST.DEFAULTS["vivienda"]
 
 
+def _cama_placard(eq):
+    """Dormitorio principal con su cama doble y el placard (criterio del usuario, v2.29): (ancho con el placard al costado
+    de la cama, fondo con el placard al pie). Con las medidas por defecto, 3,20 y 3,10 m."""
+    return (2 * eq["paso_cama"] + eq["cama_doble"][0] + eq["placard_fondo"],
+            eq["cama_doble"][1] + eq["paso_cama"] + eq["placard_fondo"])
+
+
+CAMA_PLACARD = _cama_placard(ST.DEFAULTS["equipamiento"])
+
+
 def configure(vivienda, equip=None, accesible=False):
     """Ajusta las medidas de proyecto a partir de la tabla de estándares (standards.py / web). accesible: el baño
     principal toma el ancho del baño accesible."""
     global HALL, LIV_MIN, BED_MAIN, BED_W, BATH_W1, BATH_W2, HALL_W, KITCH_D, LAV_W, BATH2_D, V, DOOR, ENTRY, DOOR_ACC
+    global CAMA_PLACARD
     V = vivienda
     eq = equip or ST.DEFAULTS["equipamiento"]
+    CAMA_PLACARD = _cama_placard(eq)
     DOOR, ENTRY, DOOR_ACC = eq["puerta_interior"], eq["puerta_entrada"], eq["puerta_accesible"]
     MIN_SHARE["puerta"] = DOOR + 0.1
     HALL = max(V["pasillo"]["min_side"], V["pasillo"]["typ_side"])
@@ -376,6 +388,8 @@ def _plan_rects(x0, v0, x1, v1, nb, warnings, acc=None, lateral=False):
     # que cada dormitorio alcance su área mínima con el fondo disponible (si el frente lo permite)
     specs = [V["dorm_principal"]] + [V["dorm_secundario"]] * (nf - 1)
     mw = [max(sp["min_side"], sp["min_area"] / max(bedD, 0.1) + 0.02) for sp in specs]
+    if bedD < CAMA_PLACARD[1] - 1e-6 and sum(mw[1:]) + max(mw[0], CAMA_PLACARD[0]) <= Wn + 1e-6:
+        mw[0] = max(mw[0], CAMA_PLACARD[0])     # y el principal, el ancho de su cama doble con el placard al costado
     if sum(mw) <= Wn + 1e-6:
         widths = [max(w, m_) for w, m_ in zip(widths, mw)]
         over = sum(widths) - Wn

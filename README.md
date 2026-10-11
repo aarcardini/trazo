@@ -142,6 +142,9 @@ Si algo falla en Rhino, ejecuta el script y elige **Diagnostico**. Si no se resu
 - **Mix**: tipos con m² objetivo y %, ancho mínimo, muro medianero; métricas Match Score, Fit y Unidades únicas.
 - **Planos**: distribución día/noche con pasillo interno, puertas y grafo de conexiones verificado.
 
+## Novedades v2.29
+- **El dormitorio principal conserva su placard:** al repartir el frente entre los dormitorios, el principal conserva el ancho de su cama doble con el placard de 0,60 m al costado (3,20 m con las medidas por defecto) cuando el fondo no deja ponerlo al pie de la cama, siempre que los demás dormitorios lleguen a su mínimo. Si el frente no alcanza, los demás no bajan de su mínimo y la ficha avisa que el placard no entra. En los ejemplos, «Predio entre medianeras 10 × 40» vuelve de 22 a 30 en calidad de planos: en U01 y U03 el dormitorio principal queda de 3,20 × 3,00 m con su placard y el segundo de 2,57 × 3,00 m (7,7 m²).
+
 ## Novedades v2.28
 - **Segunda fachada:** con 3 dormitorios o más, el dormitorio al costado ya no deja la vivienda con un solo baño; con hasta 2 dormitorios sigue pudiendo (criterio del usuario). En los ejemplos, «T con 2 polilíneas» baja de 67 a 62 en calidad de planos: su vivienda U06, de 3 dormitorios en 9,10 m de frente, vuelve a tener los dormitorios al fondo, con dos baños. El ROADMAP registra tus decisiones: la norma nacional rige en todos los departamentos (R10.1 y R11.5 hechas), monoambientes desde 32 m², mínimo de 2 ascensores por edificio y, en la esquina, el estar o el dormitorio principal según cómo se conecte por dentro.
 
