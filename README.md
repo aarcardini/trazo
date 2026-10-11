@@ -142,6 +142,9 @@ Si algo falla en Rhino, ejecuta el script y elige **Diagnostico**. Si no se resu
 - **Mix**: tipos con m² objetivo y %, ancho mínimo, muro medianero; métricas Match Score, Fit y Unidades únicas.
 - **Planos**: distribución día/noche con pasillo interno, puertas y grafo de conexiones verificado.
 
+## Novedades v2.27
+- **Normativa nacional de higiene de la vivienda:** los mínimos de la vivienda siguen la Normativa Nacional de Edificación (Congreso de Intendentes, MVOTMA y SAU, 2016): dormitorio principal de 8,5 m² con lado de 2,60 m, dormitorios adicionales y estudio de 7 m², estar de 10 m² con lado de 2,60 m y baño de 3 m². La misma norma confirma el vano de iluminación de 1/10 del local y el retiro de 3 m para abrir ventanas. Las medidas que cambiaste en la web se conservan; un mínimo que el navegador o un proyecto anterior guardó con su valor viejo pasa al nuevo. En los ejemplos solo cambia la calidad de planos: «Forma en L» 87 → 84, «Predio entre medianeras 10 x 28» 58 → 60, «Predio entre medianeras 10 × 40» 30 → 22 y «Cruz con 2 polilíneas» 44 → 45. Artículos y fuentes en `STANDARDS.md`; lo que la norma pide y Trazo todavía no comprueba, en el ROADMAP (R10.8 y R11.2).
+
 ## Novedades v2.26
 - **Segunda fachada (R5.3):** las viviendas de esquina o de extremo usan la fachada lateral. Si el frente alcanza, el estar va a la esquina con luz y ventana por dos fachadas; si no alcanza para todos los dormitorios al fondo, el último va al costado con su ventana, solo si el plano mejora y no pierde estancias (puede quedar un solo baño). Toda estancia de esquina lleva ventana en las dos fachadas. En los ejemplos, «T con 2 polilíneas» sube de 61 a 67 en calidad de planos (una vivienda de 3 dormitorios con frente corto ya cumple los mínimos); los demás no cambian.
 

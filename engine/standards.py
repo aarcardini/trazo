@@ -1,9 +1,11 @@
 """Estándares dimensionales (mínimos normativos y medidas típicas). Editables desde la web.
 
 Fuentes principales (ver STANDARDS.md):
-- Ordenanzas de higiene de la vivienda (modelo departamental uruguayo; San José Res. 1244/1977, Río Negro Dec. 92/1979):
-  habitación principal 10 m² / lado 2,50; otras 6,5 m² / 2,00; cocina 4 m² / 1,60; baño 2,40 m² / 1,20;
-  baño auxiliar 1,50 m² / 0,80; pasillos 0,90; pasaje de entrada 1,20; escaleras colectivas 1,00-1,20; 2a+b=0,64.
+- Normativa Nacional de Edificación, Higiene de la Vivienda (Congreso de Intendentes, MVOTMA y SAU, 2016): un local
+  principal habitable de 10 m² / lado 2,60 (art. 8 a); dormitorio principal 8,5 m² / 2,60 (art. 8 b); dormitorios
+  adicionales 7 m² / 2,00 (art. 8 c); cocina 4 m² / 1,60 (art. 21); baño 3 m² / 1,20 (art. 17); baño auxiliar
+  1,50 m² / 0,80 con dos artefactos y 2 m² / 1,00 con tres (art. 18); pasillo interno 0,90 (art. 36); acceso 1,20
+  (art. 34); escaleras colectivas 1,00 con ascensor y 1,20 sin ascensor, 2a+b=0,64 (art. 31).
 - Ley 13.728 art. 18 y ANV (áreas vigentes según dormitorios).
 - Bomberos IT 19 (salidas de emergencia): ancho mínimo 1,20; contrahuella 16-18 cm; tipos de escalera por altura.
 - Intendencia de Montevideo: ductos y cabinas de ascensor (accesible: ducto 1,75 x 1,95; cabina 1,10 x 1,40).
@@ -15,8 +17,8 @@ Fuentes principales (ver STANDARDS.md):
   de la mesa según dormitorios: 4 y 2 más por cada dormitorio después del primero (criterio del usuario).
 - Vivienda accesible: puertas de 0,82 (criterio del usuario: la silla de ruedas); círculo de giro de 1,50 m, espacio de
   transferencia de 0,80 m junto al inodoro y ducha a nivel (criterios habituales de accesibilidad: UNIT 200, ISO 21542).
-- Ventanas: vano de iluminación directa de al menos 1/10 de la superficie del local (Digesto de Montevideo, «De los
-  locales habitables»); alto de 1,20 m y anchos típicos de 1,50 (dormitorios) y 2,00 (estar): criterios de proyecto.
+- Ventanas: vano de iluminación directa de al menos 1/10 de la superficie del local (Normativa Nacional, art. 11);
+  alto de 1,20 m y anchos típicos de 1,50 (dormitorios) y 2,00 (estar): criterios de proyecto.
 Las medidas "típicas" son criterios de proyecto (no normativos) y pueden ajustarse.
 """
 import copy
@@ -25,16 +27,16 @@ import math
 DEFAULTS = {
     "vivienda": {
         # estancia: área mínima (m²), lado mínimo (m), área típica (m²), medidas típicas [frente, fondo]
-        "dorm_principal": {"min_area": 10.0, "min_side": 2.50, "typ_area": 11.5, "typ": [3.20, 3.60]},
-        "dorm_secundario": {"min_area": 6.5, "min_side": 2.00, "typ_area": 9.0, "typ": [2.80, 3.20]},
-        "estar_comedor": {"min_area": 10.0, "min_side": 2.50, "typ_area": 20.0, "typ": [3.60, 5.50]},
+        "dorm_principal": {"min_area": 8.5, "min_side": 2.60, "typ_area": 11.5, "typ": [3.20, 3.60]},
+        "dorm_secundario": {"min_area": 7.0, "min_side": 2.00, "typ_area": 9.0, "typ": [2.80, 3.20]},
+        "estar_comedor": {"min_area": 10.0, "min_side": 2.60, "typ_area": 20.0, "typ": [3.60, 5.50]},
         "cocina": {"min_area": 4.0, "min_side": 1.60, "typ_area": 7.0, "typ": [2.40, 2.90]},
-        "bano": {"min_area": 2.4, "min_side": 1.20, "typ_area": 4.0, "typ": [1.70, 2.40]},
+        "bano": {"min_area": 3.0, "min_side": 1.20, "typ_area": 4.0, "typ": [1.70, 2.40]},
         "bano_aux": {"min_area": 1.5, "min_side": 0.80, "typ_area": 2.6, "typ": [1.20, 2.20]},
         "lavadero": {"min_area": 1.5, "min_side": 0.90, "typ_area": 2.5, "typ": [1.20, 2.10]},
         "pasillo": {"min_side": 0.90, "typ_side": 1.00},
         "hall": {"min_side": 1.20, "typ": [1.40, 1.80]},
-        "estudio": {"min_area": 6.5, "min_side": 2.00, "typ_area": 8.0, "typ": [2.60, 3.10]},
+        "estudio": {"min_area": 7.0, "min_side": 2.00, "typ_area": 8.0, "typ": [2.60, 3.10]},
         # estar-comedor típico según dormitorios (m²)
         "estar_por_dorms": [18.0, 18.0, 20.0, 24.0, 27.0],
         # rangos de superficie de la vivienda según dormitorios (ANV): [mín, máx]
@@ -71,8 +73,10 @@ DEFAULTS = {
         "hall_extra": 1.50,
     },
     "predio": {
-        "retiro_ventanas": 3.0,          # retiro desde la medianera para poder abrir ventanas
-        "patio_min": 3.0,                # ancho mínimo de un patio para que las estancias que dan a él tengan luz
+        "retiro_ventanas": 3.0,          # retiro desde la medianera para poder abrir ventanas (norma nacional: 3 m del eje
+                                         # del muro divisorio para los espacios abiertos que iluminan, arts. 46, 48 y 52)
+        "patio_min": 3.0,                # ancho mínimo de un patio para que las estancias que dan a él tengan luz (la norma
+                                         # nacional lo pide según la altura, art. 44: ver ROADMAP R11.2)
     },
     "masterplan": {
         "calzada": 9.0,                  # ancho de calzada de calle local (criterio de proyecto)
@@ -138,7 +142,7 @@ DEFAULTS = {
         "bano_accesible": [2.20, 2.20],  # frente y fondo con que se dibuja el baño de una vivienda accesible
     },
     "ventanas": {                        # R5.5: una ventana por estancia habitable, en su fachada (engine/plans.py)
-        "iluminacion": 0.10,             # vano mínimo / superficie del local (Digesto de Montevideo: iluminación directa)
+        "iluminacion": 0.10,             # vano mínimo / superficie del local (Normativa Nacional, art. 11: iluminación directa)
         "alto": 1.20,                    # alto de la ventana: con él se pasa del área al ancho (criterio de proyecto)
         "ancho_dormitorio": 1.50,        # ancho típico (criterio de proyecto); más ancha si la norma pide más
         "ancho_estar": 2.00,

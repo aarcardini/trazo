@@ -1,7 +1,7 @@
 {
  "ejemplo": "samples/cruz_dos_lineas.json",
  "nombre": "Cruz con 2 polilíneas que se cruzan (X)",
- "version_motor": "2.22",
+ "version_motor": "2.27",
  "metricas": {
   "unidades": 14,
   "unidades_totales": 70,
@@ -19,7 +19,7 @@
   "circulacion": 32.5,
   "match_score": 100.0,
   "fit_m2": 14.7,
-  "calidad_planos": 44,
+  "calidad_planos": 45,
   "evacuacion_max": 24.0,
   "nsa_total": 4996.5
  }

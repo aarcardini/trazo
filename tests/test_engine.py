@@ -1496,3 +1496,57 @@ def test_segunda_fachada():
 
 if __name__ == "__main__":
     test_segunda_fachada(); print("OK37")
+
+
+def test_normativa_nacional():
+    """v2.27: mínimos de la vivienda de la Normativa Nacional de Edificación, Higiene de la Vivienda (Congreso de
+    Intendentes, MVOTMA y SAU, 2016). Las comprobaciones de cada plano los usan: un dormitorio principal de 2,55 m de lado
+    ya no cumple (art. 8 b: 2,60 m) y uno de 9,2 m² sí (8,5 m²); un dormitorio adicional de 6,8 m² no cumple (art. 8 c:
+    7 m²). La web guarda en el navegador solo las medidas cambiadas; en lo guardado antes de v2.27 (o en un proyecto
+    anterior), un mínimo con su valor viejo pasa al nuevo y uno elegido a mano se respeta (STD_ANTES)."""
+    import copy
+    import re
+    from engine import plans as P, standards as ST
+    V = ST.DEFAULTS["vivienda"]
+    nac = {"dorm_principal": (8.5, 2.60), "dorm_secundario": (7.0, 2.00), "estar_comedor": (10.0, 2.60),
+           "estudio": (7.0, 2.00), "cocina": (4.0, 1.60), "bano": (3.0, 1.20), "bano_aux": (1.5, 0.80)}
+    for k, (area, lado) in nac.items():
+        assert (V[k]["min_area"], V[k]["min_side"]) == (area, lado), k
+    assert V["pasillo"]["min_side"] == 0.90 and V["hall"]["min_side"] == 1.20
+    assert ST.DEFAULTS["ventanas"]["iluminacion"] == 0.10 and ST.DEFAULTS["predio"]["retiro_ventanas"] == 3.0
+    # los mínimos de v2.26, para comparar
+    viejo = copy.deepcopy(V)
+    viejo["dorm_principal"].update(min_area=10.0, min_side=2.50)
+    viejo["dorm_secundario"]["min_area"] = 6.5
+    rect = [(0.0, 0.0), (9.5, 0.0), (9.5, 8.0), (0.0, 8.0)]          # dormitorios de 3,20 y 2,80 m con 4,50 m de fondo
+    corrido = lambda x: {"op": "pared", "p": (6.7, 5.75), "a": (x, 5.75)}          # el tabique entre los dos dormitorios
+    menos_fondo = {"op": "pared", "p": (5.0, 3.5), "a": (5.0, 4.6)}                # el de los dormitorios y el pasillo
+    def fallas(ed, viv=None):
+        res = P.layout_unit(rect, 2, vivienda=viv, ediciones=list(enumerate(ed)))
+        assert res["ediciones"] == list(range(len(ed))), res["ediciones"]
+        return [c["msg"] for c in res["checks"] if not c.get("ok") and not c.get("info") and "ormitorio" in c["msg"]
+                and "no entra" not in c["msg"]]
+    assert fallas([]) == []
+    assert fallas([corrido(6.05)]) == ["Dormitorio principal: lado 2.55 m < mínimo 2.60 m"]
+    assert fallas([corrido(6.05)], viejo) == []
+    assert fallas([corrido(6.2), menos_fondo]) == []                                 # 2,70 × 3,40 = 9,2 m²
+    assert fallas([corrido(6.2), menos_fondo], viejo) == ["Dormitorio principal: 9.2 m² < mínimo 10.0 m²"]
+    assert fallas([corrido(7.5), menos_fondo]) == ["Dormitorio 2: 6.8 m² < mínimo 7.0 m²"]   # 2,00 × 3,40
+    assert fallas([corrido(7.5), menos_fondo], viejo) == []
+    # web: la tabla de valores viejos nombra mínimos que existen y que cambiaron
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    antes = re.search(r"const STD_ANTES=(\{.*?\}\}\});", html).group(1)
+    antes = json.loads(re.sub(r"([{,])(\w+):", r'\1"\2":', antes))
+    assert antes == {"vivienda": {"dorm_principal": {"min_area": 10, "min_side": 2.5}, "dorm_secundario": {"min_area": 6.5},
+                                  "estar_comedor": {"min_side": 2.5}, "estudio": {"min_area": 6.5},
+                                  "bano": {"min_area": 2.4}}}, antes
+    for estancia, valores in antes["vivienda"].items():
+        for k, v in valores.items():
+            assert V[estancia][k] != v, (estancia, k)
+    # se guarda solo lo cambiado, y los valores viejos se pasan solo en lo guardado antes de v2.27
+    assert "localStorage.setItem('trazo.std',JSON.stringify(Object.assign({_v:2},medidasCambiadas())))" in html
+    assert "mezclarStd(STD,sv,viejo?STD_ANTES:null)" in html and "const viejo=!sv._v" in html
+    assert "mezclarStd(STD,P.standards||{},verMenor(p.version_motor,'2.27')?STD_ANTES:null)" in html
+
+if __name__ == "__main__":
+    test_normativa_nacional(); print("OK38")
