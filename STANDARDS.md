@@ -152,6 +152,8 @@ Distribución: hall de acceso frente al núcleo, batería de baños (mujeres, ho
 | Retiro desde medianera para abrir ventanas | 3,00 m | NNE, arts. 46, 48 y 52: los espacios abiertos y los patios que iluminan quedan a 3 m o más del eje del muro divisorio. Art. 53 e): un edificio que se separa de la divisoria queda a 1 m como mínimo |
 | Ancho mínimo de patio para iluminar | 3,00 m (fijo) | Criterio indicado por el usuario. La NNE (arts. 44 y 45) lo pide según la altura h del patio, medida desde el piso del local más bajo que ilumina: patio principal, lado L = h/4 (nunca menos de 2,85 m) y superficie S = 2h; patio secundario (solo cocinas, baños y locales secundarios), L = h/10 + 1,20 y S = 3h/4. Con h = 12 m da 3,00 m; con más altura, más. Pendiente (ROADMAP R11.2) |
 
+Una medianera puede ocupar solo parte de un borde (hoy se dibuja así en Rhino, en la capa `Trazo::Medianeras`): el retiro se aplica solo a lo largo de su tramo y la huella queda escalonada (v2.31). Varios tramos en un mismo lado, por ejemplo 0–12 m ciega y 12–30 m con 3 m de retiro, se marcan como medianeras separadas.
+
 ## Masterplan (fraccionamiento)
 
 | Parámetro | Valor por defecto | Referencia |

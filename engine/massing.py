@@ -10,8 +10,24 @@ def _inward(a, b):
     return -(b[1] - a[1]) / L, (b[0] - a[0]) / L
 
 
+def _en_tramo(fp, p, tol=0.1):
+    """True si p cae dentro de un borde de la huella: ni en una esquina ni afuera."""
+    for i in range(len(fp)):
+        a, b = fp[i], fp[(i + 1) % len(fp)]
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        L = math.hypot(dx, dy)
+        if L < 1e-9:
+            continue
+        t = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L
+        if abs((p[0] - a[0]) * dy - (p[1] - a[1]) * dx) / L <= tol and tol < t < L - tol:
+            return True
+    return False
+
+
 def apply_setbacks(fp, meds):
-    """Retira la huella r metros de cada medianera con retiro > 0 (corta por una paralela al lindero)."""
+    """Retira la huella r metros de cada medianera con retiro > 0. La que va de esquina a esquina corta por una paralela
+    al lindero; una parcial (R11.6) retira solo a lo largo de su tramo y deja la huella escalonada (del lado de un
+    extremo que llega a una esquina, el retiro sigue de largo)."""
     for m in meds or []:
         r = float(m.get("retiro") or 0)
         if r <= 0:
@@ -21,7 +37,16 @@ def apply_setbacks(fp, meds):
         c = G.centroid(fp)
         if nx * (c[0] - a[0]) + ny * (c[1] - a[1]) < 0:      # la normal debe apuntar hacia el edificio
             nx, ny = -nx, -ny
-        cut = G.largest_part(G.clip_halfplane(fp, nx, ny, nx * a[0] + ny * a[1] + r))
+        ia, ib = _en_tramo(fp, a), _en_tramo(fp, b)
+        if not (ia or ib):
+            cut = G.largest_part(G.clip_halfplane(fp, nx, ny, nx * a[0] + ny * a[1] + r))
+        else:                                                 # la franja de la medianera, hasta r hacia adentro
+            L = math.hypot(b[0] - a[0], b[1] - a[1]) or 1.0
+            ux, uy, lejos = (b[0] - a[0]) / L, (b[1] - a[1]) / L, 1e4
+            t0, t1 = (0.0 if ia else -lejos), (L if ib else L + lejos)
+            P = lambda t, s: (a[0] + ux * t + nx * s, a[1] + uy * t + ny * s)
+            partes, _ = G.subtract(fp, [[P(t0, -lejos), P(t1, -lejos), P(t1, r), P(t0, r)]])
+            cut = max((ext for ext, _ in partes), key=lambda q: abs(G.area(q)), default=[])
         if len(cut) >= 3 and abs(G.area(cut)) > 1.0:
             fp = G.ensure_ccw(G.clean(cut))
     return fp

@@ -1611,3 +1611,27 @@ def test_bano_cocina():
 
 if __name__ == "__main__":
     test_bano_cocina(); print("OK40")
+
+
+def test_medianeras_parciales():
+    """R11.6 (primera parte, v2.31): una medianera que ocupa solo parte de un borde retira la huella solo a lo largo de
+    su tramo; la huella queda escalonada. Antes, una medianera parcial con retiro retiraba el lado entero. La que va de
+    esquina a esquina (o más larga) sigue cortando por una paralela al lindero; del lado de un extremo que llega a una
+    esquina, el retiro sigue de largo. Sin retiro, la huella no cambia (solo marca el tramo ciego)."""
+    from engine import geometry as G, massing as M
+    fp = G.ensure_ccw([(0.0, 0.0), (20.0, 0.0), (20.0, 30.0), (0.0, 30.0)])    # predio de 20 × 30, lindero en x = 0
+    med = lambda y0, y1, r: {"a": [0, y1], "b": [0, y0], "retiro": r}
+    area = lambda meds: abs(G.area(M.apply_setbacks(fp, meds)))
+    ancho_en = lambda meds, y: min(p[0] for p in G.clip_rect(M.apply_setbacks(fp, meds), -1, 21, y - 0.01, y + 0.01))
+    assert abs(area([med(0, 30, 3)]) - 510) < 1e-6 and abs(area([med(-5, 35, 3)]) - 510) < 1e-6     # el lado entero
+    assert abs(area([med(0, 10, 3)]) - 570) < 1e-6                                       # 10 m desde la esquina
+    assert abs(ancho_en([med(0, 10, 3)], 5) - 3) < 1e-6 and abs(ancho_en([med(0, 10, 3)], 20)) < 1e-6
+    assert abs(area([med(10, 20, 3)]) - 570) < 1e-6                                      # al medio: una muesca
+    assert abs(ancho_en([med(10, 20, 3)], 15) - 3) < 1e-6 and abs(ancho_en([med(10, 20, 3)], 5)) < 1e-6
+    assert abs(area([med(0, 10, 0)]) - 600) < 1e-6                                       # sin retiro, no cambia
+    assert abs(area([med(0, 12, 0), med(12, 30, 3)]) - 546) < 1e-6                       # 0-12 ciega, 12-30 con 3 m
+    res = generate({"footprint": [list(p) for p in fp], "height": 9, "params": {"medianeras": [med(0, 10, 3)]}})
+    assert abs(abs(G.area(res["footprint"])) - 570) < 1e-6
+
+if __name__ == "__main__":
+    test_medianeras_parciales(); print("OK41")
