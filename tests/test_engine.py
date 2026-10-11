@@ -341,7 +341,9 @@ def test_patios_interiores():
     meds = [{"a": [30, 0], "b": [30, 45], "retiro": 0}, {"a": [0, 45], "b": [0, 0], "retiro": 0}]
     r = run(R(0, 0, 30, 45), medianeras=meds, patios_mode="manual", patios=[R(9, 14, 21, 31)])
     m = r["metrics"]
-    assert m["core_count"] == 2 and m["plan_score"] == 100 and not m.get("between"), m
+    fallas = {c["msg"] for u in r["units"] for c in u["checks"] if not c.get("ok") and not c.get("info")}
+    assert m["core_count"] == 2 and not m.get("between"), m
+    assert fallas <= {"Sin cocina: toda vivienda lleva una (norma nacional, art. 21)"}, fallas   # luz y medidas, bien
     assert not any("Zona central" in w for w in r["warnings"]), r["warnings"]     # las esquinas sin luz sí se marcan
     medios = lambda pl: [((a[0] + b[0]) / 2, (a[1] + b[1]) / 2) for a, b in zip(pl, pl[1:] + pl[:1])]
     al_patio = [u for u in r["units"] if min(L._dist_to_boundary(p, R(9, 14, 21, 31)) for p in medios(u["poly"])) < 0.6]
@@ -1589,3 +1591,23 @@ def test_dormitorio_placard():
 
 if __name__ == "__main__":
     test_dormitorio_placard(); print("OK39")
+
+
+def test_bano_cocina():
+    """v2.30: toda vivienda lleva baño y cocina (norma nacional, arts. 17 y 21). Si el plano no los tiene, la calidad
+    baja y la ficha lo dice; antes, una vivienda chica sin lugar para la cocina podía sacar 100. La cocina dentro del
+    hall («Hall / Cocina») cuenta como cocina."""
+    from engine import plans as P
+    rect = lambda w, d: [(0.0, 0.0), (w, 0.0), (w, d), (0.0, d)]
+    res = P.layout_unit(rect(6.8, 5.0), 1)          # poco frente: el baño y el hall no dejan lugar para la cocina
+    assert not any(r["kind"] == "kitchen" or "Cocina" in r["name"] for r in res["rooms"])
+    fallas = [c["msg"] for c in res["checks"] if not c.get("ok") and not c.get("info")]
+    assert fallas == ["Sin cocina: toda vivienda lleva una (norma nacional, art. 21)"] and res["score"] < 100, fallas
+    completa = P.layout_unit(rect(9.5, 8.0), 2)
+    assert completa["score"] == 100 and not any(c["msg"].startswith("Sin ") for c in completa["checks"])
+    piezas = lambda *k: [{"kind": a, "name": b} for a, b in k]
+    assert P._faltan(piezas(("bath", "Baño"), ("hall", "Hall / Cocina"))) == []
+    assert [c["msg"] for c in P._faltan(piezas(("kitchen", "Cocina")))] == ["Sin baño: toda vivienda lleva uno (norma nacional, art. 17)"]
+
+if __name__ == "__main__":
+    test_bano_cocina(); print("OK40")

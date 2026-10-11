@@ -10,7 +10,7 @@ Leyenda de esfuerzo: S = pequeño, M = mediano, L = grande (dividir antes de emp
 ## Orden de trabajo (propuesta, actualizada en v2.27)
 Lo decide el usuario; al terminar cada paso se actualiza esta lista.
 1. **Prueba del usuario** en Rhino (Mac y Windows), en el DXF y en la web de lo hecho de v2.21 a v2.27. Decisiones tomadas: puerta accesible de 0,82 m, aviso cuando la mesa del comedor no entra completa, tope de 0,60 m al arrastrar tabiques, dormitorio al costado con un solo baño solo con hasta 2 dormitorios (v2.28) y en la esquina el estar o el dormitorio principal, según cómo se conecte por dentro (R5.2).
-2. **Correcciones chicas:** que el dormitorio principal conserve el ancho de su placard al repartir el frente; que la calidad de planos baje si a una vivienda le falta el baño o la cocina (R5.2 y R9.4 se apoyan en esa puntuación); el retiro de las medianeras parciales en el motor (primera parte de R11.6); R10.7 (ascensores por núcleo).
+2. **Correcciones chicas:** que el dormitorio principal conserve el ancho de su placard al repartir el frente; que la calidad de planos baje si a una vivienda le falta el baño o la cocina (R5.2 y R9.4 se apoyan en esa puntuación); que las viviendas poco profundas tengan cocina (hoy, si entre el baño y el hall no quedan 1,80 m, no se dibuja: U08 de «Entre medianeras 30 × 45 con patio central»); el retiro de las medianeras parciales en el motor (primera parte de R11.6); R10.7 (ascensores por núcleo).
 3. **Norma nacional:** R10.8 (comprobaciones que faltan) → patios según la altura (R11.2).
 4. **Interfaz y dibujo:** R4.6 → R4.7 → edición de medianeras parciales en la web (resto de R11.6).
 5. **Planos de unidad:** cerrar R5.6 → R5.8 → R5.1 → R5.2 → R5.4.

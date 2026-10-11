@@ -508,6 +508,17 @@ def _main_con_luz(poly, main, annexes, is_facade, paso=0.25):
     return (lx0, v0, lx1, v1), annexes + [p for p in extra if p and abs(G.area(p)) > 1.0]
 
 
+def _faltan(rooms):
+    """Programa mínimo (v2.30; norma nacional, arts. 17 y 21): toda vivienda tiene baño y cocina; la cocina dentro del
+    hall («Hall / Cocina») cuenta. Lo que falta baja la calidad del plano."""
+    out = []
+    if not any(r["kind"] == "bath" for r in rooms):
+        out.append({"ok": False, "msg": "Sin baño: toda vivienda lleva uno (norma nacional, art. 17)"})
+    if not any(r["kind"] == "kitchen" or "Cocina" in r["name"] for r in rooms):
+        out.append({"ok": False, "msg": "Sin cocina: toda vivienda lleva una (norma nacional, art. 21)"})
+    return out
+
+
 def _std_for(r, nb):
     k, i = r["kind"], r["id"]
     if k == "bedroom":
@@ -805,6 +816,7 @@ def _distribuir(poly, nb, is_facade, equip, accesible, ediciones, ventanas, late
             checks.append({"ok": True, "info": True, "msg": w[1]})
         else:
             checks.append({"ok": False, "msg": w})
+    checks += _faltan(rooms)
     if all(c["ok"] for c in checks):
         checks.append({"ok": True, "msg": "Dormitorios y estar con fachada; medidas mínimas cumplidas"})
     if below:
