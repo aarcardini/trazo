@@ -59,11 +59,12 @@ def _alcanzan(ady, nucleos, sin_nodo=None, sin_arista=None):
     return vis
 
 
-def _dijkstra(ady, fuentes, sin_arista=None):
-    d = [INF] * len(ady)
+def _dijkstra(ady, fuentes, sin_arista=None, origen=False):
+    """Distancia de cada nodo a la fuente más cercana; con origen=True, también cuál es esa fuente."""
+    d, o = [INF] * len(ady), [None] * len(ady)
     q = [(0.0, s) for s in fuentes]
     for s in fuentes:
-        d[s] = 0.0
+        d[s], o[s] = 0.0, s
     heapq.heapify(q)
     while q:
         dd, u = heapq.heappop(q)
@@ -71,9 +72,9 @@ def _dijkstra(ady, fuentes, sin_arista=None):
             continue
         for v, w, k in ady[u]:
             if k != sin_arista and dd + w < d[v]:
-                d[v] = dd + w
+                d[v], o[v] = dd + w, o[u]
                 heapq.heappush(q, (d[v], v))
-    return d
+    return (d, o) if origen else d
 
 
 def analizar(pieces):
@@ -84,7 +85,7 @@ def analizar(pieces):
     nodos, aristas, nucleos = _red(pieces)
     n = len(nodos)
     ady = _ady(n, aristas)
-    rec = _dijkstra(ady, nucleos)
+    rec, origen = _dijkstra(ady, nucleos, origen=True)
     seguros = set(nucleos)                                 # núcleos y nodos con dos direcciones de salida
     for N in range(n):
         if N not in seguros and nucleos:
@@ -112,7 +113,7 @@ def analizar(pieces):
             if t is not None and t[0] is not None and t[0] != N:
                 mejor = min(mejor, w + t[1])
         saco_nodo.append(mejor)
-    return {"nodos": nodos, "aristas": aristas, "rec": rec, "tramo": tramo, "saco_nodo": saco_nodo}
+    return {"nodos": nodos, "aristas": aristas, "rec": rec, "origen": origen, "tramo": tramo, "saco_nodo": saco_nodo}
 
 
 def _sobre(red, i, x):
@@ -140,6 +141,17 @@ def recorrido(red, i, x):
     nodos, rec = red["nodos"], red["rec"]
     ns = ab if isinstance(ab, tuple) else (ab,)
     return min(rec[N] + abs(x - nodos[N][1]) for N in ns)
+
+
+def nucleo(red, i, x):
+    """(pieza, x) del núcleo más cercano por el pasillo desde el punto x del eje de la pieza i, o None (R10.7: las
+    viviendas que sirve cada núcleo)."""
+    k, ab = _sobre(red, i, x)
+    if ab is None:
+        return None
+    nodos, rec = red["nodos"], red["rec"]
+    N = min(ab if isinstance(ab, tuple) else (ab,), key=lambda N: rec[N] + abs(x - nodos[N][1]))
+    return nodos[red["origen"][N]] if rec[N] < INF else None
 
 
 def saco(red, i, x):

@@ -1,7 +1,7 @@
 {
  "ejemplo": "samples/cruz_dos_lineas.json",
  "nombre": "Cruz con 2 polilíneas que se cruzan (X)",
- "version_motor": "2.27",
+ "version_motor": "2.32",
  "metricas": {
   "unidades": 14,
   "unidades_totales": 70,
@@ -10,17 +10,17 @@
    "3 dorm": 7
   },
   "nucleos": 4,
-  "ascensores": 2,
+  "ascensores": 1,
   "tramos": 3,
   "area_planta": 1458.1,
-  "eficiencia_planta": 68.5,
-  "eficiencia_total": 65.1,
-  "sin_usar": 0.0,
-  "circulacion": 32.5,
+  "eficiencia_planta": 71.9,
+  "eficiencia_total": 68.3,
+  "sin_usar": 0.8,
+  "circulacion": 28.0,
   "match_score": 100.0,
   "fit_m2": 14.7,
-  "calidad_planos": 45,
-  "evacuacion_max": 24.0,
-  "nsa_total": 4996.5
+  "calidad_planos": 46,
+  "evacuacion_max": 24.9,
+  "nsa_total": 5243.5
  }
 }

@@ -724,12 +724,15 @@ def nucleo_punto(spec):
 
 def medidas_nucleo(spec, params):
     """(giro, frente, fondo con el pasillo) de un núcleo manual: sus medidas propias o las de todos los núcleos
-    (con giro 90, las del núcleo con la escalera a lo largo del pasillo: params["_core_90"])."""
+    (con giro 90, las del núcleo con la escalera a lo largo del pasillo: params["_core_90"]). Con sus propios
+    ascensores (R10.7), las medidas de la normativa para esa cantidad."""
     op = spec if isinstance(spec, dict) else {}
     giro = 90 if str(op.get("giro", 0)) == "90" else 0
     w, d = (params.get("_core_90") or (params["core_depth"] - params["corridor_width"],
                                        params["core_width"] + params["corridor_width"])) if giro == 90 else \
         (params["core_width"], params["core_depth"])
+    if op.get("ascensores") is not None and params.get("_tam_nucleo"):
+        w, d = params["_tam_nucleo"](max(0, int(op["ascensores"])), giro)
     if op.get("frente"):
         w = max(1.0, float(op["frente"]))
     if op.get("fondo"):
@@ -948,6 +951,8 @@ def _generate_circulation(plate, params):
             side = 1 if pc.get("single") else (1 if ly >= 0 else -1) if abs(ly) > 0.3 else next_side()
             _add_core(pc, lx, side, dict(params, core_width=w, core_depth=d), bolsillo=not (isinstance(spec, dict) and spec.get("fondo")))
             pc["cores"][-1].update({"spec": idx, "giro": giro, "pisa": _pisa_nucleo(pieces, pc, pc["cores"][-1])})
+            if isinstance(spec, dict) and spec.get("ascensores") is not None:
+                pc["cores"][-1]["ascensores"] = max(0, int(spec["ascensores"]))      # R10.7: propios
         return pieces
     ring = bool(params.get("_huecos"))
     for pc in pieces:               # un núcleo en cada extremo libre

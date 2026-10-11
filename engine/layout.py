@@ -21,7 +21,7 @@ from .units import (_bisect_x, _chain_union, _is_rect, _segments, generate_unit_
                     unit_rooms, sin_solapes, editar_unidades, vecinas)  # noqa: F401
 from .patios import (auto_patios, _anillo, split_blocks, make_patio_dark, _block_of, _block_of_line)  # noqa: F401
 
-VERSION = "2.31"
+VERSION = "2.32"
 
 DEFAULT_PARAMS = {
     # Masa
@@ -50,6 +50,7 @@ DEFAULT_PARAMS = {
     "unit_width_target_min": 4.0,
     "loading": "auto",          # auto | double | single (pasillo central o pasillo de borde)
     "core_auto": True,          # núcleo dimensionado a partir de escalera + ascensores (standards)
+    "ascensores": "auto",       # R10.7: ascensores de cada núcleo: auto (según las viviendas que sirve) o una cantidad
     "standards": None,          # valores que sobrescriben engine/standards.py
     "medianeras": None,         # [{"a":[x,y],"b":[x,y],"retiro":m}] bordes del predio contra linderos
     "patios_mode": "auto",      # auto (patios en predios entre medianeras demasiado profundos) | manual
@@ -63,6 +64,41 @@ def merge_params(p):
     out = dict(DEFAULT_PARAMS)
     out.update({k: v for k, v in (p or {}).items() if v is not None or k in ("stories", "centerline", "centerlines", "cores", "medianeras", "patios")})
     return out
+
+
+# ---------------------------------------------------------------- ascensores por núcleo (R10.7)
+def _nucleo_de(red, pieces, i, x):
+    """Índice en res["cores"] del núcleo más cercano por el pasillo desde x en la pieza i (None si no se llega)."""
+    n = EV.nucleo(red, i, x)
+    if n is None:
+        return None
+    return next((c.get("_res") for c in pieces[n[0]]["cores"] if abs(c["x"] - n[1]) < 1e-6), None)
+
+
+def _ascensores_pedidos(cores, S, n_niveles, sube, units=None, n_res=1, por_nucleo=None):
+    """Ascensores que lleva cada núcleo automático, iguales en todos: los que pide el más cargado, 1 cada
+    S["unidades_por_ascensor"] viviendas de las que sirve (las que tienen en él su recorrido más corto, por los niveles
+    residenciales) y al menos 1. Desde S["pisos_dos_ascensores"] niveles, el edificio lleva al menos 2 en total
+    (criterio del usuario: el mínimo es por edificio). Sin viviendas todavía, con por_nucleo = viviendas estimadas del
+    edificio, repartidas entre los núcleos. None si no hay núcleos automáticos."""
+    auto = [k for k, c in enumerate(cores) if not c.get("ascensores_propios")]
+    if not auto:
+        return None
+    if not sube:
+        return 0
+    if units is not None:
+        por = {}
+        for u in units:
+            if u.get("_nucleo") is not None:
+                por[u["_nucleo"]] = por.get(u["_nucleo"], 0) + 1
+        servidas = [por.get(k, 0) * n_res for k in auto]
+    else:
+        servidas = [por_nucleo / float(len(cores))] * len(auto)
+    n = max(max(1, int(math.ceil(s / float(S["unidades_por_ascensor"]) - 1e-9))) for s in servidas)
+    propios = sum(c["ascensores"] for c in cores if c.get("ascensores_propios"))
+    if n_niveles >= S["pisos_dos_ascensores"] and n * len(auto) + propios < 2:
+        n = 2 - propios if len(auto) == 1 else n
+    return n
 
 
 # ---------------------------------------------------------------- orquestación
@@ -94,10 +130,20 @@ def generate(data):
     top_h = stories[-1]["z"]
     n_res_lv = sum(1 for s_ in stories if s_["program"] == "Residential")
     units_est = abs(G.area(plate)) * 0.72 / max(_avg_unit_area(params), 1.0) * n_res_lv
-    n_elev = ST.elevators_needed(S["nucleo"], len(stories), top_h, units_est)
+    sube = top_h > S["nucleo"]["altura_sin_ascensor"]      # acceso a más de 9 m: el edificio necesita ascensor
+    fijo = str(params.get("ascensores") or "auto").strip()  # R10.7: «auto» o la misma cantidad en todos los núcleos
+    if fijo.isdigit():
+        n_elev = int(fijo)
+    elif params.get("_ascensores") is not None:            # segunda pasada: los que pide el núcleo más cargado
+        n_elev = int(params["_ascensores"])
+    else:                                                  # primera pasada: uno por núcleo; después se ajusta a las
+        n_elev = 1 if sube else 0                          # viviendas que sirve cada uno (_ascensores_pedidos)
+    tam = lambda n, giro=0: ST.core_size(S["nucleo"], floor_h, n, cw, giro=giro)
+    params["_tam_nucleo"] = tam                            # un núcleo manual con sus propios ascensores
     if params.get("core_auto", True):
-        params["core_width"], params["core_depth"] = ST.core_size(S["nucleo"], floor_h, n_elev, cw)
-    params["_core_90"] = ST.core_size(S["nucleo"], floor_h, n_elev, cw, giro=90)   # núcleo girado (R3.5)
+        params["core_width"], params["core_depth"] = tam(n_elev)
+    params["_core_90"] = tam(n_elev, 90)                   # núcleo girado (R3.5)
+    otra_pasada = lambda n: generate(dict(data, params=dict(data.get("params") or {}, _ascensores=n)))
     sw_, sl_, risers_ = ST.stair_box(S["nucleo"], floor_h)
     stype = ("común" if top_h <= 12 else "protegida (EP)" if top_h <= 30 else "presurizada (PFP)")
     core_m = {"elevators": n_elev, "width": params["core_width"],
@@ -183,10 +229,12 @@ def generate(data):
             for c in pc["cores"]:
                 if c["poly_local"]:
                     cen = G.to_world([G.centroid(c["poly_local"])], pc["origin"], pc["angle"])[0]
+                    n_c = c["ascensores"] if c.get("ascensores") is not None else n_elev      # R10.7
                     if c.get("between"):
-                        parts = PR.core_parts(c["box"], 1, -(c["box"][3] - c["box"][1]), S["nucleo"], floor_h, n_elev)
+                        parts = PR.core_parts(c["box"], 1, -(c["box"][3] - c["box"][1]), S["nucleo"], floor_h, n_c)
                     else:
-                        parts = PR.core_parts(c["box"], c["side"], cw_b, S["nucleo"], floor_h, n_elev, c.get("giro", 0))
+                        parts = PR.core_parts(c["box"], c["side"], cw_b, S["nucleo"], floor_h, n_c, c.get("giro", 0))
+                    c["_res"] = len(res["cores"])
                     spec = c.get("spec")
                     if mapa is not None and spec is not None:
                         spec = mapa[spec]
@@ -194,6 +242,7 @@ def generate(data):
                     res["cores"].append({"poly": W(pc, G.largest_part(c["poly_local"])), "x": round(c["x"], 3), "side": c["side"],
                                          "center": [round(cen[0], 3), round(cen[1], 3)], "spec": spec,
                                          "giro": c.get("giro", 0), "frente": round(b_[2] - b_[0], 2),
+                                         "ascensores": n_c, "ascensores_propios": c.get("ascensores") is not None,
                                          "fondo": round(b_[3] - b_[1] - cw_b, 2),
                                          "parts": [{"kind": p_["kind"], "name": p_["name"], "poly": W(pc, p_["poly"]),
                                                     "lines": [W(pc, ln) for ln in p_["lines"]]} for p_ in parts]})
@@ -273,6 +322,9 @@ def generate(data):
                 d["stalls"] = acc["count"] * d["stories"]
     res["program_layouts"] = layouts
     if stage == "corridor":
+        pide = _ascensores_pedidos(res["cores"], S["nucleo"], len(stories), sube, por_nucleo=units_est)
+        if pide is not None and pide != n_elev and params.get("_ascensores") is None and not fijo.isdigit():
+            return otra_pasada(pide)
         return res
     state = {}
     units, hechos = [], set()
@@ -292,7 +344,16 @@ def generate(data):
             extra = pc.get("egress_extra", {}).get(u["side"], 0.0)
             u["egress"] = min(1e9, EV.recorrido(pb["_evac"], u["_i"], xd) + extra)
             u["saco"] = min(1e9, EV.saco(pb["_evac"], u["_i"], xd) + extra)
+            u["_nucleo"] = _nucleo_de(pb["_evac"], pieces, u["_i"], xd)
         units += del_bloque
+    pide = _ascensores_pedidos(res["cores"], S["nucleo"], len(stories), sube, units=units, n_res=n_res_lv)
+    if pide is not None and pide != n_elev and params.get("_ascensores") is None and not fijo.isdigit():
+        return otra_pasada(pide)              # R10.7: núcleos con los ascensores que piden las viviendas que sirven
+    total = sum(c["ascensores"] for c in res["cores"])
+    res["metrics"]["core"]["elevators_total"] = total
+    if sube and len(stories) >= S["nucleo"]["pisos_dos_ascensores"] and res["cores"] and total < 2:
+        res["warnings"].append("Desde %d niveles el edificio lleva al menos 2 ascensores y tiene %d: agrega %s en la "
+                               "ficha de un núcleo" % (S["nucleo"]["pisos_dos_ascensores"], total, "uno" if total == 1 else "dos"))
     faltan = len(params.get("unit_edits") or []) - len(hechos)
     if faltan > 0:
         res["warnings"].append("%d cambio(s) de viviendas no se pudieron aplicar: la planta cambió desde que los hiciste. "
