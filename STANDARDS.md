@@ -90,7 +90,13 @@ Una ventana por estancia habitable (dormitorios, estar, comedor y estudio) con f
 | Ancho típico | 1,50 m en dormitorios y estudio; 2,00 m en el estar y el comedor | Criterio de proyecto: se agranda si el vano mínimo pide más |
 | Libre a una esquina o tabique | 0,20 m | Criterio de proyecto |
 
-Reglas del motor: la ventana va centrada en el tramo de fachada más largo de la estancia, primero en la fachada del fondo; si no llega al vano mínimo, se agrega otra en el tramo siguiente (por ejemplo, la fachada lateral de una esquina). El comedor sin fachada se ilumina por el estar: el vano del estar cuenta la superficie de los dos. La ventana va en el muro exterior y solo donde del otro lado hay aire: junto a una esquina entrante no se mete en el muro de la otra ala. Si no alcanza, o si no entra ninguna, la ficha lo avisa (salvo en una estancia ya avisada por no tener fachada o por no llegar a su medida mínima).
+Reglas del motor: la ventana va centrada en el tramo de fachada más largo de la estancia, primero en la fachada del fondo; si no llega al vano mínimo, se agrega otra en el tramo siguiente (por ejemplo, la fachada lateral de una esquina). Una estancia de esquina lleva además una ventana del ancho típico en la otra fachada, si entra (R5.3). El comedor sin fachada se ilumina por el estar: el vano del estar cuenta la superficie de los dos. La ventana va en el muro exterior y solo donde del otro lado hay aire: junto a una esquina entrante no se mete en el muro de la otra ala. Si no alcanza, o si no entra ninguna, la ficha lo avisa (salvo en una estancia ya avisada por no tener fachada o por no llegar a su medida mínima).
+
+## Segunda fachada (R5.3)
+
+Para viviendas con fachada en todo el fondo y en un solo costado (de esquina o de extremo). No usa medidas nuevas: las de la vivienda y las ventanas.
+
+Reglas del motor: si el frente alcanza para el estar y los dormitorios al fondo, el estar va al costado con fachada (en la esquina: luz y ventana por dos fachadas). Si no alcanza y entre el pasillo común y el pasillo interno hay fondo para un dormitorio (3,00 m), el último dormitorio va a ese costado, con su ventana; Trazo compara los dos planos y lo hace solo si mejora la calidad del plano y no pierde estancias (cocina, lavadero, estar, dormitorios; puede perder el segundo baño). En una vivienda irregular, el plano al revés se usa solo si no es peor. Si el fondo no es todo fachada, o la vivienda da a los dos costados, el plano no cambia. Pendiente: viviendas sin fachada al fondo con luz solo por un costado.
 
 ## Núcleo de circulación vertical
 

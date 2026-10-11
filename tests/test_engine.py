@@ -1415,3 +1415,84 @@ def test_ventanas():
 
 if __name__ == "__main__":
     test_ventanas(); print("OK36")
+
+def test_segunda_fachada():
+    """R5.3: una vivienda con fachada al fondo y en un costado (de esquina o de extremo) la usa. Si el frente alcanza, el
+    estar va a la esquina (el plano se hace al revés si el costado es el otro) y lleva ventana en las dos fachadas; si el
+    frente no alcanza para todos los dormitorios al fondo, el último va al costado, entre el pasillo común y el interno,
+    con su ventana a esa fachada, solo si el plano mejora y no pierde estancias (puede perder el segundo baño). Sin
+    fachada lateral, con las dos o con el fondo en parte ciego, no cambia nada. Los cambios a mano siguen valiendo."""
+    import math
+    from engine import plans as P
+    rect = lambda w, d: [(0.0, 0.0), (w, 0.0), (w, d), (0.0, d)]
+    caja = lambda pl: (min(p[0] for p in pl), min(p[1] for p in pl), max(p[0] for p in pl), max(p[1] for p in pl))
+
+    def luz(W, D, izq=False, der=False, fondo=(0.0, 1e9)):
+        def f(p, q):
+            if abs(p[1] - D) < 0.05 and abs(q[1] - D) < 0.05:
+                return fondo[0] - 1e-6 <= min(p[0], q[0]) and max(p[0], q[0]) <= fondo[1] + 1e-6
+            return (izq and abs(p[0]) < 0.05 and abs(q[0]) < 0.05) or (der and abs(p[0] - W) < 0.05 and abs(q[0] - W) < 0.05)
+        return f
+    R = lambda res: {r["id"]: caja(r["poly"]) for r in res["rooms"]}
+    info = lambda res: [c["msg"] for c in res["checks"] if c.get("info") and c["msg"].startswith("Fachada lateral")]
+    # 2 dormitorios, fachada a la derecha: el estar va a esa esquina (al revés), con ventana al fondo y al costado
+    W, D = 11.7, 6.5
+    sin = P.layout_unit(rect(W, D), 2, luz(W, D))
+    for der, borde in ((True, W), (False, 0.0)):
+        res = P.layout_unit(rect(W, D), 2, luz(W, D, izq=not der, der=der))
+        est = R(res)["living"]
+        assert res["segunda_fachada"] == "estar" and info(res) == ["Fachada lateral: el estar en la esquina, con luz por dos fachadas"]
+        assert abs(est[3] - D) < 1e-6 and abs((est[2] if der else est[0]) - borde) < 1e-6, est
+        assert sorted(w["n"] for w in res["ventanas"] if w["room"] == "living") == sorted([(0.0, 1.0), (1.0 if der else -1.0, 0.0)])
+        assert res["score"] == sin["score"] and sorted(r["kind"] for r in res["rooms"]) == sorted(r["kind"] for r in sin["rooms"])
+    corta = P.layout_unit(rect(W, 5.5), 2, luz(W, 5.5, der=True))     # poco fondo: el baño junto al hall (puerta vertical)
+    verticales = [d for d in corta["doors"] if d["vertical"]]
+    assert corta["segunda_fachada"] == "estar" and verticales
+    for d in verticales:                                       # la hoja abre hacia su estancia, también al revés
+        b = R(corta)[d["b"]]
+        assert (((b[0] + b[2]) / 2 - d["p"][0]) > 0) == (d["into"] > 0), d
+    # sin fachada lateral, con las dos o con parte del fondo ciega: no cambia
+    assert sin["segunda_fachada"] is None and not info(sin)
+    for w_, f in ((W, luz(W, D, True, True)), (9.0, luz(9.0, D, der=True, fondo=(0.0, 6.0)))):
+        res = P.layout_unit(rect(w_, D), 2, f)
+        assert res["segunda_fachada"] is None and abs(R(res)["living"][0]) < 1e-6, R(res)["living"]
+    # 3 dormitorios en 9,10 m de frente: al fondo no entran; el tercero va al costado, con su ventana
+    W, D = 9.1, 8.5
+    sin = P.layout_unit(rect(W, D), 3, luz(W, D))
+    assert any(c["msg"].startswith("Frente de 9.1 m insuficiente") for c in sin["checks"] if not c["ok"])
+    for der in (True, False):
+        res = P.layout_unit(rect(W, D), 3, luz(W, D, izq=not der, der=der))
+        b3, pas = R(res)["bed3"], R(res)["hallway"]
+        assert res["segunda_fachada"] == "dormitorio" and info(res) == ["Fachada lateral: Dormitorio 3 al costado, con su ventana a esa fachada"]
+        assert abs(b3[1]) < 1e-6 and abs(b3[3] - pas[1]) < 1e-6 and abs((b3[2] if der else b3[0]) - (W if der else 0.0)) < 1e-6, b3
+        assert [w["n"] for w in res["ventanas"] if w["room"] == "bed3"] == [(1.0 if der else -1.0, 0.0)]
+        assert res["score"] > sin["score"] and not any(c["msg"].startswith("Frente de") for c in res["checks"] if not c["ok"])
+        k = [r["kind"] for r in res["rooms"]]
+        assert k.count("bedroom") == 3 and k.count("bath") >= 1 and "laundry" in k and "kitchen" in k, k
+    # 2 dormitorios en 9,30 m: al fondo ya entran; el estar va a la esquina y quedan los dos baños
+    res = P.layout_unit(rect(9.3, 8.5), 2, luz(9.3, 8.5, der=True))
+    assert res["segunda_fachada"] == "estar" and [r["kind"] for r in res["rooms"]].count("bath") == 2
+    # en el edificio: las viviendas de los extremos de la barra; un cambio a mano en una dada vuelta sigue valiendo
+    barra = [[0, 0], [60, 0], [60, 16], [0, 16]]
+    r = run(barra)
+    ext = [u for u in r["units"] if any(c["msg"].startswith("Fachada lateral") for c in u["checks"] if c.get("info"))]
+    punta = [u for u in r["units"] if min(p[0] for p in u["poly"]) < 0.4 or max(p[0] for p in u["poly"]) > 59.6]
+    assert ext and [u["id"] for u in ext] == [u["id"] for u in punta], ([u["id"] for u in ext], [u["id"] for u in punta])
+    for u in ext:
+        est = next(x for x in u["rooms"] if x["kind"] == "living")
+        b = caja(est["poly"])
+        assert min(b[0], 60 - b[2]) < 0.4, (u["id"], b)                                     # el estar, en el extremo
+        assert len([w for w in u["ventanas"] if w["room"] == "living"]) == 2
+    for u in ext:                                     # (una de las dos se hizo al revés)
+        w = next(w for w in u["paredes"] if abs(w["dir"][0]) > 0.9)          # un tabique que se mueve a lo largo
+        m = [(w["seg"][0][0] + w["seg"][1][0]) / 2, (w["seg"][0][1] + w["seg"][1][1]) / 2]
+        r2 = run(barra, room_edits=[{"op": "pared", "p": m, "a": [m[0] + 0.3 * w["dir"][0], m[1] + 0.3 * w["dir"][1]]}])
+        u2 = next(x for x in r2["units"] if x["id"] == u["id"])
+        assert u2.get("editada_dentro") and not any("dentro de las viviendas" in x for x in r2["warnings"]), u["id"]
+        mid = lambda t: [(t["seg"][0][0] + t["seg"][1][0]) / 2, (t["seg"][0][1] + t["seg"][1][1]) / 2]
+        nuevo = [m[0] + 0.3 * w["dir"][0], m[1] + 0.3 * w["dir"][1]]       # el tabique que se arrastró está 0,30 más allá
+        assert any(math.hypot(mid(t)[0] - nuevo[0], mid(t)[1] - nuevo[1]) < 0.05 for t in u2["paredes"]), u["id"]
+        assert not any(math.hypot(mid(t)[0] - m[0], mid(t)[1] - m[1]) < 0.05 for t in u2["paredes"]), u["id"]
+
+if __name__ == "__main__":
+    test_segunda_fachada(); print("OK37")
