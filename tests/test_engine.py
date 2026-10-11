@@ -1861,3 +1861,28 @@ def test_terreno_rectangular():
 
 if __name__ == "__main__":
     test_terreno_rectangular(); print("OK45")
+
+
+def test_datos_al_pasar():
+    """Pedido del usuario: al pasar el mouse por la planta, un recuadro con el nombre y los m² de lo que está debajo
+    (estancia y su vivienda, lo sin uso, parte de núcleo, pasillo, zona sin luz, patio; en los niveles que no son
+    viviendas, sus partes), sin clic. Se apaga con «Datos al pasar» y no aparece mientras se dibuja o se arrastra."""
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    cuerpo = lambda f: html.split(f, 1)[1].split("\nfunction ", 1)[0].split("\nsvg.addEventListener", 1)[0]
+    assert 'id="showTip" checked' in html and 'id="dato"' in html and "showTip=true" in html
+    dato = cuerpo("function datoEn(")
+    for t in ("u.sin_uso", "u.rooms", "c.parts", "result.corridors", "result.dark_zones", "result.patios", "progShapes(",
+              "coreShapes()", "r.name", "u.type", "u.area"):
+        assert t in dato, t
+    mover = html.split("svg.addEventListener('mousemove',e=>{ const t=$('dato');", 1)[1].split("svg.addEventListener", 1)[0]
+    assert "tool||drag||dragCore||dragTab||dragIn" in mover and "viewMode!=='plan'" in mover
+    assert "svg.addEventListener('mouseleave',ocultarDato)" in html and "function enPoly(" in html and "function areaPoly(" in html
+    # lo que muestra viene del resultado del motor: cada estancia y cada parte de núcleo tienen nombre y superficie
+    s = json.load(open(os.path.join(os.path.dirname(__file__), "..", "samples", "L_ochava.json"), encoding="utf-8"))
+    r = run(s["footprint"], h=s["height"])
+    assert all(x["name"] and x["area"] > 0 for u in r["units"] for x in u["rooms"])
+    assert all(u["type"] and u["area"] > 0 and u["width"] > 0 and u["depth"] > 0 for u in r["units"])
+    assert all(p["name"] for c in r["cores"] for p in c["parts"]) and all(c.get("ascensores") is not None for c in r["cores"])
+
+if __name__ == "__main__":
+    test_datos_al_pasar(); print("OK46")
