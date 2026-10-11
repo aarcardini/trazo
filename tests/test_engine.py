@@ -1886,3 +1886,52 @@ def test_datos_al_pasar():
 
 if __name__ == "__main__":
     test_datos_al_pasar(); print("OK46")
+
+
+def test_interfaz_grupos():
+    """R4.6, opción B de la maqueta (la eligió el usuario): un riel con los grupos Proyecto, Masa, Circulación, Viviendas,
+    Normativa y Vista abre su panel, de a uno; sobre la planta, la vista 2D/3D, el nivel y las capas, y abajo la barra de
+    dibujo (Línea, Núcleo, Medianera, Patio, Orto con F8); a la derecha, el resumen, los avisos y la ficha. Cada control
+    conserva su id, así que los proyectos guardados se siguen abriendo. «Muro medianero» pasa a «Muro entre viviendas»."""
+    import re
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    cuerpo = html.split("<body>", 1)[1].split("<script>", 1)[0]
+    grupo = lambda g: cuerpo.split('<div class="grupo" data-grupo="%s"' % g, 1)[1].split('<div class="grupo"', 1)[0] \
+        .split("</section>", 1)[0]
+    rail = cuerpo.split('<nav class="rail"', 1)[1].split("</nav>", 1)[0]
+    contenido = {"proyecto": ("sample", "archivoProyecto", "btnVar", "rhinoBadge"),
+                 "masa": ("ter_frente", "height", "floor_height", "outer_wall", "storyTable", "medList", "patios_mode"),
+                 "circ": ("loading", "corridor_width", "lineInfo", "cores_mode", "core_auto", "ascensores", "core_count",
+                          "egress_single", "egress_multi"),
+                 "viviendas": ("mix", "min_unit_width", "party_wall", "max_unit_depth", "edInfo"),
+                 "normativa": ("stdPanel",), "vista": ("legendColors",)}
+    for g, ids in contenido.items():
+        assert 'data-grupo="%s" onclick="grupo(\'%s\')"' % (g, g) in rail, g
+        for i in ids:
+            assert 'id="%s"' % i in grupo(g), (g, i)
+    assert "run('massing')" in grupo("masa") and "run('corridor')" in grupo("circ") and "run('mix')" in grupo("viviendas") \
+        and "run('plans')" in grupo("viviendas")
+    dibujo = cuerpo.split('<div class="dibujo"', 1)[1].split("</div>", 1)[0]
+    for t in ('id="btnDraw" data-tool="line"', 'id="btnAddCore" data-tool="addcore"', 'id="btnMed" data-tool="medianera"',
+              'id="btnPatio" data-tool="patio"', 'id="orto" checked', "F8"):
+        assert t in dibujo, t
+    capas = cuerpo.split('<details class="capas"', 1)[1].split("</details>", 1)[0]
+    assert all('id="%s" checked' % i in capas for i in ("showGraph", "showEquip", "showDims", "showEvac", "showTip"))
+    derecha = cuerpo.split('<aside class="r">', 1)[1].split("</aside>", 1)[0]
+    for i in ("ctx", "resumen", "warns", "todo", "donut", "metrics", "units"):
+        assert 'id="%s"' % i in derecha, i
+    assert 'id="btnUndo"' in cuerpo.split('<header class="top">', 1)[1].split("</header>", 1)[0]
+    assert ">Muro entre viviendas (m) <input" in cuerpo and "Muro medianero (m)" not in cuerpo
+    js = html.split("<script>", 1)[1]
+    for f in ("function grupo(", "function herramientaBar(", "function resumenPanel(", "function estadoTop(", "function capas(",
+              "function verTodo(", "function quitarMedianeras("):
+        assert f in js, f
+    assert "e.key==='F8'" in js and "localStorage.getItem('trazo.grupo')" in js
+    assert "document.querySelectorAll('[data-tool]')" in js and "$('btnDelCore')" not in js
+    # cada id que el JS pide con $('…') existe en la página o lo arma el JS (las fichas)
+    pedidos = set(re.findall(r"\$\('([A-Za-z_]\w*)'\)", js))
+    hechos = set(re.findall(r'\bid="([A-Za-z_]\w*)"', html))
+    assert not pedidos - hechos, pedidos - hechos
+
+if __name__ == "__main__":
+    test_interfaz_grupos(); print("OK47")

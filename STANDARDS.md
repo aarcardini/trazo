@@ -1,6 +1,6 @@
 # Medidas y normativa — Trazo
 
-Valores que usa el motor (`engine/standards.py`) y que se editan en la web en **0 · Medidas y normativa**.
+Valores que usa el motor (`engine/standards.py`) y que se editan en la web en el grupo **Normativa** (riel de la izquierda).
 **Mínimo** = exigencia normativa encontrada. **Típico** = criterio de proyecto (no normativo) para que los espacios salgan "reales".
 Verificar siempre con la normativa vigente del departamento y del organismo correspondiente antes de usar en un proyecto.
 
@@ -29,13 +29,13 @@ Superficie de la vivienda: la NNE (art. 3) pide 32 m² con un dormitorio, 44 con
 Rango de referencia ANV según dormitorios: monoambiente 25–40 m², 1 dorm. 35–50, 2 dorm. 50–75, 3 dorm. 65–100, 4 dorm. 80–125.
 Ley 13.728, art. 18: mínimo 25 m²; 35 m² para 1 dormitorio y +15 m² por dormitorio adicional.
 
-Muros: el muro entre viviendas es de 0,30 m («Muro medianero» en la web); la NNE pide al menos 0,20 m de hormigón o mampostería, o un aislamiento acústico Rw de 45 dB o más (art. 54).
+Muros: el muro entre viviendas es de 0,30 m («Muro entre viviendas» en la web, antes «Muro medianero»); la NNE pide al menos 0,20 m de hormigón o mampostería, o un aislamiento acústico Rw de 45 dB o más (art. 54).
 
 Reglas de distribución que aplica el motor: dormitorios y estar con fachada; dormitorios y baños accesibles desde el pasillo interno; cocina, comedor y estar integrados (conexión abierta); frente mínimo de la unidad = estar + dormitorios (para que todos tengan ventana). Toda vivienda lleva baño y cocina (NNE, arts. 17 y 21): si el plano no los tiene, la ficha lo avisa y baja la calidad del plano; la cocina dentro del hall («Hall / Cocina») cuenta (v2.30).
 
 ## Equipamiento de baños, cocina y lavadero (F5)
 
-Cada artefacto ocupa un módulo contra una pared maciza (largo a lo largo de la pared × fondo) y deja libre su paso delante; no se apoya en un borde abierto a otra estancia ni pisa el barrido de las puertas. Editables en la web («Medidas y normativa → Equipamiento»).
+Cada artefacto ocupa un módulo contra una pared maciza (largo a lo largo de la pared × fondo) y deja libre su paso delante; no se apoya en un borde abierto a otra estancia ni pisa el barrido de las puertas. Editables en la web («Normativa → Equipamiento»).
 
 | Elemento | Valor por defecto | Referencia |
 |---|---|---|
@@ -57,7 +57,7 @@ Reglas del motor: el baño principal lleva ducha, inodoro y lavatorio (y bidé s
 
 ## Muebles de dormitorios, estar y comedor (F5)
 
-Cada mueble es un módulo con su paso libre. Ninguno va delante de las aberturas al hall, al pasillo o a la cocina (paso del estar), el placard y el rack de TV no van contra una ventana, y desde cada puerta o abertura se llega a todos (un paso de unos 0,50 m como mínimo entre muebles). Editables en la web («Medidas y normativa → Equipamiento y muebles»).
+Cada mueble es un módulo con su paso libre. Ninguno va delante de las aberturas al hall, al pasillo o a la cocina (paso del estar), el placard y el rack de TV no van contra una ventana, y desde cada puerta o abertura se llega a todos (un paso de unos 0,50 m como mínimo entre muebles). Editables en la web («Normativa → Equipamiento y muebles»).
 
 | Elemento | Valor por defecto | Referencia |
 |---|---|---|
@@ -76,7 +76,7 @@ Reglas del motor: el dormitorio principal lleva la cama doble (mejor con la cabe
 
 ## Vivienda accesible (F5)
 
-Para los tipos del mix marcados «Acc.». Editables en «Medidas y normativa → Equipamiento y muebles».
+Para los tipos del mix marcados «Acc.». Editables en «Normativa → Equipamiento y muebles».
 
 | Elemento | Valor por defecto | Referencia |
 |---|---|---|
@@ -90,7 +90,7 @@ Reglas del motor: el baño principal abre hacia afuera (el barrido de la hoja no
 
 ## Ventanas (R5.5)
 
-Una ventana por estancia habitable (dormitorios, estar, comedor y estudio) con fachada. Editables en «Medidas y normativa → Ventanas».
+Una ventana por estancia habitable (dormitorios, estar, comedor y estudio) con fachada. Editables en «Normativa → Ventanas».
 
 | Elemento | Valor por defecto | Referencia |
 |---|---|---|
