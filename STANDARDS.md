@@ -8,19 +8,25 @@ Verificar siempre con la normativa vigente del departamento y del organismo corr
 
 | Estancia | Mínimo (área / lado) | Típico (área / frente × fondo) | Referencia del mínimo |
 |---|---|---|---|
-| Dormitorio principal | 10,0 m² / 2,50 m | 11,5 m² / 3,20 × 3,60 | Ordenanza de higiene de la vivienda, art. 8 a): "una habitación" 10 m², lado 2,50 |
-| Dormitorio secundario | 6,5 m² / 2,00 m (o 7 m² / 1,80) | 9,0 m² / 2,80 × 3,20 | Ídem, art. 8 b) |
-| Estar-comedor | 10,0 m² / 2,50 m | 18–27 m² según dormitorios | Habitación (art. 8). Típico: 18 (monoamb./1 dorm.), 20 (2), 24 (3), 27 (4) |
-| Cocina | 4,0 m² / 1,60 m (3 m² si abre a paso en 70 % del lado mayor) | 7,0 m² / 2,40 × 2,90 | Ídem, arts. 26-27 |
-| Baño principal | 2,40 m² / 1,20 m (3,00 m² / 1,40 con bañera) | 4,0 m² / 1,70 × 2,40 | Ídem, art. 14 |
-| Baño auxiliar | 1,50 m² / 0,80 m | 2,6 m² / 1,20 × 2,20 | Ídem, art. 14-15 |
-| Lavadero / terraza de servicio | 1,5 m² | 2,5 m² / 1,20 × 2,10 | MVOT Reglamento de producto, art. 6 g) |
-| Pasillo interno | 0,90 m (0,80 si tramo ≤ 4 m) | 1,00 m | Ordenanza, art. 41 |
-| Pasaje / hall de entrada | 1,20 m (1,00 si ≤ 5 m) | 1,40 × 1,80 | Ordenanza, art. 41 |
-| Altura libre | 2,40 m habitables; 2,20 m cocina, baño, circulaciones | — | Ordenanza, arts. 9, 14, 26 |
+| Dormitorio principal | 8,5 m² / 2,60 m | 11,5 m² / 3,20 × 3,60 | Normativa Nacional de Edificación (NNE), art. 8 b) |
+| Dormitorio secundario | 7,0 m² / 2,00 m | 9,0 m² / 2,80 × 3,20 | NNE, art. 8 c): dormitorios adicionales |
+| Estar-comedor | 10,0 m² / 2,60 m | 18–27 m² según dormitorios | NNE, art. 8 a): al menos un local principal habitable de 10 m² y lado 2,60. Típico: 18 (monoamb./1 dorm.), 20 (2), 24 (3), 27 (4) |
+| Estudio | 7,0 m² / 2,00 m | 8,0 m² / 2,60 × 3,10 | NNE, art. 8 c): un local que puede usarse como dormitorio (presunción de destino, art. 6). Más chico es un local secundario, sin mínimo (art. 29) |
+| Cocina | 4,0 m² / 1,60 m (3 m² si abre a un local principal o a un corredor en el 70 % del lado mayor; integrada: 3 a 5 m², lado 1,40) | 7,0 m² / 2,40 × 2,90 | NNE, arts. 21, 22 y 27 |
+| Baño principal | 3,00 m² / 1,20 m; ducha de 0,70 m² y lado 0,70 | 4,0 m² / 1,70 × 2,40 | NNE, art. 17: lavabo, ducha e inodoro; bidé optativo |
+| Baño auxiliar | 1,50 m² / 0,80 m con dos artefactos; 2,00 m² / 1,00 m con tres | 2,6 m² / 1,20 × 2,20 | NNE, art. 18. En Trazo, un baño 2 donde no entra la ducha queda como toilette (dos artefactos) |
+| Lavadero / terraza de servicio | 1,5 m² | 2,5 m² / 1,20 × 2,10 | MVOT Reglamento de producto, art. 6 g) (vivienda de interés social). Para la NNE es un local secundario, sin mínimo (arts. 4 y 29) |
+| Pasillo interno | 0,90 m (0,80 si es un solo tramo de hasta 4 m que no lleva a un local accesible) | 1,00 m | NNE, art. 36 |
+| Pasaje / hall de entrada | 1,20 m (1,00 si ≤ 5 m) | 1,40 × 1,80 | NNE, art. 34 |
+| Altura libre | 2,40 m habitables; 2,20 m cocina, baño y locales secundarios | — | NNE, arts. 9, 17, 21 y 29 |
 
-Superficie de la vivienda según dormitorios (rango de referencia ANV): monoambiente 25–40 m², 1 dorm. 35–50, 2 dorm. 50–75, 3 dorm. 65–100, 4 dorm. 80–125.
+Las medidas mínimas se cumplen en cualquier dirección: la parte de un local que no llega al lado mínimo no cuenta para su área (NNE, arts. 7 y 10).
+
+Superficie de la vivienda: la NNE (art. 3) pide 32 m² con un dormitorio, 44 con dos, 56 con tres y 68 con cuatro, medidos con los muros exteriores hasta su cara exterior y hasta el eje de los muros divisorios. El art. 2 pide estar, cocina, dormitorio y baño, con el dormitorio y el baño como locales independientes: un monoambiente no lo cumple. Trazo todavía no comprueba estos dos artículos (ROADMAP R10.8).
+Rango de referencia ANV según dormitorios: monoambiente 25–40 m², 1 dorm. 35–50, 2 dorm. 50–75, 3 dorm. 65–100, 4 dorm. 80–125.
 Ley 13.728, art. 18: mínimo 25 m²; 35 m² para 1 dormitorio y +15 m² por dormitorio adicional.
+
+Muros: el muro entre viviendas es de 0,30 m («Muro medianero» en la web); la NNE pide al menos 0,20 m de hormigón o mampostería, o un aislamiento acústico Rw de 45 dB o más (art. 54).
 
 Reglas de distribución que aplica el motor: dormitorios y estar con fachada; dormitorios y baños accesibles desde el pasillo interno; cocina, comedor y estar integrados (conexión abierta); frente mínimo de la unidad = estar + dormitorios (para que todos tengan ventana).
 
@@ -31,7 +37,7 @@ Cada artefacto ocupa un módulo contra una pared maciza (largo a lo largo de la 
 | Elemento | Valor por defecto | Referencia |
 |---|---|---|
 | Puerta interior (dormitorios, baños, lavadero) | 0,70 m | Criterio indicado por el usuario |
-| Puerta de entrada a la vivienda | 0,90 m | Criterio de proyecto |
+| Puerta de entrada a la vivienda | 0,90 m | Criterio de proyecto (NNE, art. 35: luz libre de paso de 0,80 m como mínimo) |
 | Inodoro (con mochila) | módulo 0,75 × 0,70 m | E. Neufert, *Arte de proyectar en arquitectura* (medidas habituales) |
 | Bidé | módulo 0,70 × 0,60 m | Ídem |
 | Lavatorio | módulo 0,70 × 0,50 m | Ídem |
@@ -85,12 +91,18 @@ Una ventana por estancia habitable (dormitorios, estar, comedor y estudio) con f
 
 | Elemento | Valor por defecto | Referencia |
 |---|---|---|
-| Vano mínimo de iluminación | 10 % de la superficie del local (1/10) | Digesto de Montevideo, «De los locales habitables»: vano de iluminación directa no menor a 1/10 de la superficie del piso; antepecho no mayor a 1,50 m. D.3319: al menos el 50 % del área mínima debe ser móvil (una ventana corrediza de dos hojas lo cumple). Confirmar en el Digesto |
+| Vano mínimo de iluminación | 10 % de la superficie del local (1/10) | NNE, art. 11: vano de iluminación directa no menor a 1/10 de la superficie del local; antepecho no mayor a 1,50 m. Art. 13: la parte móvil, al menos el 50 % del vano mínimo (una ventana corrediza de dos hojas lo cumple). Lo mismo dice el Digesto de Montevideo («De los locales habitables», D.3319) |
 | Alto de la ventana | 1,20 m | Criterio de proyecto (con él se pasa del área al ancho) |
 | Ancho típico | 1,50 m en dormitorios y estudio; 2,00 m en el estar y el comedor | Criterio de proyecto: se agranda si el vano mínimo pide más |
 | Libre a una esquina o tabique | 0,20 m | Criterio de proyecto |
 
 Reglas del motor: la ventana va centrada en el tramo de fachada más largo de la estancia, primero en la fachada del fondo; si no llega al vano mínimo, se agrega otra en el tramo siguiente (por ejemplo, la fachada lateral de una esquina). Una estancia de esquina lleva además una ventana del ancho típico en la otra fachada, si entra (R5.3). El comedor sin fachada se ilumina por el estar: el vano del estar cuenta la superficie de los dos. La ventana va en el muro exterior y solo donde del otro lado hay aire: junto a una esquina entrante no se mete en el muro de la otra ala. Si no alcanza, o si no entra ninguna, la ficha lo avisa (salvo en una estancia ya avisada por no tener fachada o por no llegar a su medida mínima).
+
+Lo que la NNE pide y Trazo todavía no comprueba (ROADMAP R10.8 y R11.3):
+- profundidad del local de hasta 3 veces su lado menor, con la ventana en el lado menor o en el primer tercio del mayor (art. 14);
+- cocina integrada al estar sin ventana propia: de 3 a 5 m² con lado de 1,40 m, y el vano del estar de 1/10 de los dos locales, con 2 m² como mínimo, y ventilación de 1 m² (art. 27); una cocina más grande necesita su propia luz y ventilación (art. 24: 0,40 m² como mínimo);
+- baños: sin luz natural obligatoria, pero ventilados por un vano (0,10 m² al exterior, 0,20 m² por una logia) o por un ducto (arts. 19 y 38 a 40);
+- iluminación indirecta por logias de más de 1,20 m de fondo: vano de 1/6 del local si da al espacio abierto y de 1/5 si no (art. 12).
 
 ## Segunda fachada (R5.3)
 
@@ -103,9 +115,9 @@ Reglas del motor: si el frente alcanza para el estar y los dormitorios al fondo,
 | Elemento | Valor | Referencia |
 |---|---|---|
 | Ancho de tramo de escalera | 1,20 m (general) — 1,65 m en ciertos usos > 750 m² o > 12 m | Bomberos IT 19, 6.2.2.1 |
-| Escalera colectiva (higiene) | 1,00 m con ascensor / 1,20 m sin ascensor | Ordenanza de higiene, art. 33 |
-| Contrahuella | 16–18 cm (máx. 0,18; 0,19 con ascensor en ordenanzas) | IT 19 / Ordenanza art. 31 |
-| Huella | 2a + b = 0,64 m (→ 0,29 con 17,5 cm) | IT 19 / Ordenanza art. 31 |
+| Escalera colectiva (higiene) | 1,00 m con ascensor / 1,20 m sin ascensor; descanso cada 18 escalones | NNE, art. 31 A.1 y A.2 |
+| Contrahuella | 16–18 cm (máx. 0,18 sin ascensor; 0,19 con ascensor) | IT 19 / NNE art. 31 |
+| Huella | 2a + b = 0,64 m (→ 0,29 con 17,5 cm) | IT 19 / NNE art. 31 |
 | Altura máxima por tramo | 3,70 m | IT 19 |
 | Tipo de escalera (vivienda) | común ≤ 12 m; protegida (EP) 12–30 m; presurizada (PFP) > 30 m | IT 19, Anexo C, tabla 3 (grupo A) |
 | Recorrido máximo de evacuación (vivienda, pisos altos) | 40 m (una salida) / 45 m (más de una), sin detección | IT 19, Anexo B, tabla 2 |
@@ -113,7 +125,9 @@ Reglas del motor: si el frente alcanza para el estar y los dormitorios al fondo,
 | Ducto de ascensor accesible | 1,75 × 1,95 m (accesibilidad básica 1,70 × 1,75) | Intendencia de Montevideo, ductos y cabinas |
 | Cabina accesible | 1,10 × 1,40 m, puerta 0,80 m | Ídem |
 | Ascensor obligatorio | acceso a más de 9 m de altura | MVOT, estándares de desempeño (cl. 58) |
-| Palier frente a ascensores | 1,50 m (círculo de giro); palier común 1,20 (≤ 4 aptos) / 1,40 (> 4) | Accesibilidad / Ordenanza art. 41 |
+| Palier frente a ascensores | 1,50 m (círculo de giro) | Accesibilidad. El palier se comunica en cada piso con la escalera (NNE, art. 35) |
+| Pasillo común (accesos, pasillos de piso y palier) | 2,00 m en Trazo («Ancho de pasillo») | NNE, art. 35: 1,20 m hasta 3 viviendas, 1,40 de 4 a 10 y 1,60 con 11 o más; 2,00 m si un tramo recto pasa de 15 m (salvo con el 60 % de sus paredes vidriado o abierto); ducto de ventilación de 0,20 × 0,20 m cada 15 m. Trazo no lo comprueba todavía (ROADMAP R10.8) |
+| Ducto de instalaciones | 0,60 m de ancho | NNE, art. 39 D: ducto colectivo con cañerías de 0,60 m² y 0,60 m de ancho, transitable, con escalera marinera |
 
 Cantidad de ascensores (criterio de proyecto, editable): 1 cada 60 unidades servidas; mínimo 2 desde 10 niveles.
 El núcleo se dimensiona sumando caja de escalera de ida y vuelta + ascensores + ducto de instalaciones; el fondo es el mayor entre la escalera y palier + ducto de ascensor. Con giro 90° (la escalera sube a lo largo del pasillo) el frente es el largo de la escalera + ascensores + ducto y el fondo, el mayor entre el ancho de la escalera y palier + ducto de ascensor: un núcleo más ancho y menos profundo. Cada núcleo manual puede tener frente y fondo propios.
@@ -135,8 +149,8 @@ Distribución: hall de acceso frente al núcleo, batería de baños (mujeres, ho
 
 | Parámetro | Valor | Referencia |
 |---|---|---|
-| Retiro desde medianera para abrir ventanas | 3,00 m | Criterio indicado por el usuario (práctica en Montevideo); confirmar en el Digesto |
-| Ancho mínimo de patio para iluminar | 3,00 m | Criterio indicado por el usuario (mismo criterio que el retiro para ventanas); confirmar en el Digesto, que puede exigir más según la altura |
+| Retiro desde medianera para abrir ventanas | 3,00 m | NNE, arts. 46, 48 y 52: los espacios abiertos y los patios que iluminan quedan a 3 m o más del eje del muro divisorio. Art. 53 e): un edificio que se separa de la divisoria queda a 1 m como mínimo |
+| Ancho mínimo de patio para iluminar | 3,00 m (fijo) | Criterio indicado por el usuario. La NNE (arts. 44 y 45) lo pide según la altura h del patio, medida desde el piso del local más bajo que ilumina: patio principal, lado L = h/4 (nunca menos de 2,85 m) y superficie S = 2h; patio secundario (solo cocinas, baños y locales secundarios), L = h/10 + 1,20 y S = 3h/4. Con h = 12 m da 3,00 m; con más altura, más. Pendiente (ROADMAP R11.2) |
 
 ## Masterplan (fraccionamiento)
 
@@ -167,8 +181,9 @@ El modo informa la **reserva** (verde + equipamiento, contra el mínimo) y las *
 Pendiente: rampas, plazas accesibles y radios de giro (ver ROADMAP).
 
 ## Fuentes consultadas
-- [Ordenanza de higiene de edificios destinados a vivienda (San José, Res. 1244/1977)](https://sanjose.gub.uy/wp-content/uploads/2015/07/ordenanzahigieneedificios.pdf)
-- [Higiene de la vivienda (Río Negro, Dec. 92/1979)](https://innovacionpublica.anii.org.uy/wp-content/uploads/2023/04/HIGIENE-DE-LA-VIVIENDA.pdf)
+- Normativa Nacional de Edificación — Higiene de la Vivienda (Congreso de Intendentes, MVOTMA y SAU, 2016; comisión con participación de la Intendencia de Montevideo). PDF aportado por el usuario
+- [Ordenanza de higiene de edificios destinados a vivienda (San José, Res. 1244/1977)](https://sanjose.gub.uy/wp-content/uploads/2015/07/ordenanzahigieneedificios.pdf) (fuente de los mínimos hasta v2.26)
+- [Higiene de la vivienda (Río Negro, Dec. 92/1979)](https://innovacionpublica.anii.org.uy/wp-content/uploads/2023/04/HIGIENE-DE-LA-VIVIENDA.pdf) (ídem)
 - [Ley 13.728, art. 18 (IMPO)](https://www.impo.com.uy/bases/leyes/13728-1968/18)
 - [ANV — áreas vigentes según dormitorios](https://www.anv.gub.uy/sites/default/files/2020-07/AREAS_VIGENTES_SEGUN_DORM.pdf)
 - [MVOT — Estándares de desempeño y requisitos para la vivienda de interés social](https://www.gub.uy/ministerio-vivienda-ordenamiento-territorial/sites/ministerio-vivienda-ordenamiento-territorial/files/documentos/publicaciones/estanddesempeno_0.pdf)
@@ -181,4 +196,4 @@ Pendiente: rampas, plazas accesibles y radios de giro (ver ROADMAP).
 - [Decreto 406/988 — Reglamento de seguridad e higiene ocupacional (IMPO)](https://www.impo.com.uy/bases/decretos-reglamento/406-1988)
 - [Digesto de Montevideo — De los locales habitables](https://normativa.montevideo.gub.uy/articulos/82820) y [D.3318](https://normativa.montevideo.gub.uy/content/d3318) (iluminación de locales habitables; D.3319 sobre la parte móvil). Consultados a través de un buscador: el texto no se pudo abrir desde aquí
 
-Nota: el Digesto de Montevideo (normativa.montevideo.gub.uy) no estaba disponible al consultar; los mínimos de habitabilidad provienen de ordenanzas departamentales uruguayas que siguen el mismo modelo. Confirmar los valores de Montevideo cuando el servicio esté disponible.
+Nota: desde v2.27 los mínimos de la vivienda siguen la Normativa Nacional de Edificación (2016). Verificar que rige en el departamento del proyecto y si su normativa agrega diferencias. El Digesto de Montevideo (normativa.montevideo.gub.uy) no estaba disponible al consultar.

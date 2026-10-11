@@ -72,6 +72,7 @@ Cada programa tiene un color base en `PROGS` (editable por el usuario y guardado
 
 ### Medidas
 Ningún tamaño de estancia, núcleo, baño o plaza se escribe a mano en el código: se lee de `standards.merged(params["standards"])`. Si agregas un espacio nuevo, agrega su mínimo y su típico a `standards.py` y a `STANDARDS.md` con la fuente.
+Desde v2.27 los mínimos de la vivienda siguen la Normativa Nacional de Edificación, Higiene de la Vivienda (2016; artículos en `STANDARDS.md`). La web guarda en el navegador y en cada proyecto solo las medidas cambiadas (`medidasCambiadas`). Si cambias un valor por defecto, agrega su valor anterior a `STD_ANTES` y ajusta la versión de corte en `web/index.html`: así lo guardado antes pasa al valor nuevo (lo comprueba `test_normativa_nacional`).
 
 ## Reglas
 1. **Solo biblioteca estándar de Python** en `engine/`, `server.py` y `tests/`. Si una dependencia es imprescindible, propónla primero y espera aprobación.

@@ -30,7 +30,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:3px 4px;b
  <div id="rhinoBadge" class="w" style="color:var(--mut)">Esperando masa de Rhino… (o usa un ejemplo)</div>
  <h2>0 · Medidas y normativa</h2>
  <details id="stdBox"><summary style="cursor:pointer;font-size:13px">Ver y editar medidas (mínimos y típicos)</summary><div id="stdPanel"></div>
-  <button class="s" onclick="resetStd()">Restaurar valores</button><div class="hint">Mínimos: ordenanzas de higiene de la vivienda (Uruguay), Bomberos IT 19, IM ductos de ascensor, Dec. 406/988; equipamiento: módulos habituales (Neufert). Detalle y fuentes en STANDARDS.md.</div></details>
+  <button class="s" onclick="resetStd()">Restaurar valores</button><div class="hint">Mínimos: Normativa Nacional de Edificación, Higiene de la Vivienda (2016), Bomberos IT 19, IM ductos de ascensor, Dec. 406/988; equipamiento: módulos habituales (Neufert). Detalle y fuentes en STANDARDS.md.</div></details>
  <h2>1 · Masa</h2>
  <label>Ejemplo <select id="sample"></select></label>
  <button class="s" onclick="nuevo()" title="Borra la masa, las polilíneas, los núcleos, las medianeras, las variantes y el resultado; conserva medidas, mix y colores">Nuevo (en blanco)</button>
@@ -297,9 +297,16 @@ const STD_LABELS={predio:'Predio',retiro_ventanas:'Retiro de medianera para vent
  iluminacion:'Vano mínimo / superficie del local',alto:'Alto de ventana (m)',ancho_dormitorio:'Ancho típico en dormitorios (m)',ancho_estar:'Ancho típico en el estar (m)',mocheta:'Libre a una esquina o tabique (m)',
  puerta_accesible:'Accesible: puertas de dormitorios y baño (m)',giro:'Accesible: círculo de giro en el baño (m)',transferencia:'Accesible: transferencia junto al inodoro (m)',ducha_nivel:'Accesible: ducha a nivel (m)',bano_accesible:'Accesible: baño, frente × fondo (m)'};
 const STD_LISTA={asientos:1,placard_largo:1};   // listas (no medidas largo × fondo)
+// Mínimos que cambiaron en v2.27 (norma nacional de higiene de la vivienda) y su valor anterior: si el navegador o un
+// proyecto anterior guardó el valor viejo, vale el nuevo; un valor elegido a mano (distinto del viejo) se respeta.
+const STD_ANTES={vivienda:{dorm_principal:{min_area:10,min_side:2.5},dorm_secundario:{min_area:6.5},estar_comedor:{min_side:2.5},estudio:{min_area:6.5},bano:{min_area:2.4}}};
+function mezclarStd(dst,src,antes){ for(const k in src){ if(!(k in dst)) continue; const a=antes?antes[k]:undefined;
+  if(src[k]&&typeof src[k]==='object'&&!Array.isArray(src[k])&&dst[k]&&typeof dst[k]==='object'&&!Array.isArray(dst[k])) mezclarStd(dst[k],src[k],a);
+  else if(a===undefined||JSON.stringify(src[k])!==JSON.stringify(a)) dst[k]=src[k]; } }
+const verMenor=(a,b)=>{ const x=String(a||'0').split('.').map(Number), y=String(b).split('.').map(Number); for(let i=0;i<Math.max(x.length,y.length);i++){ const d=(x[i]||0)-(y[i]||0); if(d) return d<0; } return false; };
 async function loadStd(){ try{ STD_DEF=await (await fetch('/api/standards')).json(); }catch(e){ return; } let sv=null; try{ sv=JSON.parse((localStorage.getItem('trazo.std')||localStorage.getItem('finchlocal.std'))||'null'); }catch(e){}
- STD=JSON.parse(JSON.stringify(STD_DEF)); if(sv) for(const g in sv) for(const k in sv[g]) if(STD[g]&&k in STD[g]) STD[g][k]=sv[g][k]; renderStd(); }
-function saveStd(){ try{ localStorage.setItem('trazo.std',JSON.stringify(STD)); }catch(e){} }
+ STD=JSON.parse(JSON.stringify(STD_DEF)); if(sv){ const viejo=!sv._v; delete sv._v; mezclarStd(STD,sv,viejo?STD_ANTES:null); if(viejo) saveStd(); } renderStd(); }
+function saveStd(){ try{ localStorage.setItem('trazo.std',JSON.stringify(Object.assign({_v:2},medidasCambiadas()))); }catch(e){} }   // solo lo cambiado: los valores por defecto nuevos llegan solos
 function resetStd(){ STD=JSON.parse(JSON.stringify(STD_DEF)); saveStd(); renderStd(); if(lastStage) run(lastStage,{keepView:true}); }
 function setStd(path,val){ let o=STD; for(let i=0;i<path.length-1;i++) o=o[path[i]]; o[path[path.length-1]]=val; saveStd(); renderMeds(); if(lastStage) run(lastStage,{keepView:true}); }
 function numIn(path,v,step=0.05){ return `<input type="number" step="${step}" value="${v}" style="width:58px" onchange="setStd(${JSON.stringify(path).replace(/"/g,"'")},+this.value)">`; }
@@ -682,7 +689,7 @@ function abrirProyecto(p,archivo,opt){ opt=opt||{}; const no=t=>{ alert('Trazo: 
   for(const [k,v] of Object.entries(P)){ const e=$(k); if(e&&/^(INPUT|SELECT)$/.test(e.tagName)&&v!=null&&typeof v!=='object'){ if(e.type==='checkbox') e.checked=!!v; else e.value=v; } }   // cada parámetro simple vuelve a su control (mismo id)
   $('core_width').disabled=$('core_depth').disabled=$('core_auto').checked;
   if(Array.isArray(P.unit_mix)&&P.unit_mix.length){ mix=P.unit_mix.map(m=>Object.assign({},m)); renderMix(); legend(); }
-  if(STD_DEF){ STD=JSON.parse(JSON.stringify(STD_DEF)); const d=P.standards||{}; for(const g in d) for(const k in d[g]) if(STD[g]&&k in STD[g]) STD[g][k]=d[g][k]; saveStd(); renderStd(); }   // las medidas del proyecto (guarda solo las cambiadas)
+  if(STD_DEF){ STD=JSON.parse(JSON.stringify(STD_DEF)); mezclarStd(STD,P.standards||{},verMenor(p.version_motor,'2.27')?STD_ANTES:null); saveStd(); renderStd(); }   // las medidas del proyecto (guarda solo las cambiadas)
   const otra=p.version_motor&&VER&&p.version_motor!==VER;
   return setMass({name:p.name,footprint:p.footprint,height:p.height,centerlines:P.centerlines,cores:P.cores,cores_mode:P.cores_mode,stories:P.stories,medianeras:P.medianeras,patios:P.patios,patios_mode:P.patios_mode,unit_edits:P.unit_edits,room_edits:P.room_edits},false,{label:(opt.variante?'Variante: '+archivo:'Proyecto: '+(p.name||archivo)),etapa:ETAPAS.includes(p.stage)?p.stage:'massing'})
    .then(()=>{ if(otra) $('tag').textContent+=' · guardado con Trazo v'+p.version_motor+' (ahora v'+VER+'): el resultado puede variar'; }); }

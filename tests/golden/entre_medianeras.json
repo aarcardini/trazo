@@ -1,7 +1,7 @@
 {
  "ejemplo": "samples/entre_medianeras.json",
  "nombre": "Predio entre medianeras 10 x 28",
- "version_motor": "2.0",
+ "version_motor": "2.27",
  "metricas": {
   "unidades": 2,
   "unidades_totales": 12,
@@ -19,7 +19,7 @@
   "circulacion": 44.0,
   "match_score": 100.0,
   "fit_m2": 10.0,
-  "calidad_planos": 58,
+  "calidad_planos": 60,
   "evacuacion_max": 6.6,
   "nsa_total": 1008.0
  }
