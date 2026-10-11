@@ -193,6 +193,17 @@ def curve_to_points(curve, tol):
 
 
 # ------------------------------------------------------------------ enviar masa
+def nucleo(punto, nombre):
+    """Un núcleo de la capa Trazo::Cores: el punto y, si el objeto se llama «ascensores=2», sus ascensores (R10.7)."""
+    nm = (nombre or "").lower().replace(" ", "")
+    if "ascensores=" in nm:
+        try:
+            return {"p": punto, "ascensores": max(0, int(float(nm.split("ascensores=")[1].split(";")[0])))}
+        except ValueError:
+            pass
+    return punto
+
+
 def send_mass():
     http("GET", "/api/version")          # sin servidor, avisa antes de pedir la masa
     oid = rs.GetObject("Selecciona la masa (sólido cerrado: polisuperficie o extrusión)", preselect=True)
@@ -287,11 +298,12 @@ def send_mass():
                 pats.append([[q.X * k, q.Y * k] for q in cp])
         if pats:
             payload["patios"] = pats
-    # núcleos manuales opcionales: objetos punto en la capa Trazo::Cores
+    # núcleos manuales opcionales: objetos punto en la capa Trazo::Cores (nombre «ascensores=2» para fijar sus ascensores)
     if rs.IsLayer("Trazo::Cores"):
-        pts_c = [rs.PointCoordinates(pid) for pid in (rs.ObjectsByLayer("Trazo::Cores") or []) if rs.IsPoint(pid)]
-        if pts_c:
-            payload["cores"] = [[q.X * k, q.Y * k] for q in pts_c]
+        ids_c = [pid for pid in (rs.ObjectsByLayer("Trazo::Cores") or []) if rs.IsPoint(pid)]
+        if ids_c:
+            payload["cores"] = [nucleo([q.X * k, q.Y * k], rs.ObjectName(pid))
+                                for pid, q in ((pid, rs.PointCoordinates(pid)) for pid in ids_c)]
     res = http("POST", "/api/mass", payload)
     for a in avisos:
         print("Trazo: aviso: " + a)

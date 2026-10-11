@@ -77,7 +77,7 @@ Desde entonces basta con escribir `trazo` en Rhino.
 2. En Rhino 8: comando `_RunPythonScript` y elige `rhino/trazo_rhino.py` (o el alias `trazo`).
    - **Enviar**: selecciona tu masa (sólido cerrado). Aparece sola en la web.
    - Para controlar el pasillo, dibuja polilíneas en la capa `Trazo::Centerline` antes de enviar (cada vértice es un giro del pasillo).
-   - Para fijar los núcleos, coloca puntos en la capa `Trazo::Cores`; se usan en modo manual.
+   - Para fijar los núcleos, coloca puntos en la capa `Trazo::Cores`; se usan en modo manual (nombre `ascensores=2` para fijar los ascensores de ese núcleo).
    - Para marcar medianeras, dibuja líneas en la capa `Trazo::Medianeras` (nombre `retiro=3` si el edificio se retira).
    - Para abrir patios, dibuja curvas cerradas en la capa `Trazo::Patios`; llegan a la web en modo manual.
 3. En la web: Calcular masa → Generar pasillo y núcleos → Generar mix → Generar planos.
@@ -141,6 +141,9 @@ Si algo falla en Rhino, ejecuta el script y elige **Diagnostico**. Si no se resu
 - **Pasillo y núcleos**: eje (automático o dibujado), ancho de pasillo, núcleos (ancho, fondo incluyendo pasillo, cantidad), distancias de evacuación (salida única / múltiple) y núcleos extra automáticos.
 - **Mix**: tipos con m² objetivo y %, ancho mínimo, muro medianero; métricas Match Score, Fit y Unidades únicas.
 - **Planos**: distribución día/noche con pasillo interno, puertas y grafo de conexiones verificado.
+
+## Novedades v2.32
+- **Ascensores por núcleo (R10.7):** cada núcleo lleva los ascensores que piden las viviendas que sirve (1 cada 60), y en automático todos los núcleos son iguales. Antes, la cantidad calculada para todo el edificio se ponía en cada núcleo: la cruz de 60 viviendas y 4 núcleos llevaba 8 ascensores, y ahora lleva 4. Desde 10 niveles el edificio lleva al menos 2 en total (el mínimo es por edificio); si se fijan menos a mano, se avisa. Se fijan en la ficha de cada núcleo (0 = solo escalera), para todos en «Ascensores por núcleo» o desde Rhino (punto llamado `ascensores=2`). En los ejemplos con varios núcleos, los núcleos son 1,90 m más angostos y crece la superficie vendible: «T con 2 polilíneas» +217 m² (2 viviendas más por planta; su calidad de planos baja de 62 a 47 porque el mix arma viviendas de 3 dormitorios de menos frente), «Barra larga 90x18» +299 m² y la cruz +247 m².
 
 ## Novedades v2.31
 - **Medianeras parciales (R11.6, primera parte):** una medianera que ocupa solo parte de un borde retira la huella solo a lo largo de su tramo, y la huella queda escalonada. Antes, una medianera parcial con retiro retiraba el lado entero: en un predio de 20 × 30 m, una de 10 m con 3 m de retiro dejaba 510 m² en vez de 570. Hoy las medianeras parciales se dibujan en Rhino (capa `Trazo::Medianeras`); marcarlas en la web es la segunda parte de R11.6. Los ejemplos no cambian.

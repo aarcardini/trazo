@@ -146,6 +146,15 @@ def test_medidas():
     assert m._area([[0, 0], [60, 0], [60, 16], [0, 16]]) == 960
 
 
+def test_nucleo_con_ascensores():
+    """R10.7: un punto de Trazo::Cores llamado «ascensores=2» fija los ascensores de ese núcleo; sin nombre (o con uno
+    que no es una cantidad) va solo el punto, como antes."""
+    m = cargar()
+    assert m.nucleo([1.0, 2.0], "ascensores=2") == {"p": [1.0, 2.0], "ascensores": 2}
+    assert m.nucleo([1.0, 2.0], "Ascensores = 3") == {"p": [1.0, 2.0], "ascensores": 3}
+    assert m.nucleo([1.0, 2.0], None) == [1.0, 2.0] and m.nucleo([1.0, 2.0], "ascensores=dos") == [1.0, 2.0]
+
+
 def test_curva_a_puntos():
     """El contorno pasa a polilínea con las dos formas en que el Python de Rhino devuelve TryGetPolyline."""
     m = cargar()
@@ -402,7 +411,7 @@ def todas():
     for t in (test_servidor_apagado, test_con_servidor, test_objeto_no_valido, test_medidas,
               test_curva_a_puntos, test_origen_resultado, test_error_inesperado,
               test_capas_resultado, test_recibir_primera_vez, test_recibir_reemplaza, test_recibir_cancelar_o_agregar,
-              test_recibir_dos_veces, test_recibir_no_pudo_borrar):
+              test_recibir_dos_veces, test_recibir_no_pudo_borrar, test_nucleo_con_ascensores):
         t()
 
 

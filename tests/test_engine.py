@@ -448,12 +448,18 @@ def test_codos():
     m = r["metrics"]
     assert not oscuras(r) and m["unused_area"] < 1 and m["efficiency"] >= 71.5 and m["egress_max"] <= 18, m
     assert any(8 < c["center"][0] < 16 and 7 < c["center"][1] < 14 for c in r["cores"]), [c["center"] for c in r["cores"]]
-    # U y T: ninguna vivienda a oscuras; las esquinas sin luz se marcan y se avisan
-    for fp in ([[0, 0], [60, 0], [60, 45], [44, 45], [44, 16], [16, 16], [16, 45], [0, 45]],
-               [[0, 0], [70, 0], [70, 16], [43, 16], [43, 45], [27, 45], [27, 16], [0, 16]]):
-        r = run(fp)
+    # U y T: ninguna vivienda a oscuras; las esquinas sin luz se marcan y se avisan (con núcleos de 2 ascensores, que no
+    # entran en la esquina interior)
+    U = [[0, 0], [60, 0], [60, 45], [44, 45], [44, 16], [16, 16], [16, 45], [0, 45]]
+    for fp in (U, [[0, 0], [70, 0], [70, 16], [43, 16], [43, 45], [27, 45], [27, 16], [0, 16]]):
+        r = run(fp, ascensores="2")
         assert r["units"] and not oscuras(r) and r["metrics"].get("dark_area", 0) > 10, r["metrics"]
         assert any("Esquinas sin luz" in w for w in r["warnings"]), r["warnings"]
+    # con un ascensor por núcleo (R10.7), en la U los núcleos entran en las dos esquinas interiores: no queda esquina a
+    # oscuras y entran más viviendas
+    r = run(U)
+    assert r["units"] and not oscuras(r) and not r["metrics"].get("dark_area"), r["metrics"]
+    assert all(c["ascensores"] == 1 for c in r["cores"]) and len(r["units"]) > len(run(U, ascensores="2")["units"])
     # un lote en trapecio con medianeras en los lados largos no se vacía: contra una medianera no se bloquea
     fp = [[0, 0], [47.5, 20.1], [15.2, 70.1], [-18.1, 56.0]]
     r = run(fp, h=6, medianeras=[{"a": fp[1], "b": fp[2], "retiro": 0}, {"a": fp[3], "b": fp[0], "retiro": 0}])
@@ -553,9 +559,12 @@ def test_lavadero():
         res = P.layout_unit([(x0, 0), (x0 + 9.15, 0), (x0 + 9.15, 8.5), (x0, 8.5)], 2, None, P.V)
         assert not [c for c in res["checks"] if not c["ok"]], (x0, [c["msg"] for c in res["checks"] if not c["ok"]])
     s = json.load(open(os.path.join(os.path.dirname(__file__), "..", "samples", "T_dos_lineas.json"), encoding="utf-8"))
-    r = run(s["footprint"], centerlines=s["centerlines"])
-    assert not [u["id"] for u in r["units"] if any("Lavadero" in c["msg"] and not c["ok"] for c in u["checks"])]
-    assert r["metrics"]["plan_score"] >= 60, r["metrics"]["plan_score"]
+    # con núcleos de 2 ascensores, como cuando se escribió la prueba: con 1 (R10.7) entran 2 viviendas más por planta y
+    # el mix arma viviendas de 3 dormitorios de menos frente, que bajan la calidad por sus dormitorios, no por el lavadero
+    for asc in ("2", "auto"):
+        r = run(s["footprint"], centerlines=s["centerlines"], ascensores=asc)
+        assert not [u["id"] for u in r["units"] if any("Lavadero" in c["msg"] and not c["ok"] for c in u["checks"])]
+    assert run(s["footprint"], centerlines=s["centerlines"], ascensores="2")["metrics"]["plan_score"] >= 60
 
 if __name__ == "__main__":
     test_lavadero(); print("OK21")
@@ -1635,3 +1644,38 @@ def test_medianeras_parciales():
 
 if __name__ == "__main__":
     test_medianeras_parciales(); print("OK41")
+
+
+def test_ascensores_por_nucleo():
+    """R10.7 (v2.32): cada núcleo lleva los ascensores que piden las viviendas que sirve (las que tienen en él su
+    recorrido más corto, por los niveles residenciales): 1 cada 60 y al menos 1 si el edificio necesita ascensor. En
+    automático todos los núcleos son iguales (los del más cargado). Desde 10 niveles, el edificio lleva al menos 2 en
+    total: el mínimo es por edificio (criterio del usuario). Un núcleo manual puede fijar los suyos y su frente toma las
+    medidas de la normativa para esa cantidad; «ascensores» fija la misma cantidad en todos. Antes, la cantidad del
+    edificio entero se ponía en cada núcleo (la cruz de 60 viviendas y 4 núcleos llevaba 8)."""
+    from engine import standards as ST
+    asc = lambda r: [c["ascensores"] for c in r["cores"]]
+    s = json.load(open(os.path.join(os.path.dirname(__file__), "..", "samples", "cruz_dos_lineas.json"), encoding="utf-8"))
+    r = run(s["footprint"], centerlines=s["centerlines"])
+    assert asc(r) == [1, 1, 1, 1] and r["metrics"]["core"]["elevators_total"] == 4, asc(r)
+    barra = [[0, 0], [60, 0], [60, 16], [0, 16]]
+    assert asc(run(barra, h=30)) == [1, 1]                                  # 10 niveles, 2 núcleos: 2 en el edificio
+    uno = run(barra, h=27, cores_mode="manual", cores=[[30, 8]])            # un núcleo para 9 viviendas × 9 niveles
+    assert asc(uno) == [2] and len(uno["units"]) * 9 > 60, (asc(uno), len(uno["units"]))
+    assert asc(run(barra, h=36, cores_mode="manual", cores=[[30, 8]])) == [2]
+    fijo = run(barra, h=36, cores_mode="manual", cores=[{"p": [30, 8], "ascensores": 1}])
+    assert asc(fijo) == [1] and any("al menos 2 ascensores y tiene 1" in w for w in fijo["warnings"]), fijo["warnings"]
+    mixto = run(barra, cores_mode="manual", cores=[{"p": [10, 8], "ascensores": 3}, [50, 8]])
+    tres = ST.core_size(ST.DEFAULTS["nucleo"], 3.0, 3, 2.0)[0]
+    assert asc(mixto) == [3, 1] and abs(mixto["cores"][0]["frente"] - tres) < 1e-6 and mixto["metrics"]["core"]["elevators_total"] == 4
+    assert sum(1 for p in mixto["cores"][0]["parts"] if p["kind"] == "elevator") == 3
+    assert asc(run(barra, ascensores="2")) == [2, 2] and asc(run(barra, h=9)) == [0, 0]    # todos 2; 9 m: sin ascensor
+    cero = run(barra, h=36, cores_mode="manual", cores=[{"p": [30, 8], "ascensores": 0}])     # solo escalera
+    assert asc(cero) == [0] and any("tiene 0: agrega dos" in w for w in cero["warnings"]), cero["warnings"]
+    # la web: un control general y uno en la ficha de cada núcleo
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    assert 'id="ascensores"' in html and "ascensores:$('ascensores').value" in html and 'id="nAsc"' in html
+    assert "if(asc!=='auto') nuevo.ascensores=+asc;" in html
+
+if __name__ == "__main__":
+    test_ascensores_por_nucleo(); print("OK42")
