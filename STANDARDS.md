@@ -28,7 +28,7 @@ Ley 13.728, art. 18: mínimo 25 m²; 35 m² para 1 dormitorio y +15 m² por dorm
 
 Muros: el muro entre viviendas es de 0,30 m («Muro medianero» en la web); la NNE pide al menos 0,20 m de hormigón o mampostería, o un aislamiento acústico Rw de 45 dB o más (art. 54).
 
-Reglas de distribución que aplica el motor: dormitorios y estar con fachada; dormitorios y baños accesibles desde el pasillo interno; cocina, comedor y estar integrados (conexión abierta); frente mínimo de la unidad = estar + dormitorios (para que todos tengan ventana).
+Reglas de distribución que aplica el motor: dormitorios y estar con fachada; dormitorios y baños accesibles desde el pasillo interno; cocina, comedor y estar integrados (conexión abierta); frente mínimo de la unidad = estar + dormitorios (para que todos tengan ventana). Toda vivienda lleva baño y cocina (NNE, arts. 17 y 21): si el plano no los tiene, la ficha lo avisa y baja la calidad del plano; la cocina dentro del hall («Hall / Cocina») cuenta (v2.30).
 
 ## Equipamiento de baños, cocina y lavadero (F5)
 

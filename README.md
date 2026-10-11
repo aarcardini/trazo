@@ -142,6 +142,9 @@ Si algo falla en Rhino, ejecuta el script y elige **Diagnostico**. Si no se resu
 - **Mix**: tipos con m² objetivo y %, ancho mínimo, muro medianero; métricas Match Score, Fit y Unidades únicas.
 - **Planos**: distribución día/noche con pasillo interno, puertas y grafo de conexiones verificado.
 
+## Novedades v2.30
+- **Baño y cocina:** una vivienda sin baño o sin cocina baja su calidad de planos y la ficha lo avisa («Sin cocina: toda vivienda lleva una»). La cocina dentro del hall cuenta. Antes, una vivienda chica sin lugar para la cocina podía sacar 100. En los ejemplos, «Entre medianeras 30 × 45 con patio central» baja de 100 a 94: su vivienda U08, de 3 dormitorios, no tiene cocina.
+
 ## Novedades v2.29
 - **El dormitorio principal conserva su placard:** al repartir el frente entre los dormitorios, el principal conserva el ancho de su cama doble con el placard de 0,60 m al costado (3,20 m con las medidas por defecto) cuando el fondo no deja ponerlo al pie de la cama, siempre que los demás dormitorios lleguen a su mínimo. Si el frente no alcanza, los demás no bajan de su mínimo y la ficha avisa que el placard no entra. En los ejemplos, «Predio entre medianeras 10 × 40» vuelve de 22 a 30 en calidad de planos: en U01 y U03 el dormitorio principal queda de 3,20 × 3,00 m con su placard y el segundo de 2,57 × 3,00 m (7,7 m²).
 
