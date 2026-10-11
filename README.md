@@ -142,6 +142,9 @@ Si algo falla en Rhino, ejecuta el script y elige **Diagnostico**. Si no se resu
 - **Mix**: tipos con m² objetivo y %, ancho mínimo, muro medianero; métricas Match Score, Fit y Unidades únicas.
 - **Planos**: distribución día/noche con pasillo interno, puertas y grafo de conexiones verificado.
 
+## Novedades v2.28
+- **Segunda fachada:** con 3 dormitorios o más, el dormitorio al costado ya no deja la vivienda con un solo baño; con hasta 2 dormitorios sigue pudiendo (criterio del usuario). En los ejemplos, «T con 2 polilíneas» baja de 67 a 62 en calidad de planos: su vivienda U06, de 3 dormitorios en 9,10 m de frente, vuelve a tener los dormitorios al fondo, con dos baños. El ROADMAP registra tus decisiones: la norma nacional rige en todos los departamentos (R10.1 y R11.5 hechas), monoambientes desde 32 m², mínimo de 2 ascensores por edificio y, en la esquina, el estar o el dormitorio principal según cómo se conecte por dentro.
+
 ## Novedades v2.27
 - **Normativa nacional de higiene de la vivienda:** los mínimos de la vivienda siguen la Normativa Nacional de Edificación (Congreso de Intendentes, MVOTMA y SAU, 2016): dormitorio principal de 8,5 m² con lado de 2,60 m, dormitorios adicionales y estudio de 7 m², estar de 10 m² con lado de 2,60 m y baño de 3 m². La misma norma confirma el vano de iluminación de 1/10 del local y el retiro de 3 m para abrir ventanas. Las medidas que cambiaste en la web se conservan; un mínimo que el navegador o un proyecto anterior guardó con su valor viejo pasa al nuevo. En los ejemplos solo cambia la calidad de planos: «Forma en L» 87 → 84, «Predio entre medianeras 10 x 28» 58 → 60, «Predio entre medianeras 10 × 40» 30 → 22 y «Cruz con 2 polilíneas» 44 → 45. Artículos y fuentes en `STANDARDS.md`; lo que la norma pide y Trazo todavía no comprueba, en el ROADMAP (R10.8 y R11.2).
 

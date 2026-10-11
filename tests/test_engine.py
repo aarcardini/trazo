@@ -1420,8 +1420,9 @@ def test_segunda_fachada():
     """R5.3: una vivienda con fachada al fondo y en un costado (de esquina o de extremo) la usa. Si el frente alcanza, el
     estar va a la esquina (el plano se hace al revés si el costado es el otro) y lleva ventana en las dos fachadas; si el
     frente no alcanza para todos los dormitorios al fondo, el último va al costado, entre el pasillo común y el interno,
-    con su ventana a esa fachada, solo si el plano mejora y no pierde estancias (puede perder el segundo baño). Sin
-    fachada lateral, con las dos o con el fondo en parte ciego, no cambia nada. Los cambios a mano siguen valiendo."""
+    con su ventana a esa fachada, solo si el plano mejora y no pierde estancias. El segundo baño puede perderse solo con
+    hasta 2 dormitorios (criterio del usuario, v2.28): con 3 o más, el plano conserva sus dos baños. Sin fachada lateral,
+    con las dos o con el fondo en parte ciego, no cambia nada. Los cambios a mano siguen valiendo."""
     import math
     from engine import plans as P
     rect = lambda w, d: [(0.0, 0.0), (w, 0.0), (w, d), (0.0, d)]
@@ -1456,19 +1457,26 @@ def test_segunda_fachada():
     for w_, f in ((W, luz(W, D, True, True)), (9.0, luz(9.0, D, der=True, fondo=(0.0, 6.0)))):
         res = P.layout_unit(rect(w_, D), 2, f)
         assert res["segunda_fachada"] is None and abs(R(res)["living"][0]) < 1e-6, R(res)["living"]
-    # 3 dormitorios en 9,10 m de frente: al fondo no entran; el tercero va al costado, con su ventana
-    W, D = 9.1, 8.5
-    sin = P.layout_unit(rect(W, D), 3, luz(W, D))
-    assert any(c["msg"].startswith("Frente de 9.1 m insuficiente") for c in sin["checks"] if not c["ok"])
+    # 4 dormitorios en 12,00 m de frente: al fondo no entran; el cuarto va al costado, con su ventana, y quedan dos baños
+    W, D = 12.0, 9.0
+    sin = P.layout_unit(rect(W, D), 4, luz(W, D))
+    assert any(c["msg"].startswith("Dormitorio 4: lado") for c in sin["checks"] if not c["ok"])     # angostos
     for der in (True, False):
-        res = P.layout_unit(rect(W, D), 3, luz(W, D, izq=not der, der=der))
-        b3, pas = R(res)["bed3"], R(res)["hallway"]
-        assert res["segunda_fachada"] == "dormitorio" and info(res) == ["Fachada lateral: Dormitorio 3 al costado, con su ventana a esa fachada"]
-        assert abs(b3[1]) < 1e-6 and abs(b3[3] - pas[1]) < 1e-6 and abs((b3[2] if der else b3[0]) - (W if der else 0.0)) < 1e-6, b3
-        assert [w["n"] for w in res["ventanas"] if w["room"] == "bed3"] == [(1.0 if der else -1.0, 0.0)]
-        assert res["score"] > sin["score"] and not any(c["msg"].startswith("Frente de") for c in res["checks"] if not c["ok"])
+        res = P.layout_unit(rect(W, D), 4, luz(W, D, izq=not der, der=der))
+        b4, pas = R(res)["bed4"], R(res)["hallway"]
+        assert res["segunda_fachada"] == "dormitorio" and info(res) == ["Fachada lateral: Dormitorio 4 al costado, con su ventana a esa fachada"]
+        assert abs(b4[1]) < 1e-6 and abs(b4[3] - pas[1]) < 1e-6 and abs((b4[2] if der else b4[0]) - (W if der else 0.0)) < 1e-6, b4
+        assert [w["n"] for w in res["ventanas"] if w["room"] == "bed4"] == [(1.0 if der else -1.0, 0.0)]
+        assert res["score"] > sin["score"] and not any("Dormitorio" in c["msg"] for c in res["checks"] if not c["ok"])
         k = [r["kind"] for r in res["rooms"]]
-        assert k.count("bedroom") == 3 and k.count("bath") >= 1 and "laundry" in k and "kitchen" in k, k
+        assert k.count("bedroom") == 4 and k.count("bath") == 2 and "laundry" in k and "kitchen" in k, k
+    # con 3 o más dormitorios, el dormitorio al costado no deja la vivienda con un solo baño: en 9,10 m (3 dormitorios)
+    # y en 10,70 m (4) el plano sigue con los dormitorios al fondo y sus dos baños
+    for nb, W, D in ((3, 9.1, 8.5), (4, 10.7, 7.0)):
+        sin = P.layout_unit(rect(W, D), nb, luz(W, D))
+        res = P.layout_unit(rect(W, D), nb, luz(W, D, der=True))
+        assert res["segunda_fachada"] != "dormitorio" and "bed%d" % nb in R(res), (nb, res["segunda_fachada"])
+        assert [r["kind"] for r in res["rooms"]].count("bath") == 2, nb
     # 2 dormitorios en 9,30 m: al fondo ya entran; el estar va a la esquina y quedan los dos baños
     res = P.layout_unit(rect(9.3, 8.5), 2, luz(9.3, 8.5, der=True))
     assert res["segunda_fachada"] == "estar" and [r["kind"] for r in res["rooms"]].count("bath") == 2
