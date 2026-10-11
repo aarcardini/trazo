@@ -436,4 +436,5 @@ def unit_rooms(u, params, pc=None, plate=None, ediciones=None):
         d["into"] = d["into"] * (side if not d["vertical"] else 1)
     for n in res["graph"]["nodes"]:
         n["pos"] = back(n["pos"])
+    res["sin_uso"] = [back_poly(pl) for pl in res["sin_uso"]]
     return res

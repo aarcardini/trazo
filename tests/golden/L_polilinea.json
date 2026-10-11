@@ -1,7 +1,7 @@
 {
  "ejemplo": "samples/L_polilinea.json",
  "nombre": "L con polilínea",
- "version_motor": "2.22",
+ "version_motor": "2.33",
  "metricas": {
   "unidades": 9,
   "unidades_totales": 45,
@@ -19,7 +19,7 @@
   "circulacion": 25.5,
   "match_score": 94.4,
   "fit_m2": 8.6,
-  "calidad_planos": 89,
+  "calidad_planos": 100,
   "evacuacion_max": 17.9,
   "nsa_total": 3809.5
  }

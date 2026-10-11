@@ -32,6 +32,8 @@ def result_to_dxf(res):
                 out += _poly("Trazo_%s_Equipamiento" % tag, q["poly"], z)
                 for ln in q.get("lines", []):
                     out += _poly("Trazo_%s_Equipamiento" % tag, ln, z, closed=False)
+            for s in u.get("sin_uso", []):                  # v2.33: lo que queda sin uso dentro de la vivienda
+                out += _poly("Trazo_%s_SinUso" % tag, s["poly"], z)
             for w in u.get("ventanas", []):
                 out += _poly("Trazo_%s_Ventanas" % tag, w["poly"], z)
                 for ln in w.get("lines", []):

@@ -1,7 +1,7 @@
 {
  "ejemplo": "samples/L_ochava.json",
  "nombre": "Esquina en L con ochava",
- "version_motor": "2.22",
+ "version_motor": "2.33",
  "metricas": {
   "unidades": 10,
   "unidades_totales": 50,
@@ -19,7 +19,7 @@
   "circulacion": 27.4,
   "match_score": 100.0,
   "fit_m2": 15.2,
-  "calidad_planos": 80,
+  "calidad_planos": 87,
   "evacuacion_max": 17.4,
   "nsa_total": 4042.5
  }

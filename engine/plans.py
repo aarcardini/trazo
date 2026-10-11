@@ -26,6 +26,13 @@ MIN_W = {"bedroom": 2.6, "living": 3.0, "dining": 2.4, "bath": 1.5, "hallway": 0
          "laundry": 1.0, "storage": 0.8, "study": 2.2}
 DAY = ("hall", "kitchen", "dining", "living", "hallway")     # se conectan en abierto si comparten borde
 BATH_W1, BATH_W2, HALL_W, KITCH_D, LAV_W, BATH2_D = 1.7, 1.3, 1.4, 2.9, 1.2, 2.0
+BATH_MIN = 1.3        # el baño más angosto: el inodoro contra la pared larga y su paso (configure lo toma de equipamiento)
+BATH_MIN_D = 1.45     # el baño menos profundo: la ducha y su paso, con los artefactos en fila (ídem)
+BATH_FULL = (1.6, 2.3)    # baño con ducha: con menos fondo que el segundo valor, al menos el primero de ancho (ídem)
+FR_MIN, FR_MAX = 1.8, 2.8     # fondo de la franja de servicios (configure lo toma de vivienda["franja_servicios"])
+BED_MAX = 4.5         # fondo máximo de un dormitorio al fondo
+KITCH_LINE = 2.7      # mesada en línea con la heladera (configure lo toma de equipamiento)
+KITCH_L = 2.2         # fondo de una cocina en L: la mesada, su paso y la heladera en la otra pared (ídem)
 V = ST.DEFAULTS["vivienda"]
 
 
@@ -43,7 +50,7 @@ def configure(vivienda, equip=None, accesible=False):
     """Ajusta las medidas de proyecto a partir de la tabla de estándares (standards.py / web). accesible: el baño
     principal toma el ancho del baño accesible."""
     global HALL, LIV_MIN, BED_MAIN, BED_W, BATH_W1, BATH_W2, HALL_W, KITCH_D, LAV_W, BATH2_D, V, DOOR, ENTRY, DOOR_ACC
-    global CAMA_PLACARD
+    global CAMA_PLACARD, BATH_MIN, BATH_MIN_D, BATH_FULL, FR_MIN, FR_MAX, KITCH_LINE, KITCH_L
     V = vivienda
     eq = equip or ST.DEFAULTS["equipamiento"]
     CAMA_PLACARD = _cama_placard(eq)
@@ -60,10 +67,15 @@ def configure(vivienda, equip=None, accesible=False):
     BATH2_D = eq["inodoro"][1] + eq["paso_bano"] + eq["lavatorio"][0]   # fondo mínimo de un segundo baño (al menos toilette)
     HALL_W = max(V["hall"]["min_side"], V["hall"]["typ"][0])
     KITCH_D = V["cocina"]["typ"][1]
+    BATH_MIN = max(V["bano"]["min_side"], inodoro)
+    BATH_MIN_D = max(V["bano"]["min_side"], eq["ducha"][1] + eq["paso_bano"])
+    BATH_FULL = (eq["ducha"][0] + eq["inodoro"][0], eq["ducha"][1] + eq["inodoro"][0] + eq["lavatorio"][0])
+    FR_MIN, FR_MAX = V["franja_servicios"]["min_side"], V["franja_servicios"]["max_side"]
+    KITCH_LINE = eq["heladera"][0] + eq["bacha_cocina"] + eq["mesada_trabajo"] + eq["cocina_horno"]
+    KITCH_L = eq["mesada_fondo"] + eq["paso_cocina"] + eq["heladera"][1]
 MIN_SHARE = {"puerta": DOOR + 0.1, "abierto": 0.85}
 NAMES = {"hall": "Hall", "kitchen": "Cocina", "living": "Estar-Comedor", "dining": "Comedor", "hallway": "Pasillo",
-         "bath": "Baño", "bedroom": "Dormitorio", "laundry": "Lavadero", "storage": "Depósito / Placard",
-         "study": "Estudio"}
+         "bath": "Baño", "bedroom": "Dormitorio", "laundry": "Lavadero", "storage": "Depósito", "study": "Estudio"}
 
 
 def bedrooms_for(area):
@@ -300,13 +312,94 @@ def _frente_noche(W, nb, lateral=False):
     return max(0.0, W - max(3.0, W * 0.38)), need
 
 
+def _ancho(clave, d, acc=None):
+    """Ancho, a lo largo de la franja de servicios de fondo d, del baño (bath1), del segundo baño (bath2), del baño en
+    suite (suite) o del lavadero: el de su superficie típica, sin bajar del que piden sus artefactos (v2.33). El baño de
+    una vivienda accesible (acc), con su medida."""
+    if clave == "bath1" and acc:
+        return acc[0]
+    sd, minimo = {"bath1": (V["bano"], BATH_MIN), "suite": (V["bano"], BATH_MIN), "bath2": (V["bano_aux"], BATH_MIN),
+                  "laundry": (V["lavadero"], LAV_W)}[clave]
+    if clave != "laundry" and d < BATH_FULL[1] - 1e-6:     # con poco fondo, el ancho que deja lugar a la ducha
+        minimo = max(minimo, BATH_FULL[0])
+    return max(minimo, sd["typ_area"] / d)
+
+
+def _tope(clave, d):
+    """Ancho máximo de una estancia de la franja de fondo d: hasta ahí la agranda lo que sobra (B, v2.33)."""
+    return {"bath1": V["bano"], "suite": V["bano"], "bath2": V["bano_aux"], "laundry": V["lavadero"],
+            "storage": V["deposito"]}[clave]["max_area"] / d
+
+
+def _fondo_franja(claves, L, lo, hi, acc=None):
+    """Fondo de la franja de servicios (v2.33): el menor entre lo y hi con el que sus estancias entran en el largo L (así
+    los dormitorios ganan fondo); si no entran ni con hi, hi."""
+    d = lo
+    while d < hi - 1e-9 and sum(_ancho(k, d, acc) for k in claves) > L + 1e-6:
+        d = min(hi, d + 0.05)
+    return d
+
+
+def _servicios(L, nb, hi, acc=None, lo=0.0):
+    """Estancias de la franja de servicios de largo L y su fondo (v2.33): el baño, el segundo baño (con 2 dormitorios o
+    más, si entra) y el lavadero, con el menor fondo (no menos de lo) con el que entran, hasta hi."""
+    lo = min(hi, max(FR_MIN, acc[1] if acc else 0.0, lo))
+    if nb >= 2 and max(lo, BATH2_D) <= hi + 1e-9:
+        claves = ["bath1", "bath2", "laundry"]
+        d = _fondo_franja(claves, L, max(lo, BATH2_D), hi, acc)
+        if _ancho("bath1", d, acc) + _ancho("bath2", d) + 1.0 <= L + 1e-6:
+            return claves, d
+    claves = ["bath1", "laundry"]
+    return claves, _fondo_franja(claves, L, lo, hi, acc)
+
+
+def _repartir(claves, anchos, L, d):
+    """B (v2.33): lo que sobra del largo L de la franja agranda sus estancias, en proporción a lo que a cada una le falta
+    para su máximo. Devuelve los anchos y lo que sigue sobrando (C: sin uso)."""
+    sobra = L - sum(anchos)
+    for _ in range(len(claves)):
+        margen = [max(0.0, _tope(k, d) - w) for k, w in zip(claves, anchos)]
+        if sobra <= 1e-6 or sum(margen) <= 1e-6:
+            break
+        f = min(1.0, sobra / sum(margen))
+        anchos = [w + m * f for w, m in zip(anchos, margen)]
+        sobra = L - sum(anchos)
+    return anchos, max(0.0, sobra)
+
+
+def _anchos_dormitorios(Wn, nf, bedD):
+    """Frente de cada dormitorio al fondo: el típico, estirado a Wn, y que cada uno llegue a su área mínima con el fondo
+    bedD (si el frente lo permite); el principal, el ancho de su cama doble con el placard al costado (v2.29)."""
+    widths = [BED_MAIN] + [BED_W] * (nf - 1)
+    k = Wn / sum(widths)
+    widths = [w * k for w in widths]
+    specs = [V["dorm_principal"]] + [V["dorm_secundario"]] * (nf - 1)
+    mw = [max(sp["min_side"], sp["min_area"] / max(bedD, 0.1) + 0.02) for sp in specs]
+    if bedD < CAMA_PLACARD[1] - 1e-6 and sum(mw[1:]) + max(mw[0], CAMA_PLACARD[0]) <= Wn + 1e-6:
+        mw[0] = max(mw[0], CAMA_PLACARD[0])
+    if sum(mw) <= Wn + 1e-6:
+        widths = [max(w, m_) for w, m_ in zip(widths, mw)]
+        over = sum(widths) - Wn
+        slack = [w - m_ for w, m_ in zip(widths, mw)]
+        if over > 1e-6 and sum(slack) > 0:
+            widths = [w - over * s_ / sum(slack) for w, s_ in zip(widths, slack)]
+    return widths
+
+
 def _plan_rects(x0, v0, x1, v1, nb, warnings, acc=None, lateral=False):
-    """Rectángulos de estancias y conexiones con puerta (las abiertas de la zona de día se deducen después). acc: frente
-    y fondo del baño de una vivienda accesible (None si no lo es). lateral (R5.3): el costado x1 es fachada y el frente
-    no alcanza: el último dormitorio va a ese costado, entre el pasillo común y el pasillo interno."""
+    """Rectángulos de estancias, conexiones con puerta (las abiertas de la zona de día se deducen después) y lo que queda
+    sin uso [(rect, aviso)]. acc: frente y fondo del baño de una vivienda accesible (None si no lo es). lateral (R5.3): el
+    costado x1 es fachada y el frente no alcanza: el último dormitorio va a ese costado, entre el pasillo común y el
+    pasillo interno.
+    v2.33 (criterio del usuario): el placard es el armario del dormitorio, no una estancia. La franja sin luz entre el
+    pasillo interno y el pasillo común lleva baños, lavadero y un depósito de hasta 4 m², con el menor fondo con el que
+    entran (lo demás va a los dormitorios). Si sobra franja: A, el dormitorio principal pasa al final del pasillo, en
+    suite, con su baño en la franja; si no se puede, B, baños, lavadero y depósito más grandes (hasta su máximo); y si
+    aún sobra, C, queda sin uso, con aviso."""
     W, D = x1 - x0, v1 - v0
     R = {}          # id -> (kind, rect, name)
     E = []          # (id_a, id_b, tipo)
+    vacios = []     # C: (rect, aviso)
 
     def add(i, kind, rect, name=None):
         if rect[2] - rect[0] > 0.3 and rect[3] - rect[1] > 0.3:
@@ -323,7 +416,7 @@ def _plan_rects(x0, v0, x1, v1, nb, warnings, acc=None, lateral=False):
         add("hall", "hall", (x1 - hw, v0, x1, v0 + kd))
         add("living", "living", (x0, v0 + kd, x1, v1), "Estar-Dormitorio")
         E.append(("living", "bath1", "puerta"))
-        return R, E
+        return R, E, vacios
 
     # ---- reparto del frente entre día y noche
     nf = nb - 1 if lateral else nb                     # dormitorios al fondo (R5.3: el último, al costado)
@@ -338,70 +431,140 @@ def _plan_rects(x0, v0, x1, v1, nb, warnings, acc=None, lateral=False):
             warnings.append("Frente de %.1f m insuficiente para estar + %d dormitorio(s) (mín. %.1f m)" %
                             (W, nb, hard))
     xs = x1 - Wn                                       # inicio de la zona de noche
-    bedD = max(3.0, min(4.5, D - HALL - (BED_D if lateral else 2.4)))
-    widths = [BED_MAIN] + [BED_W] * (nf - 1)
-    k = Wn / sum(widths)
-    widths = [w * k for w in widths]
-    inner = D - HALL - bedD
-    deep = inner >= 1.8
+    xb = x1 - ws                                       # R5.3: el dormitorio lateral, en el extremo
     hw = HALL_W
+    deep = D - HALL - BED_D >= FR_MIN - 1e-9
+    suite = False
 
     if deep:
-        # zona de noche (de fachada hacia el pasillo común): dormitorios | pasillo | baños | depósito
+        # zona de noche (de fachada hacia el pasillo común): dormitorios | pasillo | franja de servicios | (sobrante)
+        hi = min(FR_MAX, D - HALL - BED_D)
+        dep = V["deposito"]
+        angosta = xs - x0 - hw < KITCH_LINE            # la cocina va en L: la franja no la deja sin su fondo
+        lo_k = KITCH_L - (HALL - MIN_SHARE["abierto"] - 0.01) if angosta else 0.0
+
+        def fondos(d):
+            """(dormitorios, franja, tira junto al pasillo común) con una franja de fondo d: los dormitorios hasta su
+            máximo; muy profunda, la franja crece hasta el suyo y lo que queda es la tira (si es de menos de 1 m, va a la
+            franja)."""
+            bD = min(BED_MAX, D - HALL - d)
+            d = min(FR_MAX, D - HALL - bD)
+            e = D - HALL - bD - d
+            return (bD, d + e, 0.0) if e < 1.0 else (bD, d, e)
+
+        def franja(claves, L, d, con_dep):
+            """Anchos de una franja de largo L y fondo d: sus estancias y, si queda lugar, el depósito (hasta su
+            máximo). Devuelve también lo que sobra."""
+            anchos = [_ancho(k, d, acc) for k in claves]
+            while len(claves) > 1 and sum(anchos) > L + 1e-6 and claves[-1] == "laundry" and \
+                    L - sum(anchos[:-1]) < 1.0:        # el lavadero, solo si queda más de 1 m
+                claves, anchos = claves[:-1], anchos[:-1]
+            if sum(anchos) > L + 1e-6:                 # no entran: la última hasta el final
+                anchos[-1] = max(0.0, L - sum(anchos[:-1]))
+                return claves, anchos, 0.0
+            libre = L - sum(anchos)
+            if con_dep and dep["max_area"] > 0 and libre >= dep["min_side"] - 1e-6 and libre * d >= dep["min_area"] - 1e-6:
+                claves, anchos = claves + ["storage"], anchos + [min(libre, dep["max_area"] / d)]
+            return claves, anchos, L - sum(anchos)
+
+        if lateral:                                    # R5.3: el dormitorio lateral pide el fondo entre los pasillos
+            bedD = max(BED_D, min(BED_MAX, D - HALL - BED_D))
+            d = min(FR_MAX, D - HALL - bedD)
+            e = D - HALL - bedD - d
+            d, e = (d + e, 0.0) if e < 1.0 else (d, e)
+            claves = ["bath1"] + (["bath2"] if nb >= 2 and d + 1e-6 >= BATH2_D and xb - xs >= _ancho("bath1", d, acc) +
+                                  _ancho("bath2", d) + 1.0 else []) + ["laundry"]
+        else:
+            claves, d = _servicios(xb - xs, nb, hi, acc, lo_k)
+            bedD, d, e = fondos(d)
+        widths = _anchos_dormitorios(Wn, nf, bedD)
+        claves, anchos, sobra = franja(claves, xb - xs, d, e == 0.0)
+        if not lateral and nb >= 2 and sobra >= 1.0 - 1e-6:
+            # A: el principal, al final del pasillo, en suite (su baño en la franja); el pasillo termina en su puerta y la
+            # franja de los demás ya no lleva el segundo baño: se rehace con su fondo
+            c1 = ["bath1", "laundry"]
+            d1 = _fondo_franja(c1, xb - xs - widths[0], min(hi, max(FR_MIN, acc[1] if acc else 0.0, lo_k)), hi, acc)
+            bD1, d1, e1 = fondos(d1)
+            w1 = _anchos_dormitorios(Wn, nf, bD1)
+            xm = x1 - w1[0]
+            if w1[0] * min(d1, max(BATH_MIN_D, V["bano"]["max_area"] / w1[0])) >= V["bano"]["min_area"] - 1e-6 and \
+                    w1[0] >= BATH_MIN - 1e-6 and sum(_ancho(k, d1, acc) for k in c1) <= xm - xs + 1e-6:
+                suite, bedD, d, e, widths = True, bD1, d1, e1, w1
+                claves, anchos, sobra = franja(c1, xm - xs, d, e == 0.0)
         hv0, hv1 = v1 - bedD - HALL, v1 - bedD
-        add("hallway", "hallway", (xs, hv0, x1, hv1))
-        ib = min(inner, 2.8)
-        bv0 = hv0 - ib
+        bv0 = hv0 - d
+        if suite:                                      # el baño en suite, hasta su máximo: lo demás, al dormitorio
+            wm = widths[0]
+            vs = bv0 + min(d, max(BATH_MIN_D, V["bano"]["max_area"] / wm))
+            add("hallway", "hallway", (xs, hv0, xm, hv1))
+            add("bath2", "bath", (xm, bv0, x1, vs), "Baño en suite")
+            E.append(("bed1", "bath2", "puerta"))
+            xz = xm
+        else:
+            add("hallway", "hallway", (xs, hv0, x1, hv1))
+            xz = xb
+        anchos, sobra = _repartir(claves, anchos, xz - xs, d)
+        if sobra < MIN_W["storage"] + 0.1 or sobra * d < 1.0:   # lo poco que queda (no da para una estancia), a la
+            j = max(i for i, k in enumerate(claves) if k != "storage" or i == 0)      # última (no al depósito, que no
+            anchos[j] += sobra                                                        # pasa de su máximo)
+            sobra = 0.0
+        nombres = {"bath1": "Baño", "bath2": "Baño 2", "laundry": "Lavadero", "storage": "Depósito"}
         bx = xs
-        xb = x1 - ws                                   # R5.3: el dormitorio lateral, en el extremo
-        nbaths = 2 if nb >= 2 and xb - xs >= BATH_W1 + BATH_W2 + 1.0 and ib + 1e-6 >= BATH2_D else 1
-        for j in range(nbaths):
-            bw = BATH_W1 if j == 0 else BATH_W2
-            add("bath%d" % (j + 1), "bath", (bx, bv0, min(xb, bx + bw), hv0), "Baño" if j == 0 else "Baño 2")
-            E.append(("hallway", "bath%d" % (j + 1), "puerta"))
-            bx += bw
-        if xb - bx > 1.0:
-            lw = min(xb - bx, max(LAV_W, V["lavadero"]["typ_area"] / max(hv0 - bv0, 0.5)))
-            if xb - bx - lw < 0.8:
-                lw = xb - bx
-            add("laundry", "laundry", (bx, bv0, bx + lw, hv0), "Lavadero")
-            E.append(("hallway", "laundry", "puerta"))
-            if xb - bx - lw >= 0.8:
-                add("closet", "storage", (bx + lw, bv0, xb, hv0), "Placard")
-                E.append(("hallway", "closet", "puerta"))
-        if bv0 - v0 >= 1.0:
-            add("storage", "storage", (xs, v0, xb, bv0))
-            E.append(("hall", "storage", "puerta"))
+        for k, w in zip(claves, anchos):
+            add(k, "storage" if k == "storage" else "laundry" if k == "laundry" else "bath", (bx, bv0, bx + w, hv0),
+                nombres[k])
+            E.append(("hallway", k, "puerta"))
+            bx += w
+        if sobra > 1e-6:                               # C: queda sin uso
+            vacios.append(((bx, bv0, xz, hv0), "Sin uso: %.1f m² de franja sin luz junto al pasillo común: la vivienda "
+                                               "tiene más frente del que su tipo necesita" % (sobra * d)))
+        if bv0 - v0 >= 1.0:                            # muy profunda: entre la franja y el pasillo común, el depósito
+            e, lado, fondo = bv0 - v0, 0.0, 0.0        # junto al hall y lo demás, C: sin uso
+            if dep["max_area"] > 0 and e >= dep["min_side"]:
+                lado = max(dep["min_side"], min(xb - xs, e, dep["max_area"] ** 0.5))
+                fondo = min(e, dep["max_area"] / lado)
+                add("storage", "storage", (xs, v0, xs + lado, v0 + fondo), "Depósito")
+                E.append(("hall", "storage", "puerta"))
+            resto = (xb - xs) * e - lado * fondo
+            if resto >= 1.0:
+                aviso = "Sin uso: %.1f m² junto al pasillo común: la vivienda tiene %.1f m de fondo" % (resto, D)
+                vacios.append(((xs + lado, v0, xb, bv0), aviso))
+                if fondo < e - 0.3:
+                    vacios.append(((xs, v0 + fondo, xs + lado, bv0), ""))      # el mismo aviso
         if lateral:
             add("bed%d" % nb, "bedroom", (xb, v0, x1, hv0), "Dormitorio %d" % nb)
             E.append(("hallway", "bed%d" % nb, "puerta"))
         kd = max(1.8, min(KITCH_D, hv0 - v0))
+        if xs - x0 - hw < KITCH_LINE:                  # la heladera no entra en línea: la cocina, más profunda (en L),
+            kd = max(kd, min(KITCH_D, hv1 - v0 - MIN_SHARE["abierto"] - 0.01))   # sin cerrar la boca del pasillo
     else:
-        # unidad poco profunda: pasillo interno junto al pasillo común, dormitorios detrás
+        # unidad poco profunda: pasillo interno junto al pasillo común, dormitorios detrás; el pasillo termina en la
+        # puerta del último dormitorio, que toma lo que queda (v2.33: sin punta de pasillo)
         hv0, hv1 = v0, v0 + HALL
-        add("hallway", "hallway", (xs, hv0, x1, hv1))
         bedD = D - HALL
         if bedD < BED_D:
             warnings.append("Fondo de %.1f m escaso para dormitorios (mín. %.1f m)" % (D, fondo_min()))
         kd = min(2.6, max(1.8, D * 0.4))
+        widths = _anchos_dormitorios(Wn, nf, bedD)
+        add("hallway", "hallway", (xs, hv0, x1 - widths[-1] if nf >= 2 else x1, hv1))
 
-    # que cada dormitorio alcance su área mínima con el fondo disponible (si el frente lo permite)
-    specs = [V["dorm_principal"]] + [V["dorm_secundario"]] * (nf - 1)
-    mw = [max(sp["min_side"], sp["min_area"] / max(bedD, 0.1) + 0.02) for sp in specs]
-    if bedD < CAMA_PLACARD[1] - 1e-6 and sum(mw[1:]) + max(mw[0], CAMA_PLACARD[0]) <= Wn + 1e-6:
-        mw[0] = max(mw[0], CAMA_PLACARD[0])     # y el principal, el ancho de su cama doble con el placard al costado
-    if sum(mw) <= Wn + 1e-6:
-        widths = [max(w, m_) for w, m_ in zip(widths, mw)]
-        over = sum(widths) - Wn
-        slack = [w - m_ for w, m_ in zip(widths, mw)]
-        if over > 1e-6 and sum(slack) > 0:
-            widths = [w - over * s_ / sum(slack) for w, s_ in zip(widths, slack)]
-    bxs = xs
-    for j, w in enumerate(widths):
-        add("bed%d" % (j + 1), "bedroom", (bxs, v1 - bedD, bxs + w, v1),
-            "Dormitorio principal" if j == 0 and nb > 1 else ("Dormitorio %d" % (j + 1) if nb > 1 else "Dormitorio"))
-        E.append(("hallway", "bed%d" % (j + 1), "puerta"))
-        bxs += w
+    nombre = lambda j: "Dormitorio principal" if j == 0 and nb > 1 else ("Dormitorio %d" % (j + 1) if nb > 1 else
+                                                                         "Dormitorio")
+    if suite:                                          # A: los demás desde la zona de día; el principal, al final
+        bxs = xs
+        for j, w in enumerate(widths[1:], 1):
+            add("bed%d" % (j + 1), "bedroom", (bxs, v1 - bedD, bxs + w, v1), nombre(j))
+            E.append(("hallway", "bed%d" % (j + 1), "puerta"))
+            bxs += w
+        add("bed1", "bedroom", (xm, vs, x1, v1), nombre(0))
+        E.append(("hallway", "bed1", "puerta"))
+    else:
+        bxs = xs
+        for j, w in enumerate(widths):
+            fin = not deep and nf >= 2 and j == nf - 1         # poco profunda: el último, al final del pasillo
+            add("bed%d" % (j + 1), "bedroom", (bxs, v0 if fin else v1 - bedD, bxs + w, v1), nombre(j))
+            E.append(("hallway", "bed%d" % (j + 1), "puerta"))
+            bxs += w
 
     # ---- zona de día: hall junto a la zona de noche, cocina, comedor/estar a fachada
     if deep:
@@ -428,7 +591,7 @@ def _plan_rects(x0, v0, x1, v1, nb, warnings, acc=None, lateral=False):
         add("living", "living", (x0, sp, xs, v1), "Estar")
     else:
         add("living", "living", (x0, lv0, xs, v1))
-    return R, E
+    return R, E, vacios
 
 
 def _main_rect(poly):
@@ -627,6 +790,7 @@ def _espejar(res, m):
         w["p"], w["q"], w["n"] = m(w["q"]), m(w["p"]), (-w["n"][0], w["n"][1])
     for n in res["graph"]["nodes"]:
         n["pos"] = m(n["pos"])
+    res["sin_uso"] = [[m(p) for p in pl][::-1] for pl in res["sin_uso"]]
     return res
 
 
@@ -636,7 +800,8 @@ def _distribuir(poly, nb, is_facade, equip, accesible, ediciones, ventanas, late
     if is_facade is not None:
         (x0, v0, x1, v1), annexes = _main_con_luz(poly, (x0, v0, x1, v1), annexes, is_facade)
     warnings = []
-    R, E = _plan_rects(x0, v0, x1, v1, nb, warnings, equip["bano_accesible"] if accesible else None, lateral)
+    R, E, vacios = _plan_rects(x0, v0, x1, v1, nb, warnings, equip["bano_accesible"] if accesible else None, lateral)
+    vacios = [(G.clip_rect(poly, r[0], r[2], r[1], r[3]), msg) for r, msg in vacios]
     hechas = [k for k, e in (ediciones or []) if e.get("op") == "pared" and e.get("a") and _mover_pared(R, e)]
     # conexiones abiertas de la zona de día: entre estancias de día que comparten borde
     day = [i for i, (k, r, n) in R.items() if k in DAY]
@@ -649,10 +814,21 @@ def _distribuir(poly, nb, is_facade, equip, accesible, ediciones, ventanas, late
             seg = _shared(R[a][1], R[b][1])
             if seg and ((seg[1][0] - seg[0][0]) ** 2 + (seg[1][1] - seg[0][1]) ** 2) ** 0.5 >= MIN_SHARE["abierto"]:
                 E.append((a, b, "abierto"))
-    # anexos (bolsillos de la unidad): estudio si tiene fachada, depósito si no
+    # anexos (bolsillos de la unidad): estudio si tiene fachada (también oblicua, como una ochava); sin ella, depósito si
+    # no pasa de su máximo y, si pasa, C: queda sin uso, con aviso (v2.33)
+    dep = V["deposito"]
     for n_, ap in enumerate(annexes):
         r = G.bbox(ap)
-        fac = abs(r[3] - v1) < 0.05 and (r[3] - r[1]) >= 3.0 and (is_facade is None or is_facade((r[0], v1), (r[2], v1)))
+        if is_facade is None:
+            fac = abs(r[3] - v1) < 0.05 and (r[3] - r[1]) >= 3.0
+        else:
+            fac = min(r[2] - r[0], r[3] - r[1]) >= V["estudio"]["min_side"] - 1e-6 and any(
+                ((q[0] - p[0]) ** 2 + (q[1] - p[1]) ** 2) ** 0.5 >= 1.5
+                for p, q, _ in _tramos_fachada(G.ensure_ccw(ap), poly, is_facade, v1))
+        if not fac and abs(G.area(ap)) > dep["max_area"] + 0.5:
+            vacios.append((ap, "Sin uso: %.1f m² sin luz natural en un rincón de la vivienda (más que un depósito de "
+                               "%.0f m²)" % (abs(G.area(ap)), dep["max_area"])))
+            continue
         aid = "annex%d" % (n_ + 1)
         R[aid] = ("study" if fac else "storage", r, "Estudio" if fac else "Depósito")
         best, bl = None, 0.0
@@ -773,7 +949,9 @@ def _distribuir(poly, nb, is_facade, equip, accesible, ediciones, ventanas, late
     for r in rooms:
         if r["kind"] in ("bedroom", "living", "study"):
             rx0, rv0, rx1, rv1 = r["rect"]
-            if is_facade:
+            if is_facade and r["id"].startswith("annex"):     # un anexo con un muro oblicuo (una ochava): por su contorno
+                fac = bool(_tramos_fachada(r["poly"], poly, is_facade, v1))
+            elif is_facade:
                 fac = any(is_facade(p, q) for p, q in (((rx0, rv1), (rx1, rv1)), ((rx0, rv0), (rx0, rv1)),
                                                        ((rx1, rv0), (rx1, rv1))) if
                           ((p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2) ** 0.5 >= 1.0)
@@ -816,6 +994,8 @@ def _distribuir(poly, nb, is_facade, equip, accesible, ediciones, ventanas, late
             checks.append({"ok": True, "info": True, "msg": w[1]})
         else:
             checks.append({"ok": False, "msg": w})
+    sin_uso = [p for p, msg in vacios if p and abs(G.area(p)) >= 0.3]     # C (v2.33): lo que queda sin uso, con aviso
+    checks += [{"ok": False, "msg": msg} for p, msg in vacios if msg and p and abs(G.area(p)) >= 0.3]
     checks += _faltan(rooms)
     if all(c["ok"] for c in checks):
         checks.append({"ok": True, "msg": "Dormitorios y estar con fachada; medidas mínimas cumplidas"})
@@ -836,4 +1016,4 @@ def _distribuir(poly, nb, is_facade, equip, accesible, ediciones, ventanas, late
     return {"rooms": rooms, "doors": doors, "graph": {"nodes": nodes, "edges": edges}, "equipamiento": equipo,
             "checks": checks, "score": score, "bedrooms": nb, "facade": round(x1 - x0, 2),
             "facade_min": round(facade_min(nb), 2), "accesible": bool(accesible), "paredes": muros,
-            "ediciones": sorted(hechas), "ventanas": vent}
+            "ediciones": sorted(hechas), "ventanas": vent, "sin_uso": sin_uso}

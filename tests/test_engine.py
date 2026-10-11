@@ -324,7 +324,8 @@ def test_patios_interiores():
     assert len(b["holes"]) == 1 and len(b["plate_holes"]) == 1, b
     patio = r["patios"][0]
     assert not any(G.point_in_poly(G.centroid(u["poly"]), patio) for u in r["units"]), "nada dentro del patio"
-    assert not sin_fachada(r) and m["egress_max"] <= 30 and m["efficiency"] > 65 and m["plan_score"] >= 85, m
+    # (v2.33: las dos viviendas de 10 m de fondo avisan lo que les queda sin uso junto al pasillo común)
+    assert not sin_fachada(r) and m["egress_max"] <= 30 and m["efficiency"] > 65 and m["plan_score"] >= 80, m
     for lado in ((13, 15), (27, 15), (20, 11), (20, 19)):     # el pasillo da la vuelta: bordea los cuatro lados
         assert min(L._dist_to_boundary(lado, c) for c in r["corridors"]) < 1.0, lado
     # la misma masa girada y en coordenadas UTM (como llega de un plano georreferenciado) da lo mismo:
@@ -464,10 +465,12 @@ def test_codos():
     fp = [[0, 0], [47.5, 20.1], [15.2, 70.1], [-18.1, 56.0]]
     r = run(fp, h=6, medianeras=[{"a": fp[1], "b": fp[2], "retiro": 0}, {"a": fp[3], "b": fp[0], "retiro": 0}])
     assert len(r["units"]) > 4, len(r["units"])
-    # el plano de una vivienda con parte del fondo sin luz: estancias habitables con luz y el resto, depósito
+    # el plano de una vivienda con parte del fondo sin luz: estancias habitables con luz y el resto (v2.33: si pasa de
+    # un depósito de 4 m²), sin uso y con aviso
     res = P.layout_unit([(0, 0), (12, 0), (12, 8), (0, 8)], 2, lambda p, q: min(p[0], q[0]) >= 3.0)
-    dep = [rm for rm in res["rooms"] if rm["name"] == "Depósito"]
-    assert dep and max(G.bbox(d["poly"])[2] for d in dep) <= 3.05, [(rm["name"], G.bbox(rm["poly"])) for rm in res["rooms"]]
+    assert min(G.bbox(rm["poly"])[0] for rm in res["rooms"]) >= 2.95, [(rm["name"], G.bbox(rm["poly"])) for rm in res["rooms"]]
+    assert len(res["sin_uso"]) == 1 and G.bbox(res["sin_uso"][0])[2] <= 3.05 and abs(G.area(res["sin_uso"][0])) > 20
+    assert any(not c["ok"] and c["msg"].startswith("Sin uso: 24.0 m² sin luz natural") for c in res["checks"]), res["checks"]
     assert not [c for c in res["checks"] if not c["ok"] and "sin fachada" in c["msg"]], res["checks"]
 
 if __name__ == "__main__":
@@ -564,7 +567,8 @@ def test_lavadero():
     for asc in ("2", "auto"):
         r = run(s["footprint"], centerlines=s["centerlines"], ascensores=asc)
         assert not [u["id"] for u in r["units"] if any("Lavadero" in c["msg"] and not c["ok"] for c in u["checks"])]
-    assert run(s["footprint"], centerlines=s["centerlines"], ascensores="2")["metrics"]["plan_score"] >= 60
+    # (v2.33: la vivienda de 3 dormitorios de 114 m² avisa la franja sin luz que le sobra aun con suite y baños grandes)
+    assert run(s["footprint"], centerlines=s["centerlines"], ascensores="2")["metrics"]["plan_score"] >= 55
 
 if __name__ == "__main__":
     test_lavadero(); print("OK21")
@@ -1023,7 +1027,9 @@ def test_equipamiento():
     for q in res["equipamiento"]:
         fuera = sum(abs(G.area(e)) - sum(abs(G.area(h)) for h in hs) for e, hs in G.subtract(q["poly"], [salas[q["room"]]])[0])
         assert fuera < 1e-3, (q["kind"], q["room"], fuera)
-    assert any("Cocina: no entra la mesada" in c["msg"] for c in res["checks"]), res["checks"]   # su pared maciza: 1,23 m
+    # su pared maciza es corta: no entra la mesada (v2.33: con la franja de servicios a medida, la cocina queda además
+    # por debajo de su mínimo, y entonces se avisa eso)
+    assert any(not c["ok"] and c["msg"].startswith("Cocina:") for c in res["checks"]), res["checks"]
     # DXF y web
     assert "Trazo_L00_Equipamiento" in dxf.result_to_dxf(r)
     html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
@@ -1293,8 +1299,9 @@ def test_editar_interior():
     r = plano({"op": "puerta", "p": m0, "entre": ["bed2", otra], "a": hacia(t)}, {"op": "pared", "p": ml, "a": (ml[0] + 0.5, ml[1])})
     d5 = puerta(r, "bed2")
     assert r["ediciones"] == [0, 1] and abs(mitad(d5["p"], d5["q"])[k] - max(t, B["bed2"][0] + 0.5 + 0.4)) < 1e-6
-    # vivienda con un anexo (bolsillo al fondo): todos los tabiques que se ofrecen se pueden mover; el borde del anexo, no
-    L = [(0.0, 0.0), (9.5, 0.0), (9.5, 8.0), (4.0, 8.0), (4.0, 10.0), (0.0, 10.0)]
+    # vivienda con un anexo (bolsillo al fondo, un depósito de 4 m²: v2.33): todos los tabiques que se ofrecen se pueden
+    # mover; el borde del anexo, no
+    L = [(0.0, 0.0), (9.5, 0.0), (9.5, 8.0), (2.0, 8.0), (2.0, 10.0), (0.0, 10.0)]
     r = P.layout_unit(L, 2)
     assert any(x["id"].startswith("annex") for x in r["rooms"]) and r["paredes"]
     for a, b in r["paredes"]:
@@ -1404,13 +1411,15 @@ def test_ventanas():
                 assert max(borde(p, R[w["room"]]["poly"]) for p in w["seg"]) < 0.01 and len(w["lines"]) == 2
                 n += 1
         assert n >= 3 * len(r["units"]), n
-    # en una L, junto a la esquina entrante, la ventana no entra en el muro de la otra ala
+    # en una L, junto a la esquina entrante, la ventana no entra en el muro de la otra ala (v2.33: el estudio de la ochava
+    # tiene su ventana en el muro oblicuo, con un error de redondeo de centésimas de milímetro)
     L = [[4, 0], [50, 0], [50, 16], [16, 16], [16, 40], [0, 40], [0, 4]]
     r = run(L)
     for u in r["units"]:
         for w in u["ventanas"]:
             d = sorted(borde(p, L) for p in w["poly"])
-            assert d[0] < 1e-6 and d[1] < 1e-6 and abs(d[2] - 0.35) < 1e-6 and abs(d[3] - 0.35) < 1e-6, (u["id"], w["room"], d)
+            assert d[0] < 1e-4 and d[1] < 1e-4 and abs(d[2] - 0.35) < 1e-4 and abs(d[3] - 0.35) < 1e-4, (u["id"], w["room"], d)
+    assert any(w["room"].startswith("annex") for u in r["units"] for w in u["ventanas"])
     # medidas de la web: más bajas, más anchas
     r = run(barra, standards={"ventanas": {"alto": 1.0}})
     w = next(w for w in r["units"][0]["ventanas"] if w["room"] == "living")
@@ -1482,11 +1491,11 @@ def test_segunda_fachada():
         k = [r["kind"] for r in res["rooms"]]
         assert k.count("bedroom") == 4 and k.count("bath") == 2 and "laundry" in k and "kitchen" in k, k
     # con 3 o más dormitorios, el dormitorio al costado no deja la vivienda con un solo baño: en 9,10 m (3 dormitorios)
-    # y en 10,70 m (4) el plano sigue con los dormitorios al fondo y sus dos baños
-    for nb, W, D in ((3, 9.1, 8.5), (4, 10.7, 7.0)):
-        sin = P.layout_unit(rect(W, D), nb, luz(W, D))
+    # el plano sigue con los dormitorios al fondo y sus dos baños; en 10,70 m (4), desde v2.33 la franja de servicios a
+    # medida deja los dos baños también con el cuarto al costado, y entonces va ahí (el plano mejora)
+    for nb, W, D, lat in ((3, 9.1, 8.5, False), (4, 10.7, 7.0, True)):
         res = P.layout_unit(rect(W, D), nb, luz(W, D, der=True))
-        assert res["segunda_fachada"] != "dormitorio" and "bed%d" % nb in R(res), (nb, res["segunda_fachada"])
+        assert (res["segunda_fachada"] == "dormitorio") == lat and "bed%d" % nb in R(res), (nb, res["segunda_fachada"])
         assert [r["kind"] for r in res["rooms"]].count("bath") == 2, nb
     # 2 dormitorios en 9,30 m: al fondo ya entran; el estar va a la esquina y quedan los dos baños
     res = P.layout_unit(rect(9.3, 8.5), 2, luz(9.3, 8.5, der=True))
@@ -1679,3 +1688,68 @@ def test_ascensores_por_nucleo():
 
 if __name__ == "__main__":
     test_ascensores_por_nucleo(); print("OK42")
+
+
+def test_sin_placards():
+    """v2.33 (criterio del usuario): el placard es el armario del dormitorio, no una estancia. La franja sin luz entre el
+    pasillo interno y el pasillo común lleva baños (con ducha), lavadero y un depósito de hasta 4 m² (editable; 0 = sin
+    depósito), con el menor fondo con el que entran: los dormitorios ganan fondo. Lo que sobra: A, el principal al final
+    del pasillo, en suite; si no se puede, B, baños, lavadero y depósito más grandes (hasta su máximo); si aún sobra, C,
+    sin uso y con aviso. El pasillo interno termina en la última puerta. La ochava (fachada oblicua) es un estudio."""
+    from engine import plans as P, standards as ST, geometry as G, dxf
+    rect = lambda w, d: [(0.0, 0.0), (w, 0.0), (w, d), (0.0, d)]
+    fondo = lambda D: (lambda p, q: abs(p[1] - D) < 0.05 and abs(q[1] - D) < 0.05)
+    caja = lambda res: {r["id"]: G.bbox(r["poly"]) for r in res["rooms"]}
+    con = lambda res, rid: {q["kind"] for q in res["equipamiento"] if q["room"] == rid}
+    # 3 dormitorios de 16,27 × 6,50 (U02 de «Esquina en L con ochava», que tenía un placard de 14,6 m²): A, en suite
+    res = P.layout_unit(rect(16.27, 6.5), 3, fondo(6.5))
+    B = caja(res)
+    assert not [r for r in res["rooms"] if "Placard" in r["name"]] and not res["sin_uso"] and res["score"] == 100
+    assert abs(B["bed1"][2] - 16.27) < 1e-6 and abs(B["hallway"][2] - B["bed1"][0]) < 1e-6    # el pasillo, hasta su puerta
+    suite = next(r for r in res["rooms"] if r["id"] == "bath2")
+    assert suite["name"] == "Baño en suite" and suite["area"] <= ST.DEFAULTS["vivienda"]["bano"]["max_area"] + 1e-6
+    assert any({d["a"], d["b"]} == {"bed1", "bath2"} for d in res["doors"])
+    assert all(B[k][3] - B[k][1] >= 3.6 for k in ("bed2", "bed3")), B          # antes, 3,10 m de fondo
+    dep = [r for r in res["rooms"] if r["kind"] == "storage"]
+    assert len(dep) == 1 and dep[0]["area"] <= 4.0 + 1e-6 and dep[0]["name"] == "Depósito"
+    assert {"ducha", "inodoro", "lavatorio"} <= con(res, "bath1") and {"ducha", "inodoro", "lavatorio"} <= con(res, "bath2")
+    # 2 dormitorios de 11,73 × 6,50: sin suite, los dos baños con ducha, depósito y dormitorios de 3,50 m de fondo
+    res = P.layout_unit(rect(11.73, 6.5), 2, fondo(6.5))
+    B = caja(res)
+    assert "bath2" in B and {"ducha", "inodoro"} <= con(res, "bath2") and not any("suite" in r["name"] for r in res["rooms"])
+    assert min(B["bed1"][3] - B["bed1"][1], B["bed2"][3] - B["bed2"][1]) >= 3.5 - 1e-6 and res["score"] == 100
+    assert 1.0 <= next(r["area"] for r in res["rooms"] if r["kind"] == "storage") <= 4.0 + 1e-6
+    # sin depósito (máximo 0): no hay; lo que sobra va a la suite (A)
+    V0 = ST.merged({"vivienda": {"deposito": {"max_area": 0}}})["vivienda"]
+    res = P.layout_unit(rect(11.73, 6.5), 2, fondo(6.5), V0)
+    assert not [r for r in res["rooms"] if r["kind"] == "storage"] and "Baño en suite" in [r["name"] for r in res["rooms"]]
+    # muy profunda (10,15 m): el depósito junto al hall y lo que queda junto al pasillo común, C: sin uso, con aviso
+    res = P.layout_unit(rect(8.7, 10.15), 2, fondo(10.15))
+    dep = next(r for r in res["rooms"] if r["kind"] == "storage")
+    assert dep["area"] <= 4.0 + 1e-6 and any({d["a"], d["b"]} == {"hall", "storage"} for d in res["doors"])
+    assert len(res["sin_uso"]) == 1 and abs(G.area(res["sin_uso"][0])) > 5
+    assert [c["msg"] for c in res["checks"] if not c["ok"]] == ["Sin uso: 6.6 m² junto al pasillo común: la vivienda "
+                                                                 "tiene 10.2 m de fondo"], res["checks"]
+    # poco profunda (5,50 m): el pasillo junto al pasillo común termina en el último dormitorio, que toma lo que queda
+    res = P.layout_unit(rect(13.3, 5.5), 2, fondo(5.5))
+    B = caja(res)
+    assert abs(B["hallway"][2] - B["bed2"][0]) < 1e-6 and abs(B["bed2"][1]) < 1e-6 and res["score"] == 100, B
+    # en los ejemplos: ningún placard; los depósitos de la franja, hasta 4 m² (un bolsillo, hasta 4,5)
+    s = json.load(open(os.path.join(os.path.dirname(__file__), "..", "samples", "L_ochava.json"), encoding="utf-8"))
+    r = run(s["footprint"], h=s["height"])
+    salas = [x for u in r["units"] for x in u["rooms"]]
+    assert not [x for x in salas if "Placard" in x["name"]] and all(x["area"] <= 4.5 for x in salas if x["kind"] == "storage")
+    u3 = next(u for u in r["units"] if u["id"] == "U03")                       # la ochava: un estudio con su ventana
+    est = next(x for x in u3["rooms"] if x["id"].startswith("annex"))
+    assert est["name"] == "Estudio" and any(w["room"] == est["id"] for w in u3["ventanas"]) and u3["plan_score"] == 100
+    assert r["metrics"]["plan_score"] >= 85                                      # antes, 80
+    # una barra de 24 m de crujía (viviendas de 10,50 m de fondo): lo sin uso, también en el DXF y en la web
+    r = run([[0, 0], [60, 0], [60, 24], [0, 24]])
+    assert any(u["sin_uso"] for u in r["units"]) and "Trazo_L00_SinUso" in dxf.result_to_dxf(r)
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    assert "(u.sin_uso||[]).forEach" in html and "deposito:'Depósito (0 = sin depósito)'" in html and " Sin uso</span>" in html
+    rh = open(os.path.join(os.path.dirname(__file__), "..", "rhino", "trazo_rhino.py"), encoding="utf-8").read()
+    assert 'u.get("sin_uso", [])' in rh and '"::SinUso"' in rh
+
+if __name__ == "__main__":
+    test_sin_placards(); print("OK43")
