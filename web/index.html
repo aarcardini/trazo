@@ -4,118 +4,207 @@
 <style>
 :root{--bg:#f6f7f9;--pan:#fff;--ink:#1b2430;--mut:#667085;--line:#d9dee6;--acc:#2f6fed;--ok:#1a9d5b;--mid:#9aa3b2;--bad:#d63b3b}
 @media (prefers-color-scheme:dark){:root{--bg:#12161c;--pan:#1a2029;--ink:#e6eaf0;--mut:#98a2b3;--line:#2c3542;--acc:#6b9bff}}
-*{box-sizing:border-box}body{margin:0;font:14px system-ui,sans-serif;background:var(--bg);color:var(--ink);display:grid;grid-template-columns:330px 1fr 280px;height:100vh}
-aside{background:var(--pan);overflow:auto;padding:14px;border-right:1px solid var(--line)}aside.r{border-right:0;border-left:1px solid var(--line)}
+*{box-sizing:border-box}body{margin:0;font:14px system-ui,sans-serif;background:var(--bg);color:var(--ink);display:grid;grid-template-columns:78px auto 1fr 300px;grid-template-rows:46px minmax(0,1fr);grid-template-areas:"top top top top" "rail panel main right";height:100vh;overflow:hidden}
+svg{stroke-linecap:round;stroke-linejoin:round}
+.top{grid-area:top;display:flex;align-items:center;gap:12px;padding:0 12px;background:var(--pan);border-bottom:1px solid var(--line);min-width:0}
+.top .marca{font-weight:700;font-size:16px}.top>small{color:var(--mut);font:12px ui-monospace,monospace}
+.modo{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;font-size:12px}.modo>*{padding:4px 10px;color:var(--mut);text-decoration:none}.modo .on{background:var(--bg);color:var(--ink);font-weight:600}.modo a:hover{color:var(--acc)}
+.masaTop{margin-left:auto;text-align:right;line-height:1.2;min-width:0;overflow:hidden}.masaTop b{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.masaTop small{font-size:11px;color:var(--mut);white-space:nowrap}
+.hist{display:flex;gap:4px}.hist button{margin:0;padding:3px 9px}
+.rail{grid-area:rail;display:flex;flex-direction:column;gap:3px;padding:8px 6px;background:var(--pan);border-right:1px solid var(--line);overflow:auto}
+.rail button{display:flex;flex-direction:column;align-items:center;gap:4px;background:transparent;color:var(--mut);border:0;border-radius:8px;padding:9px 2px 7px;margin:0;font-size:11px;font-weight:500}
+.rail button svg,.dibujo svg,.encuadre svg,.capas svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.7;flex:none}
+.rail button:hover{background:var(--bg);color:var(--ink)}.rail button.on{background:rgba(47,111,237,.12);color:var(--acc);outline:0}
+.panel{grid-area:panel;width:360px;display:flex;flex-direction:column;background:var(--pan);border-right:1px solid var(--line);min-height:0}.panel[hidden]{display:none}
+.grupo{display:flex;flex-direction:column;min-height:0;flex:1}.grupo[hidden]{display:none}
+.grupo>header{display:grid;grid-template-columns:1fr auto;align-items:start;padding:12px 14px 10px;border-bottom:1px solid var(--line)}
+.grupo>header b{font-size:15px}.grupo>header small{color:var(--mut);font-size:12px;grid-column:1}
+.grupo>header .x{grid-row:1/3;grid-column:2;background:transparent;color:var(--mut);border:0;font-size:20px;line-height:1;padding:2px 6px;margin:0}.grupo>header .x:hover{color:var(--ink)}
+.cuerpo{overflow:auto;padding:2px 14px 14px;flex:1;min-height:0}
+.pie{display:flex;justify-content:flex-end;gap:6px;padding:10px 14px;border-top:1px solid var(--line)}.pie button{margin:0}
 h1{font-size:16px;margin:0 0 10px}h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin:16px 0 6px}
 label{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:4px 0}input,select,textarea{background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:4px 6px;font:inherit}
 input[type=number]{width:80px}button{background:var(--acc);color:#fff;border:0;border-radius:6px;padding:7px 10px;font:inherit;cursor:pointer;margin:2px 2px 2px 0}
 button.s{background:transparent;color:var(--ink);border:1px solid var(--line)}button:disabled{opacity:.4;cursor:default}button.on{outline:2px solid var(--acc);background:var(--acc);color:#fff}
-main{position:relative;overflow:hidden}main>svg{width:100%;height:100%;display:block;touch-action:none;user-select:none}
-.tag{position:absolute;left:10px;bottom:10px;background:var(--pan);border:1px solid var(--line);border-radius:6px;padding:4px 8px;color:var(--mut);font-size:12px;max-width:70%}
-table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:3px 4px;border-bottom:1px solid var(--line);text-align:left}
-.w{color:var(--bad);font-size:12px;margin:3px 0}.k{display:flex;justify-content:space-between;margin:3px 0}.k b{font-variant-numeric:tabular-nums}
-.mixrow{display:grid;grid-template-columns:1fr 54px 54px 20px;gap:4px;margin:3px 0}.mixrow input{width:100%}
+button.lnk{background:none;border:0;color:var(--acc);padding:0;margin:0;font-size:13px}
+main{grid-area:main;position:relative;overflow:hidden;min-width:0}main>svg{width:100%;height:100%;display:block;touch-action:none;user-select:none}
+.encuadre{position:absolute;left:10px;top:8px;z-index:2;padding:4px 6px;margin:0;background:var(--pan)!important;display:inline-flex}
+.viewbar{position:absolute;right:10px;top:8px;left:56px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end;z-index:2;pointer-events:none}.viewbar>*{pointer-events:auto}
+.viewbar button{margin:0}.viewbar .grp{display:inline-flex;gap:8px;align-items:center;background:var(--pan);border:1px solid var(--line);border-radius:7px;padding:3px 8px;font-size:12px;color:var(--mut)}
+.viewbar input[type=range]{width:90px}
+.seg{display:inline-flex;background:var(--pan);border:1px solid var(--line);border-radius:7px;padding:2px;gap:2px}.seg button{background:transparent;color:var(--ink);border:0;padding:4px 10px;font-size:13px}.seg button.on{background:rgba(47,111,237,.12);color:var(--acc);outline:0;font-weight:600}
+.capas{position:relative}.capas>summary{list-style:none;cursor:pointer;padding:5px 9px!important;color:var(--ink)!important}.capas>summary::-webkit-details-marker{display:none}.capas svg{width:16px;height:16px}
+.capas>div{position:absolute;right:0;top:calc(100% + 4px);background:var(--pan);border:1px solid var(--line);border-radius:8px;padding:6px 10px;box-shadow:0 6px 18px rgba(0,0,0,.14);min-width:210px;z-index:5}.capas label{margin:5px 0;font-size:13px;cursor:pointer}
+.tag{position:absolute;left:10px;bottom:10px;background:var(--pan);border:1px solid var(--line);border-radius:6px;padding:4px 8px;color:var(--mut);font-size:12px;max-width:calc(50% - 200px)}
+.dibujo{position:absolute;left:50%;transform:translateX(-50%);bottom:12px;display:flex;align-items:center;gap:2px;background:var(--pan);border:1px solid var(--line);border-radius:10px;padding:4px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:3;white-space:nowrap}
+.dibujo button{display:inline-flex;align-items:center;gap:6px;background:transparent;color:var(--ink);border:0;margin:0;padding:6px 10px;border-radius:7px;font-weight:600}.dibujo button:hover{background:var(--bg)}
+.dibujo button.on{background:var(--acc);color:#fff;outline:0}.dibujo .sep{width:1px;height:22px;background:var(--line);margin:0 4px}
+.toggle{display:inline-flex!important;align-items:center;gap:5px;margin:0!important;padding:6px 9px;border-radius:7px;font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--mut);cursor:pointer;user-select:none}.toggle input{display:none}
+.toggle.on{background:rgba(47,111,237,.12);color:var(--acc)}.toggle kbd,.herr kbd{font:10px ui-monospace,monospace;border:1px solid var(--line);border-radius:4px;padding:0 3px;color:var(--mut)}
+.herr{position:absolute;left:50%;transform:translateX(-50%);bottom:64px;align-items:center;gap:6px;background:var(--pan);border:1px solid var(--line);border-radius:8px;padding:4px 6px 4px 10px;z-index:3;font-size:12px;max-width:calc(100% - 20px);white-space:nowrap}.herr button{margin:0;padding:3px 8px;font-size:12px}.herr .esc{color:var(--mut);margin-left:4px}
+aside.r{grid-area:right;background:var(--pan);overflow:auto;padding:12px 14px;border-left:1px solid var(--line)}aside.r h2:first-child{margin-top:4px}
+.resTit{display:flex;justify-content:space-between;align-items:baseline}.resTit h2{margin:4px 0 6px}
+.res{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin:4px 0 10px}.res>div{padding:7px 10px}.res>div:nth-child(-n+2){border-bottom:1px solid var(--line)}.res>div:nth-child(odd){border-right:1px solid var(--line)}
+.res span{display:block;color:var(--mut);font-size:11px}.res b{font-size:18px;font-variant-numeric:tabular-nums}.res small{color:var(--mut);font-size:11px}
+.k{display:flex;justify-content:space-between;margin:3px 0}.k b{font-variant-numeric:tabular-nums}.k i{flex:1;height:6px;border-radius:3px;background:var(--line);margin:0 8px;align-self:center;overflow:hidden}.k i>i{display:block;height:100%;margin:0;background:var(--ok)}
+td,th{padding:3px 4px;border-bottom:1px solid var(--line);text-align:left}
+.ctx{position:absolute;right:10px;top:52px;background:var(--pan);border:1px solid var(--line);border-radius:8px;padding:10px;width:250px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:3;font-size:13px}
+.ctx.ficha{position:static;width:auto;box-shadow:none;margin:0 0 12px;border-color:var(--acc)}#ctx:not([style*="none"])~#pistaFicha{display:none}
+.ctx label{margin:6px 0}.sw{width:12px;height:12px;border-radius:3px;display:inline-block}
+@media(max-width:900px){body{grid-template-columns:1fr;grid-template-rows:auto auto auto 62vh auto;grid-template-areas:"top" "rail" "panel" "main" "right";height:auto;overflow:auto}
+ .rail{flex-direction:row;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line);padding:4px}.rail button{flex:1;min-width:64px;padding:6px 2px}
+ .panel{width:auto;max-height:70vh;border-right:0;border-bottom:1px solid var(--line)}aside.r{border-left:0;border-top:1px solid var(--line)}
+ .masaTop small{display:none}.dibujo{bottom:8px;max-width:calc(100% - 12px);overflow-x:auto}.dibujo button{padding:6px 7px}.tag{display:none}.herr{bottom:58px;white-space:normal}
+ .viewbar{left:10px}.viewbar .grp{flex-wrap:wrap;max-width:100%}.top{gap:8px;padding:0 8px}.top>small{display:none}}
 .hint{color:var(--mut);font-size:12px;margin:4px 0}
 .tergrid{display:grid;grid-template-columns:1fr auto 64px;gap:4px 8px;align-items:center;margin:4px 0;font-size:13px}.tergrid .th{color:var(--mut);font-size:11px}.tergrid input[type=number]{width:100%}
-.viewbar{position:absolute;left:10px;right:10px;top:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;z-index:2}
-.viewbar button{margin:0}.viewbar .grp{display:inline-flex;gap:8px;align-items:center;background:var(--pan);border:1px solid var(--line);border-radius:6px;padding:3px 8px;font-size:12px;color:var(--mut)}
-.viewbar input[type=range]{width:90px}
 .dato{position:absolute;pointer-events:none;background:var(--pan);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:5px 8px;box-shadow:0 3px 10px rgba(0,0,0,.14);z-index:4;font-size:12px;line-height:1.35;white-space:nowrap}.dato span{color:var(--mut)}
-.ctx{position:absolute;right:10px;top:52px;background:var(--pan);border:1px solid var(--line);border-radius:8px;padding:10px;width:250px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:3;font-size:13px}
-.ctx label{margin:6px 0}.prow{display:grid;grid-template-columns:24px 1fr auto;gap:6px;align-items:center;padding:3px 4px;border-radius:5px;cursor:pointer;font-size:12px}
-.prow:hover{background:var(--bg)}.sw{width:12px;height:12px;border-radius:3px;display:inline-block}
-@media(max-width:900px){body{grid-template-columns:1fr;height:auto}main{height:60vh}}
+.prow{display:grid;grid-template-columns:24px 1fr auto;gap:6px;align-items:center;padding:3px 4px;border-radius:5px;cursor:pointer;font-size:12px}
+.prow:hover{background:var(--bg)}
+.mixrow{display:grid;grid-template-columns:1fr 54px 54px 20px;gap:4px;margin:3px 0;align-items:center}.mixrow input,.mixrow select{width:100%;min-width:0}
+table{width:100%;border-collapse:collapse;font-size:12px}
+.w{color:var(--bad);font-size:12px;margin:3px 0}
 </style></head><body>
-<aside>
- <h1>Trazo <small id="ver" style="color:var(--mut);font-weight:400"></small></h1>
- <div style="font-size:12px;color:var(--mut);margin-bottom:4px">Modo Edificio · <a href="/masterplan" style="color:var(--acc)">→ Modo Masterplan</a></div>
- <div id="rhinoBadge" class="w" style="color:var(--mut)">Esperando masa de Rhino… (o usa un ejemplo)</div>
- <h2>0 · Medidas y normativa</h2>
- <details id="stdBox"><summary style="cursor:pointer;font-size:13px">Ver y editar medidas (mínimos y típicos)</summary><div id="stdPanel"></div>
-  <button class="s" onclick="resetStd()">Restaurar valores</button><div class="hint">Mínimos: Normativa Nacional de Edificación, Higiene de la Vivienda (2016), Bomberos IT 19, IM ductos de ascensor, Dec. 406/988; equipamiento: módulos habituales (Neufert). Detalle y fuentes en STANDARDS.md.</div></details>
- <h2>1 · Masa</h2>
- <label>Ejemplo <select id="sample"></select></label>
- <button class="s" onclick="nuevo()" title="Borra la masa, las polilíneas, los núcleos, las medianeras, las variantes y el resultado; conserva medidas, mix y colores">Nuevo (en blanco)</button>
- <div><button class="s" onclick="$('archivoProyecto').click()" title="Abre un proyecto guardado (.trazo.json) o una masa suelta (.json)">Abrir proyecto…</button><button class="s" onclick="guardarProyecto()" title="Guarda en un archivo la masa, las polilíneas, los núcleos, las medianeras, los patios, el mix, los parámetros y las medidas que cambiaste">Guardar proyecto</button><input type="file" id="archivoProyecto" accept=".json,application/json" style="display:none" onchange="leerProyecto(this)"></div>
- <details id="terrenoBox" open><summary style="cursor:pointer;font-size:13px;font-weight:600">Terreno rectangular (sin Rhino)</summary>
-  <label>Frente (m) <input type="number" id="ter_frente" value="10" min="3" step="0.5" title="El lado sobre la calle (abajo en la planta)"></label>
-  <label>Fondo (m) <input type="number" id="ter_fondo" value="30" min="3" step="0.5"></label>
-  <div class="tergrid"><span class="th">Lindero</span><span class="th">Medianera</span><span class="th">Retiro (m)</span>
-   <span>Izquierdo</span><input type="checkbox" id="ter_m_i" checked><input type="number" id="ter_r_i" value="0" min="0" step="0.5">
-   <span>Derecho</span><input type="checkbox" id="ter_m_d" checked><input type="number" id="ter_r_d" value="0" min="0" step="0.5">
-   <span>De fondo</span><input type="checkbox" id="ter_m_b"><input type="number" id="ter_r_b" value="0" min="0" step="0.5">
-   <span>Frente (calle)</span><span></span><input type="number" id="ter_r_f" value="0" min="0" step="0.5"></div>
-  <button class="s" onclick="terrenoRectangular()">Crear masa del terreno</button>
-  <div class="hint">La masa es el terreno menos los retiros. Una medianera sin retiro es ciega; con retiro de <span class="rmin">3</span> m o más pasa a ser fachada. Un lindero sin medianera es fachada.</div></details>
- <label>Altura total (m) <input type="number" id="height" value="15" step="0.5"></label>
- <label>Altura de planta (m) <input type="number" id="floor_height" value="3" step="0.1"></label>
- <label>Muro exterior (m) <input type="number" id="outer_wall" value="0.35" step="0.05"></label>
- <details><summary>Programa por planta</summary><div id="storyTable"></div></details>
- <button class="s" onclick="run('massing')">Calcular masa</button>
- <h2 style="margin-top:12px">Medianeras y retiros</h2>
- <div class="hint">Marca en la planta los bordes del predio contra linderos (líneas rojas). Sin retiro no admiten ventanas; con retiro ≥ <span id="rmin">3</span> m pasan a ser fachada.</div>
- <button class="s" id="btnMed" onclick="setTool('medianera')">Marcar medianeras</button><button class="s" onclick="if(medianeras.length)recordar('quitar las medianeras');medianeras=[];renderMeds();draw();if(lastStage)run(lastStage,{keepView:true})">Quitar todas</button>
- <div id="medList"></div>
- <h2 style="margin-top:12px">Patios</h2>
- <div class="hint">Patios de aire y luz: separan la masa en bloques, cada uno con su núcleo. Las estancias que dan a un patio de al menos <span id="pminTxt">3</span> m de ancho tienen luz.</div>
- <label>Modo <select id="patios_mode" onchange="patiosModeChanged()"><option value="auto">automático</option><option value="manual">manual</option></select></label>
- <button class="s" id="btnPatio" onclick="setTool('patio')">+ Dibujar patio</button><button class="s" onclick="quitarPatios()">Quitar todos</button>
- <div id="patioList"></div><div class="hint" id="patioInfo"></div>
- <h2>2 · Pasillo y núcleos</h2>
- <label>Tipo de pasillo (modo auto) <select id="loading"><option value="auto">auto</option><option value="double">central (doble crujía)</option><option value="single">de borde (simple)</option></select></label>
- <label>Ancho pasillo <input type="number" id="corridor_width" value="2" step="0.1"></label>
- <label>Núcleo automático (escalera + ascensores) <input type="checkbox" id="core_auto" checked onchange="$('core_width').disabled=$('core_depth').disabled=this.checked"></label>
- <label title="Automático: cada núcleo lleva los ascensores que piden las viviendas que sirve (1 cada 60), iguales en todos; desde 10 niveles, al menos 2 en el edificio">Ascensores por núcleo <select id="ascensores"><option value="auto">Automático</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></label>
- <label>Núcleo: ancho <input type="number" id="core_width" value="5" step="0.5" disabled></label>
- <label>Núcleo: fondo (incl. pasillo) <input type="number" id="core_depth" value="7" step="0.5" disabled></label>
- <label>Nº mínimo de núcleos <input type="number" id="core_count" value="2" min="1" max="8"></label>
- <label>Añadir núcleos si no cumple <input type="checkbox" id="auto_cores" checked></label>
- <label>Lado de núcleos <select id="core_side"><option value="alternate">alternar</option><option value="left">izquierda</option><option value="right">derecha</option></select></label>
- <label title="Largo máximo desde la puerta de una vivienda hasta un núcleo o hasta un punto desde el que se puede salir en dos direcciones">Fondo de saco máx. (m) <input type="number" id="egress_single" value="18"></label>
- <label title="Distancia máxima desde la puerta de una vivienda hasta el núcleo más cercano, por el pasillo">Recorrido máx. a un núcleo (m) <input type="number" id="egress_multi" value="30"></label>
-
- <h2 style="margin-top:12px">Líneas centrales (polilíneas)</h2>
- <div class="hint">Haz clic para cada vértice. Doble clic, Enter o «Terminar» cierran la línea. Arrastra los vértices para editarlos; clic derecho sobre un vértice lo borra. Sin líneas dibujadas, el pasillo es automático.</div>
- <button class="s" id="btnDraw" onclick="setTool('line')">Dibujar polilínea</button>
- <button class="s" onclick="finishLine()">Terminar</button>
- <button class="s" onclick="undoLine()">Borrar última</button>
- <button class="s" onclick="clearLines()">Auto</button>
- <label>Ortogonal (90°) <input type="checkbox" id="orto" checked></label>
- <div class="hint" id="lineInfo">Pasillo automático</div>
-
- <h2 style="margin-top:12px">Núcleos de circulación</h2>
- <label>Modo <select id="cores_mode" onchange="coresModeChanged()"><option value="auto">automático</option><option value="manual">manual</option></select></label>
- <button class="s" id="btnAddCore" onclick="setTool('addcore')">+ Añadir núcleo</button>
- <button class="s" id="btnDelCore" onclick="setTool('delcore')">Quitar núcleo</button>
- <div class="hint" id="coreInfo">Al añadir, quitar o arrastrar un núcleo se pasa a modo manual. Se ajusta al pasillo más cercano y se coloca en el lado donde haces clic o lo sueltas.</div>
- <button onclick="run('corridor')">Generar pasillo y núcleos</button>
-
- <h2>3 · Mix de unidades</h2>
- <div id="mix"></div><button class="s" onclick="addMix()">+ tipo</button>
- <label>Ancho mínimo unidad <input type="number" id="min_unit_width" value="5" step="0.5"></label>
- <label>Muro medianero (m) <input type="number" id="party_wall" value="0.3" step="0.05"></label>
- <label>Profundidad máx. unidad <input type="number" id="max_unit_depth" value="14"></label>
- <button onclick="run('mix')">Generar mix</button>
- <div class="hint" id="edInfo"></div>
- <h2>4 · Planos de unidad</h2>
- <button onclick="run('plans')">Generar planos</button>
- <h2>Variantes</h2>
- <div class="hint">Guarda la solución actual para compararla con otras (unidades, eficiencia, match, circulación…) y volver a la que elijas. Se guardan con el proyecto.</div>
- <button class="s" onclick="guardarVariante()">Guardar como variante</button><button class="s" id="btnVar" onclick="verVariantes()">Comparar (0)</button>
- <h2>Exportar</h2>
- <button class="s" onclick="dl('json')" title="El resultado calculado (para leerlo con otros programas); para retomar el trabajo usa «Guardar proyecto»">Resultado (JSON)</button><button class="s" onclick="dl('dxf')">DXF (Rhino)</button>
-</aside>
+<header class="top">
+ <span class="marca">Trazo</span><small id="ver"></small>
+ <nav class="modo" aria-label="Modo"><span class="on">Edificio</span><a href="/masterplan" title="Calles, manzanas, lotes y construcciones">Masterplan</a></nav>
+ <div class="masaTop"><b id="masaNombre"></b><small id="masaInfo"></small></div>
+ <div class="hist"><button class="s" id="btnUndo" onclick="deshacer()" disabled title="Deshacer (Ctrl+Z)">↶</button><button class="s" id="btnRedo" onclick="rehacer()" disabled title="Rehacer (Ctrl+Shift+Z)">↷</button></div>
+</header>
+<nav class="rail" id="rail" aria-label="Grupos">
+ <button data-grupo="proyecto" onclick="grupo('proyecto')" title="Proyecto: nuevo, abrir y guardar; ejemplos, variantes y exportar"><svg viewBox="0 0 24 24"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2h8.5A1.5 1.5 0 0 1 21 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z"/></svg><span>Proyecto</span></button>
+ <button data-grupo="masa" onclick="grupo('masa')" title="Masa: terreno, alturas, programa por planta, medianeras y patios"><svg viewBox="0 0 24 24"><path d="M12 3 3 8l9 5 9-5z"/><path d="m3 13 9 5 9-5"/></svg><span>Masa</span></button>
+ <button data-grupo="circ" onclick="grupo('circ')" title="Circulación: pasillo, líneas centrales, núcleos y evacuación"><svg viewBox="0 0 24 24"><path d="M4 20h4v-4h4v-4h4V8h4"/></svg><span>Circulación</span></button>
+ <button data-grupo="viviendas" onclick="grupo('viviendas')" title="Viviendas: mix, medidas de la unidad y planos"><svg viewBox="0 0 24 24"><path d="M4 11 12 4l8 7"/><path d="M6 10v10h12V10"/></svg><span>Viviendas</span></button>
+ <button data-grupo="normativa" onclick="grupo('normativa')" title="Normativa: medidas mínimas y típicas"><svg viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="8" rx="1.5"/><path d="M7 8v3M11 8v4M15 8v3M19 8v4"/></svg><span>Normativa</span></button>
+ <button data-grupo="vista" onclick="grupo('vista')" title="Vista: colores de los programas y leyenda"><svg viewBox="0 0 24 24"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span>Vista</span></button>
+</nav>
+<section class="panel" id="panel" hidden>
+ <div class="grupo" data-grupo="proyecto" hidden>
+  <header><b>Proyecto</b><small>Nuevo, abrir y guardar; la masa abierta, variantes y exportar.</small><button class="x" onclick="grupo(null)" title="Cerrar (Esc)">×</button></header>
+  <div class="cuerpo">
+   <h2>Archivo</h2>
+   <button class="s" onclick="nuevo()" title="Borra la masa, las polilíneas, los núcleos, las medianeras, las variantes y el resultado; conserva medidas, mix y colores">Nuevo (en blanco)</button><button class="s" onclick="$('archivoProyecto').click()" title="Abre un proyecto guardado (.trazo.json) o una masa suelta (.json)">Abrir proyecto…</button><button class="s" onclick="guardarProyecto()" title="Guarda en un archivo la masa, las polilíneas, los núcleos, las medianeras, los patios, el mix, los parámetros y las medidas que cambiaste">Guardar proyecto</button><input type="file" id="archivoProyecto" accept=".json,application/json" style="display:none" onchange="leerProyecto(this)">
+   <h2>Masa abierta</h2>
+   <label>Ejemplo <select id="sample"></select></label>
+   <div id="rhinoBadge" class="hint">Esperando masa de Rhino… (o usa un ejemplo)</div>
+   <h2>Variantes</h2>
+   <div class="hint">Guarda la solución actual para compararla con otras (unidades, eficiencia, match, circulación…) y volver a la que elijas. Se guardan con el proyecto.</div>
+   <button class="s" onclick="guardarVariante()">Guardar como variante</button><button class="s" id="btnVar" onclick="verVariantes()">Comparar (0)</button>
+   <h2>Exportar</h2>
+   <button class="s" onclick="dl('json')" title="El resultado calculado (para leerlo con otros programas); para retomar el trabajo usa «Guardar proyecto»">Resultado (JSON)</button><button class="s" onclick="dl('dxf')">DXF (Rhino)</button>
+  </div>
+ </div>
+ <div class="grupo" data-grupo="masa" hidden>
+  <header><b>Masa</b><small>Terreno, alturas y programa por planta, medianeras y patios.</small><button class="x" onclick="grupo(null)" title="Cerrar (Esc)">×</button></header>
+  <div class="cuerpo">
+   <h2>Terreno rectangular (sin Rhino)</h2>
+   <label>Frente (m) <input type="number" id="ter_frente" value="10" min="3" step="0.5" title="El lado sobre la calle (abajo en la planta)"></label>
+   <label>Fondo (m) <input type="number" id="ter_fondo" value="30" min="3" step="0.5"></label>
+   <div class="tergrid"><span class="th">Lindero</span><span class="th">Medianera</span><span class="th">Retiro (m)</span>
+    <span>Izquierdo</span><input type="checkbox" id="ter_m_i" checked><input type="number" id="ter_r_i" value="0" min="0" step="0.5">
+    <span>Derecho</span><input type="checkbox" id="ter_m_d" checked><input type="number" id="ter_r_d" value="0" min="0" step="0.5">
+    <span>De fondo</span><input type="checkbox" id="ter_m_b"><input type="number" id="ter_r_b" value="0" min="0" step="0.5">
+    <span>Frente (calle)</span><span></span><input type="number" id="ter_r_f" value="0" min="0" step="0.5"></div>
+   <button class="s" onclick="terrenoRectangular()">Crear masa del terreno</button>
+   <div class="hint">La masa es el terreno menos los retiros. Una medianera sin retiro es ciega; con retiro de <span class="rmin">3</span> m o más pasa a ser fachada. Un lindero sin medianera es fachada.</div>
+   <h2>Alturas</h2>
+   <label>Altura total (m) <input type="number" id="height" value="15" step="0.5"></label>
+   <label>Altura de planta (m) <input type="number" id="floor_height" value="3" step="0.1"></label>
+   <label>Muro exterior (m) <input type="number" id="outer_wall" value="0.35" step="0.05"></label>
+   <h2>Programa por planta</h2>
+   <div id="storyTable"></div>
+   <div class="hint">También en 3D: clic en un nivel para cambiar su programa o su altura.</div>
+   <h2>Medianeras y retiros</h2>
+   <div class="hint">Los bordes del predio contra linderos (líneas rojas) se marcan con <b>Medianera</b> en la barra de dibujo. Sin retiro no admiten ventanas; con retiro ≥ <span id="rmin">3</span> m pasan a ser fachada.</div>
+   <button class="s" onclick="quitarMedianeras()">Quitar todas</button>
+   <div id="medList"></div>
+   <h2>Patios</h2>
+   <div class="hint">Patios de aire y luz: separan la masa en bloques, cada uno con su núcleo. Las estancias que dan a un patio de al menos <span id="pminTxt">3</span> m de ancho tienen luz. Se dibujan con <b>Patio</b> en la barra de dibujo.</div>
+   <label>Modo <select id="patios_mode" onchange="patiosModeChanged()"><option value="auto">automático</option><option value="manual">manual</option></select></label>
+   <button class="s" onclick="quitarPatios()">Quitar todos</button>
+   <div id="patioList"></div><div class="hint" id="patioInfo"></div>
+  </div>
+  <div class="pie"><button onclick="run('massing')">Calcular masa</button></div>
+ </div>
+ <div class="grupo" data-grupo="circ" hidden>
+  <header><b>Circulación</b><small>Pasillo, líneas centrales, núcleos y evacuación.</small><button class="x" onclick="grupo(null)" title="Cerrar (Esc)">×</button></header>
+  <div class="cuerpo">
+   <h2>Pasillo</h2>
+   <label>Tipo de pasillo (modo auto) <select id="loading"><option value="auto">auto</option><option value="double">central (doble crujía)</option><option value="single">de borde (simple)</option></select></label>
+   <label>Ancho pasillo <input type="number" id="corridor_width" value="2" step="0.1"></label>
+   <h2>Líneas centrales (polilíneas)</h2>
+   <div class="hint">Se dibujan con <b>Línea</b> en la barra de dibujo: clic para cada vértice; doble clic, Enter o «Terminar» cierran la línea. Arrastra los vértices para editarlos; clic derecho sobre un vértice lo borra. Sin líneas dibujadas, el pasillo es automático.</div>
+   <label><span class="hint" id="lineInfo" style="margin:0">Pasillo automático</span><button class="s" onclick="clearLines()" title="Borra las líneas dibujadas y vuelve al pasillo automático">Auto</button></label>
+   <h2>Núcleos</h2>
+   <label>Modo <select id="cores_mode" onchange="coresModeChanged()"><option value="auto">automático</option><option value="manual">manual</option></select></label>
+   <label>Núcleo automático (escalera + ascensores) <input type="checkbox" id="core_auto" checked onchange="$('core_width').disabled=$('core_depth').disabled=this.checked"></label>
+   <label title="Automático: cada núcleo lleva los ascensores que piden las viviendas que sirve (1 cada 60), iguales en todos; desde 10 niveles, al menos 2 en el edificio">Ascensores por núcleo <select id="ascensores"><option value="auto">Automático</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></label>
+   <label>Núcleo: ancho <input type="number" id="core_width" value="5" step="0.5" disabled></label>
+   <label>Núcleo: fondo (incl. pasillo) <input type="number" id="core_depth" value="7" step="0.5" disabled></label>
+   <label>Nº mínimo de núcleos <input type="number" id="core_count" value="2" min="1" max="8"></label>
+   <label>Añadir núcleos si no cumple <input type="checkbox" id="auto_cores" checked></label>
+   <label>Lado de núcleos <select id="core_side"><option value="alternate">alternar</option><option value="left">izquierda</option><option value="right">derecha</option></select></label>
+   <div class="hint" id="coreInfo">Al añadir, quitar o arrastrar un núcleo se pasa a modo manual. Se ajusta al pasillo más cercano y se coloca en el lado donde haces clic o lo sueltas.</div>
+   <div class="hint">Se añaden y se quitan con <b>Núcleo</b> en la barra de dibujo; un clic en un núcleo abre su ficha.</div>
+   <h2>Evacuación</h2>
+   <label title="Largo máximo desde la puerta de una vivienda hasta un núcleo o hasta un punto desde el que se puede salir en dos direcciones">Fondo de saco máx. (m) <input type="number" id="egress_single" value="18"></label>
+   <label title="Distancia máxima desde la puerta de una vivienda hasta el núcleo más cercano, por el pasillo">Recorrido máx. a un núcleo (m) <input type="number" id="egress_multi" value="30"></label>
+  </div>
+  <div class="pie"><button onclick="run('corridor')">Generar pasillo y núcleos</button></div>
+ </div>
+ <div class="grupo" data-grupo="viviendas" hidden>
+  <header><b>Viviendas</b><small>Mix y accesibles, medidas de la unidad y planos.</small><button class="x" onclick="grupo(null)" title="Cerrar (Esc)">×</button></header>
+  <div class="cuerpo">
+   <h2>Mix de unidades</h2>
+   <div id="mix"></div><button class="s" onclick="addMix()">+ tipo</button>
+   <h2>Medidas de la unidad</h2>
+   <label>Ancho mínimo unidad <input type="number" id="min_unit_width" value="5" step="0.5"></label>
+   <label title="El muro entre dos viviendas vecinas (antes «Muro medianero»: no es la medianera del predio)">Muro entre viviendas (m) <input type="number" id="party_wall" value="0.3" step="0.05"></label>
+   <label>Profundidad máx. unidad <input type="number" id="max_unit_depth" value="14"></label>
+   <h2>Viviendas editadas</h2>
+   <div class="hint" id="edInfo"></div>
+   <h2>Planos de unidad</h2>
+   <div class="hint">Distribuye cada vivienda: estancias, puertas, ventanas y equipamiento. Para ajustarla por dentro, clic en ella: su ficha lista las puertas, y sus tabiques interiores se arrastran.</div>
+  </div>
+  <div class="pie"><button class="s" onclick="run('mix')">Generar mix</button><button onclick="run('plans')">Generar planos</button></div>
+ </div>
+ <div class="grupo" data-grupo="normativa" hidden>
+  <header><b>Normativa</b><small>Medidas mínimas y típicas de la vivienda, el núcleo y el predio.</small><button class="x" onclick="grupo(null)" title="Cerrar (Esc)">×</button></header>
+  <div class="cuerpo">
+   <div class="hint">Mínimos: Normativa Nacional de Edificación, Higiene de la Vivienda (2016), Bomberos IT 19, IM ductos de ascensor, Dec. 406/988; equipamiento: módulos habituales (Neufert). Detalle y fuentes en STANDARDS.md.</div>
+   <div id="stdPanel"></div>
+  </div>
+  <div class="pie"><button class="s" onclick="resetStd()">Restaurar valores</button></div>
+ </div>
+ <div class="grupo" data-grupo="vista" hidden>
+  <header><b>Vista</b><small>Colores y leyenda. La vista 2D/3D, el nivel y las capas están sobre la planta.</small><button class="x" onclick="grupo(null)" title="Cerrar (Esc)">×</button></header>
+  <div class="cuerpo">
+   <h2>Leyenda</h2>
+   <div id="legendColors"></div>
+   <div class="k"><span>Salida única ≤ límite</span><b style="color:var(--ok)">●</b></div>
+   <div class="k"><span>Solo salidas múltiples</span><b style="color:var(--mid)">●</b></div>
+   <div class="k"><span>No cumple</span><b style="color:var(--bad)">●</b></div>
+   <div class="k"><span>Línea central</span><b style="color:var(--acc)">- - -</b></div>
+   <div class="k"><span>Medianera (sin ventanas)</span><b style="color:#d63b3b">━━</b></div>
+   <div class="k"><span>Conexión abierta</span><b style="color:#1a9d5b">——</b></div>
+   <div class="k"><span>Conexión con puerta</span><b style="color:#2f6fed">- - -</b></div>
+   <div class="k"><span>Conexión que no cumple</span><b style="color:#d63b3b">——</b></div>
+  </div>
+ </div>
+</section>
 <main>
+ <button class="s encuadre" title="Encuadrar" onclick="zoom=1;pan=[0,0];render()"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
  <div class="viewbar">
-  <button class="s on" id="vPlan" onclick="setView('plan')">Planta 2D</button><button class="s" id="vAxo" onclick="setView('axo')">Axonometría 3D</button>
-  <button class="s" id="btnUndo" style="padding:2px 9px" onclick="deshacer()" disabled title="Deshacer (Ctrl+Z)">↶</button><button class="s" id="btnRedo" style="padding:2px 9px" onclick="rehacer()" disabled title="Rehacer (Ctrl+Shift+Z)">↷</button>
-  <span class="grp" id="lvlGrp">Nivel <select id="lvl" onchange="planStory=+this.value;draw()"></select>
-   <label style="margin:0;gap:4px"><input type="checkbox" id="showGraph" checked onchange="showGraph=this.checked;draw()">Conexiones</label>
-   <label style="margin:0;gap:4px" title="Artefactos de baños, cocina y lavadero, y muebles"><input type="checkbox" id="showEquip" checked onchange="showEquip=this.checked;draw()">Equipamiento</label>
-   <label style="margin:0;gap:4px" title="Medidas totales por fuera de la planta y escala gráfica"><input type="checkbox" id="showDims" checked onchange="showDims=this.checked;draw()">Cotas</label>
-   <label style="margin:0;gap:4px" title="Tramos de pasillo y viviendas que no cumplen el fondo de saco (naranja) o el recorrido máximo (rojo)"><input type="checkbox" id="showEvac" checked onchange="showEvac=this.checked;draw()">Evacuación</label>
-   <label style="margin:0;gap:4px" title="Al pasar el mouse por la planta: nombre y superficie de cada estancia, vivienda, núcleo, pasillo o patio"><input type="checkbox" id="showTip" checked onchange="showTip=this.checked;ocultarDato()">Datos al pasar</label>
-   <button class="s" style="padding:2px 7px" title="Encuadrar" onclick="zoom=1;pan=[0,0];draw()">⤢</button></span>
+  <span class="seg"><button class="on" id="vPlan" onclick="setView('plan')">Planta 2D</button><button id="vAxo" onclick="setView('axo')">Axonometría 3D</button></span>
+  <span class="grp" id="lvlGrp">Nivel <select id="lvl" onchange="planStory=+this.value;draw()"></select></span>
+  <details class="capas" id="capas"><summary class="grp" title="Qué se dibuja en la planta"><svg viewBox="0 0 24 24"><path d="M12 3 3 8l9 5 9-5z"/><path d="m3 13 9 5 9-5"/></svg>Capas <small id="nCapas"></small></summary><div>
+   <label title="Conexiones entre estancias: abiertas (verde) y con puerta (azul)"><span>Conexiones</span><input type="checkbox" id="showGraph" checked onchange="showGraph=this.checked;draw();capas()"></label>
+   <label title="Artefactos de baños, cocina y lavadero, y muebles"><span>Equipamiento</span><input type="checkbox" id="showEquip" checked onchange="showEquip=this.checked;draw();capas()"></label>
+   <label title="Medidas totales por fuera de la planta y escala gráfica"><span>Cotas</span><input type="checkbox" id="showDims" checked onchange="showDims=this.checked;draw();capas()"></label>
+   <label title="Tramos de pasillo y viviendas que no cumplen el fondo de saco (naranja) o el recorrido máximo (rojo)"><span>Evacuación</span><input type="checkbox" id="showEvac" checked onchange="showEvac=this.checked;draw();capas()"></label>
+   <label title="Al pasar el mouse por la planta: nombre y superficie de cada estancia, vivienda, núcleo, pasillo o patio"><span>Datos al pasar</span><input type="checkbox" id="showTip" checked onchange="showTip=this.checked;ocultarDato();capas()"></label>
+  </div></details>
   <span class="grp" id="axoCtl" style="display:none">
    <button class="s" style="padding:2px 7px" title="Girar 45°" onclick="view3.az-=Math.PI/4;drawAxo()">⟲</button><button class="s" style="padding:2px 7px" title="Girar 45°" onclick="view3.az+=Math.PI/4;drawAxo()">⟳</button>
    Explosión <input type="range" id="explode" min="0" max="8" step="0.5" value="0" oninput="view3.explode=+this.value;drawAxo()">
@@ -124,29 +213,33 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:3px 4px;b
    <label style="margin:0;gap:4px"><input type="checkbox" id="wire" onchange="view3.wire=this.checked;drawAxo()">Alambre</label>
   </span>
  </div>
- <div class="ctx" id="ctx" style="display:none"></div>
  <div class="dato" id="dato" style="display:none"></div>
- <div class="ctx" id="varPanel" style="display:none;left:10px;width:auto;top:auto;bottom:40px;max-height:60%;overflow:auto"></div>
+ <div class="ctx" id="varPanel" style="display:none;left:10px;width:auto;top:auto;bottom:70px;max-height:60%;overflow:auto"></div>
  <div class="tag" id="tag">Listo</div>
+ <div class="herr" id="herr" style="display:none"></div>
+ <div class="dibujo" id="dibujo" aria-label="Barra de dibujo">
+  <button id="btnDraw" data-tool="line" onclick="setTool('line')" title="Línea central del pasillo (polilínea)"><svg viewBox="0 0 24 24"><path d="M4 18 9 9l5 6 6-10"/></svg>Línea</button>
+  <button id="btnAddCore" data-tool="addcore" onclick="setTool('addcore')" title="Añadir núcleo (y quitar, desde la barra que aparece)"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="1.5"/><path d="M4 12h16M12 4v16"/></svg>Núcleo</button>
+  <button id="btnMed" data-tool="medianera" onclick="setTool('medianera')" title="Marcar o desmarcar un borde de la planta como medianera"><svg viewBox="0 0 24 24"><path d="M5 5h14v14H5z" stroke-dasharray="2 2.5"/><path d="M5 4v16" stroke="#d63b3b" stroke-width="2.4"/></svg>Medianera</button>
+  <button id="btnPatio" data-tool="patio" onclick="setTool('patio')" title="Dibujar un patio (dos esquinas opuestas)"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16"/><path d="M4 12 12 4M4 20 20 4M12 20l8-8"/></svg>Patio</button>
+  <span class="sep"></span>
+  <label class="toggle on" title="Ortogonal: las líneas van a 90° (F8)"><input type="checkbox" id="orto" checked onchange="this.parentNode.classList.toggle('on',this.checked)">ORTO <kbd>F8</kbd></label>
+ </div>
  <svg id="svg"><defs><pattern id="hatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="8" height="8" fill="rgba(120,120,130,.12)"/><line x1="0" y1="0" x2="0" y2="8" stroke="#8a8f99" stroke-width="1.2"/></pattern></defs><g id="gb"></g><g id="go"></g></svg>
  <svg id="axo" style="display:none"></svg>
 </main>
 <aside class="r">
- <h2>Programas</h2><div id="donut"></div><div id="progList"></div>
- <div class="hint">Clic en un programa: selecciona sus niveles (Shift suma). En 3D: clic = nivel, Shift = rango, Ctrl/Cmd = sueltos, doble clic = ver planta, arrastrar = girar.</div>
- <h2>Métricas</h2><div id="metrics"></div>
+ <div class="ctx ficha" id="ctx" style="display:none"></div>
+ <div class="resTit"><h2>Resumen</h2><button class="lnk" id="btnTodo" onclick="verTodo()">Ver todo ›</button></div>
+ <div id="resumen"><div class="hint">Genera la planta para ver el resumen.</div></div>
  <h2>Avisos</h2><div id="warns"></div>
- <h2>Unidades</h2><div id="units"></div>
- <h2>Leyenda</h2>
- <div id="legendColors"></div>
- <div class="k"><span>Salida única ≤ límite</span><b style="color:var(--ok)">●</b></div>
- <div class="k"><span>Solo salidas múltiples</span><b style="color:var(--mid)">●</b></div>
- <div class="k"><span>No cumple</span><b style="color:var(--bad)">●</b></div>
- <div class="k"><span>Línea central</span><b style="color:var(--acc)">- - -</b></div>
- <div class="k"><span>Medianera (sin ventanas)</span><b style="color:#d63b3b">━━</b></div>
- <div class="k"><span>Conexión abierta</span><b style="color:#1a9d5b">——</b></div>
- <div class="k"><span>Conexión con puerta</span><b style="color:#2f6fed">- - -</b></div>
- <div class="k"><span>Conexión que no cumple</span><b style="color:#d63b3b">——</b></div>
+ <div id="todo" hidden>
+  <h2>Programas</h2><div id="donut"></div><div id="progList"></div>
+  <div class="hint">Clic en un programa: selecciona sus niveles (Shift suma). En 3D: clic = nivel, Shift = rango, Ctrl/Cmd = sueltos, doble clic = ver planta, arrastrar = girar.</div>
+  <h2>Métricas</h2><div id="metrics"></div>
+  <h2>Unidades</h2><div id="units"></div>
+ </div>
+ <div class="hint" id="pistaFicha">Clic en una vivienda o en un núcleo de la planta para ver su ficha.</div>
 </aside>
 <script>
 const $=id=>document.getElementById(id), NS='http://www.w3.org/2000/svg';
@@ -196,7 +289,8 @@ function runCirc(){ return run(lastStage&&lastStage!=='massing'?lastStage:'corri
 /* ---------- geometría de la vista ---------- */
 let zoom=1, pan=[0,0];
 function lote(){ return terreno?[[0,0],[terreno.frente,0],[terreno.frente,terreno.fondo],[0,terreno.fondo]]:null; }   // el terreno, si la masa salió de él
-function fit(){ const todo=footprint.concat(lote()||[]), xs=todo.map(p=>p[0]),ys=todo.map(p=>p[1]); const x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys); const W=$('svg').clientWidth||800,H=$('svg').clientHeight||600,m=50; const s=Math.min((W-2*m)/(x1-x0||1),(H-2*m)/(y1-y0||1)); view={s,ox:m-x0*s+((W-2*m)-(x1-x0)*s)/2,oy:H-m+y0*s-((H-2*m)-(y1-y0)*s)/2};
+function fit(){ const todo=footprint.concat(lote()||[]), xs=todo.map(p=>p[0]),ys=todo.map(p=>p[1]); const x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys); const W=$('svg').clientWidth||800,H=$('svg').clientHeight||600,m=50,mt=62,mb=82;   // arriba, la vista y las capas; abajo, la barra de dibujo
+ const s=Math.min((W-2*m)/(x1-x0||1),(H-mt-mb)/(y1-y0||1)); view={s,ox:m-x0*s+((W-2*m)-(x1-x0)*s)/2,oy:H-mb+y0*s-((H-mt-mb)-(y1-y0)*s)/2};
  const cxs=W/2, cys=H/2; view.s*=zoom; view.ox=cxs+(view.ox-cxs)*zoom+pan[0]; view.oy=cys+(view.oy-cys)*zoom+pan[1]; }
 const X=p=>view.ox+p[0]*view.s, Y=p=>view.oy-p[1]*view.s, pts=poly=>poly.map(p=>X(p)+','+Y(p)).join(' ');
 function el(t,a,txt){ const e=document.createElementNS(NS,t); for(const k in a)e.setAttribute(k,a[k]); if(txt)e.textContent=txt; return e;}
@@ -493,10 +587,10 @@ function edInfo(){ $('edInfo').innerHTML=ediciones.length?`${ediciones.length} c
 
 /* ---------- herramientas ---------- */
 function setTool(t){ if(viewMode!=='plan') setView('plan'); if(tool==='line'&&t!=='line') finishLine(); curPatio=[]; tool=(tool===t)?null:t;
- $('btnDraw').classList.toggle('on',tool==='line'); $('btnAddCore').classList.toggle('on',tool==='addcore'); $('btnDelCore').classList.toggle('on',tool==='delcore'); $('btnMed').classList.toggle('on',tool==='medianera'); $('btnPatio').classList.toggle('on',tool==='patio'); medHover=null;
+ document.querySelectorAll('[data-tool]').forEach(b=>b.classList.toggle('on',b.dataset.tool===tool||(b.dataset.tool==='addcore'&&tool==='delcore'))); medHover=null;   // R4.6: barra de dibujo
  $('svg').style.cursor=tool?'crosshair':'default';
- $('tag').textContent=tool==='line'?'Polilínea: clic para cada vértice; doble clic o Enter para terminar':tool==='addcore'?'Haz clic cerca de un pasillo para añadir un núcleo':tool==='delcore'?'Haz clic sobre un núcleo para quitarlo':tool==='medianera'?'Haz clic sobre un borde de la planta para marcarlo o desmarcarlo como medianera':tool==='patio'?'Patio: clic en dos esquinas opuestas (se alinea con el edificio). Esc para terminar':'Listo'; curLine=[]; drawOverlay(); }
-function finishLine(){ if(curLine.length>=2){ recordar('dibujar polilínea'); centerlines.push(curLine); } curLine=[]; if(tool==='line'){ tool=null; $('btnDraw').classList.remove('on'); $('svg').style.cursor='default'; $('tag').textContent='Línea creada'; } lineInfo(); drawOverlay(); if(centerlines.length&&lastStage) runCirc(); }
+ $('tag').textContent=tool==='line'?'Polilínea: clic para cada vértice; doble clic o Enter para terminar':tool==='addcore'?'Haz clic cerca de un pasillo para añadir un núcleo':tool==='delcore'?'Haz clic sobre un núcleo para quitarlo':tool==='medianera'?'Haz clic sobre un borde de la planta para marcarlo o desmarcarlo como medianera':tool==='patio'?'Patio: clic en dos esquinas opuestas (se alinea con el edificio). Esc para terminar':'Listo'; curLine=[]; drawOverlay(); herramientaBar(); }
+function finishLine(){ if(curLine.length>=2){ recordar('dibujar polilínea'); centerlines.push(curLine); } curLine=[]; if(tool==='line'){ tool=null; $('btnDraw').classList.remove('on'); $('svg').style.cursor='default'; $('tag').textContent='Línea creada'; herramientaBar(); } lineInfo(); drawOverlay(); if(centerlines.length&&lastStage) runCirc(); }
 function undoLine(){ if(curLine.length){curLine.pop();} else { if(centerlines.length) recordar('borrar la última polilínea'); centerlines.pop(); } lineInfo(); drawOverlay(); if(lastStage) runCirc(); }
 function clearLines(){ if(centerlines.length) recordar('volver al pasillo automático'); centerlines=[]; curLine=[]; lineInfo(); drawOverlay(); if(lastStage) runCirc(); }
 function lineInfo(){ $('lineInfo').textContent=centerlines.length?centerlines.length+' polilínea(s), '+centerlines.reduce((a,p)=>a+p.length,0)+' vértices':'Pasillo automático'; }
@@ -591,7 +685,8 @@ svg.addEventListener('pointerup',e=>{ if(!dragCore) return; const g=dragCore; dr
 window.addEventListener('keydown',e=>{ const t=e.target, texto=t.tagName==='TEXTAREA'||(t.tagName==='INPUT'&&!/^(checkbox|radio|button|file|range|color)$/.test(t.type));   // en un campo de texto, su propio deshacer
  if((e.ctrlKey||e.metaKey)&&!texto){ const k=e.key.toLowerCase();
   if(k==='z'&&!e.shiftKey){ e.preventDefault(); deshacer(); return; } if((k==='z'&&e.shiftKey)||k==='y'){ e.preventDefault(); rehacer(); return; } }
- if(e.key==='Enter'&&tool==='line') finishLine(); if(e.key==='Escape'){ curLine=[]; curPatio=[]; if(tool) setTool(tool); drawOverlay(); } });
+ if(e.key==='Enter'&&tool==='line') finishLine(); if(e.key==='Escape'){ if(!tool&&!curLine.length&&!$('panel').hidden&&!texto) grupo(null); curLine=[]; curPatio=[]; if(tool) setTool(tool); drawOverlay(); }
+ if(e.key==='F8'){ e.preventDefault(); const o=$('orto'); o.checked=!o.checked; o.onchange(); } });   // R4.6: F8 = Orto, como en AutoCAD
 
 /* ---------- programas ---------- */
 let PROGS=[{key:'Residential',label:'Residencial',color:'#f2a93b'},{key:'Retail',label:'Comercial',color:'#9b6bd6'},{key:'Office',label:'Oficinas',color:'#4f8fe6'},{key:'Circulation',label:'Circulación',color:'#8a94a6'},{key:'Parking',label:'Estacionamiento',color:'#5c6370'},{key:'Amenities',label:'Amenities',color:'#2bb38a'}];
@@ -623,11 +718,32 @@ function drawDonut(progs){ const ent=Object.entries(progs); const tot=ent.reduce
  $('progList').innerHTML=ent.map(([k,v])=>`<div class="prow" onclick="selectProgram('${k}',event)"><input type="color" title="Cambiar color" value="${progColor(k)}" onclick="event.stopPropagation()" oninput="setProgColor('${k}',this.value)" style="width:22px;height:18px;padding:0;border:0;background:none;cursor:pointer"><span>${progLabel(k)} · ${v.stories} nivel(es)</span><b>${(v.gfa/tot*100).toFixed(0)}%</b></div>`).join(''); }
 function selectProgram(k,e){ if(!result) return; if(!(e&&e.shiftKey)) sel.clear(); result.stories.forEach(s=>{ if(s.program===k) sel.add(s.index); }); if(viewMode!=='axo') setView('axo'); else { drawAxo(); ctxPanel(); } }
 
+/* ---------- interfaz por grupos (R4.6, opción B): riel, panel, capas, barra de dibujo, resumen y barra superior ---------- */
+function grupo(k){ const p=$('panel'), ab=k&&!(p.dataset.g===k&&!p.hidden)?k:null;   // un grupo a la vez; otro clic en el mismo lo cierra
+ document.querySelectorAll('.grupo').forEach(g=>{ g.hidden=g.dataset.grupo!==ab; }); document.querySelectorAll('.rail button').forEach(b=>b.classList.toggle('on',b.dataset.grupo===ab));
+ p.hidden=!ab; p.dataset.g=ab||''; try{ localStorage.setItem('trazo.grupo',ab||''); }catch(e){} render(); }
+function herramientaBar(){ const h=$('herr'); $('tag').style.visibility=tool?'hidden':''; if(!tool){ h.style.display='none'; return; }   // la herramienta activa: qué hacer y sus botones
+ const b=(t,f,tt)=>`<button class="s" onclick="${f}"${tt?' title="'+tt+'"':''}>${t}</button>`;
+ h.innerHTML='<span>'+esc($('tag').textContent)+'</span>'+(tool==='line'?b('Terminar','finishLine()')+b('Borrar última','undoLine()','La última línea o el último vértice'):
+  tool==='addcore'?b('Quitar núcleo',"setTool('delcore')"):tool==='delcore'?b('Añadir núcleo',"setTool('addcore')"):tool==='medianera'?b('Quitar todas','quitarMedianeras()'):tool==='patio'?b('Quitar todos','quitarPatios()'):'')+
+  '<span class="esc"><kbd>Esc</kbd> salir</span>'; h.style.display='flex'; }
+function quitarMedianeras(){ if(medianeras.length) recordar('quitar las medianeras'); medianeras=[]; renderMeds(); draw(); if(lastStage) run(lastStage,{keepView:true}); }
+function capas(){ const ks=['showGraph','showEquip','showDims','showEvac','showTip']; $('nCapas').textContent=ks.filter(k=>$(k).checked).length+' de '+ks.length; }
+function verTodo(v){ const t=$('todo'); t.hidden=v!=null?!v:!t.hidden; $('btnTodo').textContent=t.hidden?'Ver todo ›':'Ver menos ‹'; }
+function resumenPanel(){ const e=$('resumen'), m=result&&result.metrics, mx=m&&m.mix; if(!m||!mx){ e.innerHTML='<div class="hint">Genera el mix o los planos para ver el resumen.</div>'+(m&&m.gfa?`<div class="k"><span>GFA</span><b>${m.gfa} m²</b></div><div class="k"><span>Plantas</span><b>${m.stories}</b></div>`:''); return; }
+ const c=(t,v,u)=>`<div><span>${t}</span><b>${v??'-'}</b>${u?' <small>'+u+'</small>':''}</div>`, q=m.plan_score;
+ e.innerHTML='<div class="res">'+c('Unidades/planta',mx.count)+c('Unidades totales',m.units_total)+c('NSA total',m.nsa_total,'m²')+c('Eficiencia',m.efficiency_total,'%')+'</div>'+
+  (q!=null?`<div class="k"><span>Calidad de planos</span><i><i style="width:${q}%;background:${q>=90?'var(--ok)':q>=70?'#d39a1f':'var(--bad)'}"></i></i><b>${q} %</b></div>`:'')+
+  `<div class="k"><span>Núcleos</span><b>${m.core_count??'-'}</b></div>`+(m.core?`<div class="k"><span>Ascensores</span><b>${ascensoresTxt(m)}</b></div>`:''); }
+function estadoTop(){ const s=$('sample'), o=s.selectedOptions&&s.selectedOptions[0], st=result&&result.stories;
+ $('masaNombre').textContent=footprint.length?(o&&!o.disabled?o.textContent:nombre||'Masa'):'En blanco';
+ $('masaInfo').textContent=footprint.length?[st?st.length+' nivel'+(st.length===1?'':'es'):null,lastStage?'etapa: '+({massing:'masa',corridor:'pasillo y núcleos',mix:'mix',plans:'planos'}[lastStage]||lastStage):null].filter(Boolean).join(' · '):''; }
 /* ---------- vistas ---------- */
 let viewMode='plan', planStory=null, sel=new Set(), anchor=null;
 let view3={az:-0.65, el:0.62, explode:0, plans:true, isolate:false, wire:false};
 function setView(m,silent){ viewMode=m; $('svg').style.display=m==='plan'?'block':'none'; $('axo').style.display=m==='axo'?'block':'none';
  $('vPlan').classList.toggle('on',m==='plan'); $('vAxo').classList.toggle('on',m==='axo'); $('axoCtl').style.display=m==='axo'?'inline-flex':'none'; $('lvlGrp').style.display=m==='plan'?'inline-flex':'none';
+ ['dibujo','capas'].forEach(k=>{ $(k).style.display=m==='plan'?'':'none'; }); document.querySelector('.encuadre').style.display=m==='plan'?'':'none'; if(m!=='plan') $('herr').style.display='none';   // R4.6: lo de la planta, solo en 2D
  if(m==='plan'&&tool==null) $('svg').style.cursor='default'; if(!silent){ render(); ctxPanel(); } }
 function fillLevels(){ if(!result||!result.stories) return; const s=$('lvl'); if(planStory==null||planStory>=result.stories.length){ const r=result.stories.find(x=>x.program==='Residential'); planStory=r?r.index:0; }
  s.innerHTML=result.stories.map(st=>`<option value="${st.index}" ${st.index===planStory?'selected':''}>${st.index} · ${progLabel(st.program)}</option>`).join(''); }
@@ -702,10 +818,10 @@ function panels(){ const m=result.metrics||{}, mx=m.mix; drawDonut(m.programs||{
  $('progList').innerHTML+=Object.entries(m.programs||{}).map(([k,v])=>v.stalls!=null?`<div class="hint">${progLabel(k)}: ${v.stalls} plazas en total</div>`:v.workers!=null?`<div class="hint">${progLabel(k)}: ${v.free_area} m² de planta libre, ${v.workers} personas</div>`:'').join(''); let h=`<div class="k"><span>Área por planta</span><b>${m.plate_area} m²</b></div><div class="k"><span>Plantas</span><b>${m.stories}</b></div><div class="k"><span>GFA</span><b>${m.gfa} m²</b></div>`+(m.blocks?`<div class="k"><span>Bloques</span><b>${m.blocks}</b></div><div class="k"><span>Patios</span><b>${m.patio_area} m²</b></div>`:'');
  if(m.core_count!=null) h+=`<div class="k"><span>Núcleos</span><b>${m.core_count}</b></div><div class="k"><span>Circulación</span><b>${m.circulation_pct??'-'}%</b></div>${m.core?`<div class="k"><span>Núcleo (frente × fondo)</span><b>${m.core.width} × ${m.core.depth} m</b></div><div class="k"><span>Ascensores</span><b>${ascensoresTxt(m)}</b></div><div class="k"><span>Escalera</span><b>${m.core.stair_type}</b></div><div class="k"><span>Contrahuellas por piso</span><b>${m.core.risers} × ${(m.core.riser_h*100).toFixed(1)} cm</b></div>`:''}<div class="k"><span>Tramos de pasillo</span><b>${m.wings}</b></div><div class="k"><span>Máx. distancia a núcleo</span><b>${m.egress_max} m</b></div>`;
  if(mx) h+=`<div class="k"><span>Sin usar</span><b>${m.unused_area??'-'} m²</b></div>${m.dark_area?`<div class="k"><span>Sin luz natural</span><b>${m.dark_area} m²</b></div>`:''}<div class="k"><span>Unidades/planta</span><b>${mx.count}</b></div><div class="k"><span>Unidades totales</span><b>${m.units_total}</b></div><div class="k"><span>Match score</span><b>${mx.match_score}%</b></div><div class="k"><span>Fit medio</span><b>±${mx.fit_m2} m²</b></div><div class="k"><span>Unidades únicas</span><b>${mx.unique_units}</b></div><div class="k"><span>NSA total</span><b>${m.nsa_total} m²</b></div><div class="k"><span>Eficiencia</span><b>${m.efficiency_total}%</b></div>`+(m.plan_score!=null?`<div class="k"><span>Calidad de planos</span><b>${m.plan_score}%</b></div>`:'')+Object.entries(mx.by_type).map(([k,v])=>`<div class="k"><span>${k}</span><b>${v.count} × ${v.avg_area} m²</b></div>`).join('');
- $('metrics').innerHTML=h; $('warns').innerHTML=(result.warnings||[]).slice(0,12).map(w=>`<div class="w">⚠ ${w}</div>`).join('')||'<div style="color:var(--mut)">Sin avisos</div>';
+ $('metrics').innerHTML=h; $('warns').innerHTML=(result.warnings||[]).slice(0,12).map(w=>`<div class="w">⚠ ${w}</div>`).join('')||'<div style="color:var(--mut)">Sin avisos</div>'; resumenPanel(); estadoTop();
  $('units').innerHTML=(result.units?'<table><tr><th>ID</th><th>Tipo</th><th>m²</th><th>Dorm</th><th>Evac.</th><th>Plano</th></tr>'+result.units.map(u=>`<tr style="cursor:pointer" onclick="selUnit='${u.id}';if(viewMode!=='plan')setView('plan');else{draw();unitPanel();}"><td>${u.id}</td><td>${u.type}</td><td>${u.area}</td><td>${u.bedrooms??'-'}</td><td style="color:${u.egress_status&&u.egress_status!=='ok'?EVAC[u.egress_status]:'inherit'}">${u.egress} m${u.egress_status==='saco'?' ⚠':''}</td><td>${u.plan_score!=null?u.plan_score+'%':'-'}</td></tr>`).join('')+'</table>':''); }
-function panels2(){ $('donut').innerHTML='';$('progList').innerHTML=''; $('metrics').innerHTML='';$('warns').innerHTML='';$('units').innerHTML=''; }
-function selLabel(v,txt,off){ const s=$('sample'); let o=s.querySelector('option[value="'+v+'"]'); if(!o){ o=document.createElement('option'); o.value=v; s.prepend(o); } o.textContent=txt; o.disabled=!!off; s.value=v; }
+function panels2(){ $('donut').innerHTML='';$('progList').innerHTML=''; $('metrics').innerHTML='';$('warns').innerHTML='';$('units').innerHTML=''; resumenPanel(); estadoTop(); }
+function selLabel(v,txt,off){ const s=$('sample'); let o=s.querySelector('option[value="'+v+'"]'); if(!o){ o=document.createElement('option'); o.value=v; s.prepend(o); } o.textContent=txt; o.disabled=!!off; s.value=v; estadoTop(); }
 function setMass(m,fromRhino,opt){ opt=opt||{}; olvidarHistoria(); const o=$('sample').querySelector('option[value="__nuevo"]'); if(o) o.remove();
  if(fromRhino){ externa=m; selLabel(m.source==='masterplan'?'__mp':'__rhino',(m.source==='masterplan'?'Lote del Masterplan: ':'Masa de Rhino: ')+(m.name||'sin nombre')); }
  if(opt.label) selLabel('__proyecto',opt.label);   // proyecto o masa abiertos desde un archivo
@@ -795,5 +911,5 @@ async function copiarVariantes(){ const t=[['Variante',...VCOL.map(c=>c[1])],...
  try{ await navigator.clipboard.writeText(t); $('tag').textContent='Tabla copiada: pégala en una planilla'; }catch(e){ alert('Trazo: el navegador no dejó copiar la tabla. Selecciónala con el ratón y cópiala.'); } }
 async function dl(kind){ if(!result){alert('Genera primero un resultado');return;} let blob,name; if(kind=='json'){blob=new Blob([JSON.stringify(result,null,1)],{type:'application/json'});name='trazo.json';} else {const t=await (await fetch('/api/dxf')).text(); blob=new Blob([t],{type:'text/plain'});name='trazo.dxf';} const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); }
 async function poll(){ try{ const j=await (await fetch('/api/mass')).json(); if(j.version!==massVer&&j.mass){ massVer=j.version; setMass(j.mass,true); } }catch(e){} setTimeout(poll,1500); }
-(async()=>{ fetch('/api/version').then(r=>r.json()).then(j=>{ VER=j.version; $('ver').textContent='v'+j.version; }); renderMix(); legend(); await loadStd(); renderStories(); samples=await (await fetch('/api/samples')).json(); const s=$('sample'); s.innerHTML=Object.entries(samples).map(([k,v])=>`<option value="${k}">${v.name}</option>`).join(''); s.onchange=()=>{ if(samples[s.value]) setMass(samples[s.value]); else if(externa&&(s.value==='__rhino'||s.value==='__mp')) setMass(externa,true); else if(s.value==='__proyecto'&&abierto) abrirProyecto(abierto.p,abierto.archivo,abierto.opt); else if(s.value==='__terreno'&&terrenoUlt) terrenoRectangular(terrenoUlt); }; let fromMp=null; if(new URLSearchParams(location.search).has('desde')){ try{ const j=await (await fetch('/api/mass')).json(); if(j.mass){ massVer=j.version; fromMp=j.mass; } }catch(e){} } if(fromMp){ s.insertAdjacentHTML('afterbegin','<option value="__mp">Lote del Masterplan</option>'); s.value='__mp'; setMass(fromMp,true); } else setMass(samples[s.value]||{footprint}); window.addEventListener('resize',render); poll(); })();
+(async()=>{ fetch('/api/version').then(r=>r.json()).then(j=>{ VER=j.version; $('ver').textContent='v'+j.version; }); renderMix(); legend(); await loadStd(); renderStories(); samples=await (await fetch('/api/samples')).json(); const s=$('sample'); s.innerHTML=Object.entries(samples).map(([k,v])=>`<option value="${k}">${v.name}</option>`).join(''); s.onchange=()=>{ if(samples[s.value]) setMass(samples[s.value]); else if(externa&&(s.value==='__rhino'||s.value==='__mp')) setMass(externa,true); else if(s.value==='__proyecto'&&abierto) abrirProyecto(abierto.p,abierto.archivo,abierto.opt); else if(s.value==='__terreno'&&terrenoUlt) terrenoRectangular(terrenoUlt); }; let fromMp=null; if(new URLSearchParams(location.search).has('desde')){ try{ const j=await (await fetch('/api/mass')).json(); if(j.mass){ massVer=j.version; fromMp=j.mass; } }catch(e){} } if(fromMp){ s.insertAdjacentHTML('afterbegin','<option value="__mp">Lote del Masterplan</option>'); s.value='__mp'; setMass(fromMp,true); } else setMass(samples[s.value]||{footprint}); window.addEventListener('resize',render); poll(); capas(); let g=null; try{ g=localStorage.getItem('trazo.grupo'); }catch(e){} if(g&&document.querySelector('.grupo[data-grupo="'+g+'"]')) grupo(g); })();
 </script></body></html>
