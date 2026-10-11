@@ -326,6 +326,7 @@ LAYER_COLORS = {
     "bath": SD.Color.FromArgb(60, 170, 200),
     "Equipamiento": SD.Color.FromArgb(90, 95, 105),
     "Ventanas": SD.Color.FromArgb(40, 120, 200),
+    "SinUso": SD.Color.FromArgb(150, 150, 150),
 }
 
 
@@ -467,6 +468,8 @@ def receive_result():
                     add_poly(q["poly"], z, lq, inv, q["name"])
                     for ln in q.get("lines", []):
                         add_poly(ln, z, lq, inv, cerrar=False)
+                for s in u.get("sin_uso", []):           # lo que queda sin uso dentro de la vivienda (v2.33)
+                    add_poly(s["poly"], z, layer(tag + "::SinUso", LAYER_COLORS["SinUso"]), inv, "Sin uso %.1fm2" % s["area"])
                 for w in u.get("ventanas", []):          # ventanas en el muro exterior (hueco y vidrio)
                     lw = layer(tag + "::Ventanas", LAYER_COLORS["Ventanas"])
                     add_poly(w["poly"], z, lw, inv, "Ventana %.2f x %.2f" % (w["ancho"], w["alto"]))

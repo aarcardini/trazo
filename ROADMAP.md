@@ -7,14 +7,15 @@ Cada PR marca su tarea con `[x]`: queda marcada cuando el PR se acepta. El orden
 
 Leyenda de esfuerzo: S = pequeño, M = mediano, L = grande (dividir antes de empezar).
 
-## Orden de trabajo (propuesta, actualizada en v2.27)
+## Orden de trabajo (propuesta, actualizada en v2.33)
 Lo decide el usuario; al terminar cada paso se actualiza esta lista.
 1. **Prueba del usuario** en Rhino (Mac y Windows), en el DXF y en la web de lo hecho de v2.21 a v2.27. Decisiones tomadas: puerta accesible de 0,82 m, aviso cuando la mesa del comedor no entra completa, tope de 0,60 m al arrastrar tabiques, dormitorio al costado con un solo baño solo con hasta 2 dormitorios (v2.28) y en la esquina el estar o el dormitorio principal, según cómo se conecte por dentro (R5.2).
 2. **Correcciones chicas** (v2.28 a v2.32: dormitorio al costado, placard del dormitorio principal, baño y cocina en la calidad de planos, medianeras parciales en el motor y R10.7). Quedan dos que aparecieron en el camino: que las viviendas poco profundas tengan cocina (hoy, si entre el baño y el hall no quedan 1,80 m, no se dibuja: U08 de «Entre medianeras 30 × 45 con patio central») y que el mix no arme viviendas de 3 dormitorios con menos frente del que necesitan (en «T con 2 polilíneas», con núcleos más angostos entran 2 viviendas más por planta, pero la calidad de planos baja de 62 a 47).
-3. **Norma nacional:** R10.8 (comprobaciones que faltan) → patios según la altura (R11.2).
-4. **Interfaz y dibujo:** R4.6 → R4.7 → edición de medianeras parciales en la web (resto de R11.6).
-5. **Planos de unidad:** cerrar R5.6 → R5.8 → R5.1 → R5.2 → R5.4.
-6. **Varias plantas:** R6.1 con R9.3 → R6.2 con lo que falta de R1.3.
+3. **Aprovechar la planta e interfaz** (pedido del usuario, v2.33): sin placards como estancia (R5.9, v2.33) → vestidor opcional (R5.10) → pasillo común sin puntas muertas (R3.7) → interfaz por grupos (R4.6, con la maqueta para elegir cómo agrupar). Decisiones: lo que sobra de la franja sin luz va, en este orden, a una suite (A), a baños y lavadero más grandes (B) o queda sin uso con aviso (C); el depósito, de hasta 4 m²; el vestidor, opcional.
+4. **Norma nacional:** R10.8 (comprobaciones que faltan; propuesta: el pasillo común sigue en 2,00 m y se avisa si se achica por debajo del art. 35) → patios según la altura (R11.2).
+5. **Interfaz y dibujo:** R4.7 → edición de medianeras parciales en la web (resto de R11.6).
+6. **Planos de unidad:** cerrar R5.6 → R5.8 → R5.11 → R5.1 → R5.2 → R5.4.
+7. **Varias plantas:** R6.1 con R9.3 → R6.2 con lo que falta de R1.3.
 
 Normativa: desde v2.27 los mínimos siguen la Normativa Nacional de Edificación (higiene de la vivienda, 2016), que rige en todos los departamentos (confirmado por el usuario).
 
@@ -50,6 +51,8 @@ Normativa: desde v2.27 los mínimos siguen la Normativa Nacional de Edificación
 - [x] **R3.5 (S) Núcleos con tamaño propio** (v2.13: clic en un núcleo en la planta: frente, fondo y giro; con giro 90° la escalera sube a lo largo del pasillo) y rotación 0/90°, editables por núcleo.
 - [x] **R3.6 (M) Reglas de evacuación configurables** (v2.14: fondo de saco medido hasta un punto con dos direcciones de salida; estado y aviso por vivienda; tramos de pasillo y viviendas resaltados con la casilla «Evacuación») (fondo de saco, recorrido máximo) con aviso por unidad y resaltado en el plano.
 
+- [ ] **R3.7 (M) Pasillo común sin puntas muertas:** el pasillo termina en la última puerta o núcleo, y lo que sobra pasa a la vivienda vecina. En «Esquina en L con ochava», el pasillo sigue 6,5 m después del cruce hasta la fachada oeste sin servir a ninguna puerta (13 m² por planta). Cambia cómo se cortan los pasillos: va en un PR aparte, con sus pruebas (pedido del usuario, v2.33).
+
 ## Fase 4 — Edición en la web
 - [x] **R4.1 (M) Guardar y abrir proyectos** (v2.16: «Guardar proyecto» y «Abrir proyecto…» en la web; el archivo `.trazo.json` es el pedido al motor más nombre, versión y fecha, con solo las medidas cambiadas; también abre masas sueltas) (JSON con masa, líneas, núcleos, mix y parámetros).
 - [x] **R4.2 (S) Deshacer/rehacer** (v2.17: botones ↶ ↷ y Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z o Ctrl+Y; también medianeras y patios) para líneas y núcleos.
@@ -72,6 +75,9 @@ Hecho en v1.5: zonas día/noche, pasillo interno, puertas, grafo de conexiones (
 - [~] **R5.6 (L) Mobiliario básico** (v2.21: baños, cocina y lavadero con sus artefactos, paso libre y puertas de 0,70; v2.22: dormitorios, estar y comedor con camas, mesas de luz, placard, sofá, rack, butacas y mesa según dormitorios, y comprobación de que se llega a todo; también en Rhino y DXF; v2.23: vivienda accesible por tipo del mix, con puertas de 0,82 y baño con círculo de giro, transferencia y ducha a nivel; falta: círculos de giro en cocina y dormitorios) por estancia (bloques 2D) y comprobación de que cabe (círculo de giro, paso libre).
 - [x] **R5.7 (M) Editar la unidad a mano:** mover tabiques y puertas en la ficha de la unidad; las comprobaciones se recalculan. (v2.24: tabiques interiores y puertas que se arrastran en la planta, ancho y sentido de cada puerta en la ficha; se deshace, se guarda con el proyecto y se descarta por vivienda.)
 - [ ] **R5.8 (L) Muros y tabiques con espesor:** hoy se descuentan el muro exterior (0,35 m), el muro entre viviendas (0,30 m; hacia el pasillo, la mitad) y los muros del núcleo (0,15 m), pero los tabiques interiores no tienen espesor: las superficies, los lados mínimos y el lugar de los muebles se miden al eje del tabique, y los muros se ven solo como el hueco entre colores. Dividir en tres: (a) tabiques con espesor en `standards.py` y medidas libres en las comprobaciones, los muebles y las puertas; (b) muros dibujados con relleno en la web, el DXF y Rhino, con espesor propio para el muro hacia el pasillo; (c) R7.1 sobre eso. Hacer antes de R5.2, para que las variantes se elijan con medidas reales. Decide el usuario: los espesores típicos y si la superficie de la vivienda se informa libre (como hoy), con muros o de las dos maneras.
+- [x] **R5.9 (M) Sin placards como estancia:** (v2.33, pedido del usuario) el placard es el armario del dormitorio; la franja sin luz entre el pasillo interno y el pasillo común lleva baños con ducha, lavadero y un depósito de hasta 4 m², con el fondo justo (los dormitorios ganan fondo); lo que sobra: suite, baños y lavadero más grandes o, si aún sobra, sin uso con aviso; el pasillo interno termina en la última puerta; la ochava es un estudio.
+- [ ] **R5.10 (S) Vestidor opcional:** una casilla «Vestidor» por tipo del mix (como «Acc.»), apagada por defecto: con la suite, entre el dormitorio principal y su baño; sin ella, dentro del dormitorio principal (criterio del usuario: es opcional, no un ítem por defecto).
+- [ ] **R5.11 (M) Rincones sin luz para servicios:** un rincón sin luz de más de 4 m² (un codo, un bolsillo detrás de un núcleo, la tira junto al pasillo común de una vivienda muy profunda) hoy queda sin uso, con aviso (v2.33). Podría llevar baños, lavadero o cocina, y dejar lo que tiene luz para las estancias habitables.
   *Hecho cuando:* un dormitorio de 2,50 m entre ejes, con tabiques de 0,10 m a cada lado, se comprueba con 2,40 m libres.
 
 ## Fase 6 — Varias plantas

@@ -31,12 +31,19 @@ DEFAULTS = {
         "dorm_secundario": {"min_area": 7.0, "min_side": 2.00, "typ_area": 9.0, "typ": [2.80, 3.20]},
         "estar_comedor": {"min_area": 10.0, "min_side": 2.60, "typ_area": 20.0, "typ": [3.60, 5.50]},
         "cocina": {"min_area": 4.0, "min_side": 1.60, "typ_area": 7.0, "typ": [2.40, 2.90]},
-        "bano": {"min_area": 3.0, "min_side": 1.20, "typ_area": 4.0, "typ": [1.70, 2.40]},
-        "bano_aux": {"min_area": 1.5, "min_side": 0.80, "typ_area": 2.6, "typ": [1.20, 2.20]},
-        "lavadero": {"min_area": 1.5, "min_side": 0.90, "typ_area": 2.5, "typ": [1.20, 2.10]},
+        # max_area (v2.33, criterio de proyecto): hasta dónde se agranda con la franja sin luz que sobra
+        "bano": {"min_area": 3.0, "min_side": 1.20, "typ_area": 4.0, "typ": [1.70, 2.40], "max_area": 6.0},
+        "bano_aux": {"min_area": 1.5, "min_side": 0.80, "typ_area": 2.6, "typ": [1.20, 2.20], "max_area": 4.0},
+        "lavadero": {"min_area": 1.5, "min_side": 0.90, "typ_area": 2.5, "typ": [1.20, 2.10], "max_area": 4.0},
         "pasillo": {"min_side": 0.90, "typ_side": 1.00},
         "hall": {"min_side": 1.20, "typ": [1.40, 1.80]},
         "estudio": {"min_area": 7.0, "min_side": 2.00, "typ_area": 8.0, "typ": [2.60, 3.10]},
+        # v2.33 (criterio del usuario): el placard es el armario del dormitorio, no una estancia; un solo depósito, de
+        # hasta max_area (0 = sin depósito), si queda lugar
+        "deposito": {"min_area": 1.0, "min_side": 0.80, "max_area": 4.0},
+        # franja sin luz entre el pasillo interno y el pasillo común (baños, lavadero, depósito): fondo mínimo y máximo;
+        # toma el menor con el que entran, y lo demás va a los dormitorios (criterio de proyecto)
+        "franja_servicios": {"min_side": 1.80, "max_side": 2.80},
         # estar-comedor típico según dormitorios (m²)
         "estar_por_dorms": [18.0, 18.0, 20.0, 24.0, 27.0],
         # rangos de superficie de la vivienda según dormitorios (ANV): [mín, máx]

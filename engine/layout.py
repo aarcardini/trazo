@@ -21,7 +21,7 @@ from .units import (_bisect_x, _chain_union, _is_rect, _segments, generate_unit_
                     unit_rooms, sin_solapes, editar_unidades, vecinas)  # noqa: F401
 from .patios import (auto_patios, _anillo, split_blocks, make_patio_dark, _block_of, _block_of_line)  # noqa: F401
 
-VERSION = "2.32"
+VERSION = "2.33"
 
 DEFAULT_PARAMS = {
     # Masa
@@ -410,6 +410,7 @@ def generate(data):
                                 for w in pl["ventanas"]]
             item["checks"] = pl["checks"]
             item["plan_score"] = pl["score"]
+            item["sin_uso"] = [{"poly": W(pc, p), "area": round(abs(G.area(p)), 1)} for p in pl["sin_uso"]]   # v2.33
             item["paredes"] = []                            # tabiques interiores (se arrastran en la web, R5.7)
             for a, b in pl["paredes"]:
                 a, b = Wp(a), Wp(b)
