@@ -237,8 +237,9 @@ def _tramos_fachada(poly, borde, is_facade, v1, paso=0.25):
 def _ventanas(rooms, borde, is_facade, v1, S):
     """R5.5: una ventana por estancia habitable, centrada en su tramo de fachada (primero el del fondo, después el más
     largo), del ancho típico o del que pide el vano mínimo (S["iluminacion"] de su superficie), sin pasar de la mocheta;
-    si no alcanza, otra en el tramo siguiente. El comedor sin fachada se ilumina por el estar: su superficie se suma a la del estar. Devuelve
-    (ventanas en el marco de la vivienda, comprobaciones con la estancia en "room")."""
+    si no alcanza, otra en el tramo siguiente. R5.3: en una esquina, también una (típica) en la otra fachada. El comedor
+    sin fachada se ilumina por el estar: su superficie se suma a la del estar. Devuelve (ventanas en el marco de la
+    vivienda, comprobaciones con la estancia en "room")."""
     largo = lambda t: ((t[1][0] - t[0][0]) ** 2 + (t[1][1] - t[0][1]) ** 2) ** 0.5
     habit = [r for r in rooms if r["kind"] in ("bedroom", "living", "dining", "study")]
     tramos = {r["id"]: sorted(_tramos_fachada(r["poly"], borde, is_facade, v1),     # primero la fachada del fondo
@@ -251,17 +252,23 @@ def _ventanas(rooms, borde, is_facade, v1, S):
         area = r["area"] + (sum(c["area"] for c in comedor) if r["kind"] == "living" else 0.0)
         req = S["iluminacion"] * area
         tip = S["ancho_estar"] if r["kind"] in ("living", "dining") else S["ancho_dormitorio"]
-        hecho, n_ = 0.0, 0
+        hecho, n_, usadas = 0.0, 0, []
         for a, b, n in tramos[r["id"]]:
             L = largo((a, b))
-            if hecho >= req - 1e-6 or L - 2 * S["mocheta"] < 0.5 * S["ancho_dormitorio"]:
-                continue                               # ya alcanza, o el tramo no da para una ventana
-            w = min(max((req - hecho) / S["alto"], tip), L - 2 * S["mocheta"])
+            if L - 2 * S["mocheta"] < 0.5 * S["ancho_dormitorio"]:
+                continue                               # el tramo no da para una ventana
+            if hecho >= req - 1e-6:                    # ya alcanza; R5.3: en una esquina, una por fachada si entra
+                if L - 2 * S["mocheta"] < tip or any(abs(n[0] - o[0]) + abs(n[1] - o[1]) < 0.5 for o in usadas):
+                    continue
+                w = tip
+            else:
+                w = min(max((req - hecho) / S["alto"], tip), L - 2 * S["mocheta"])
             c, u = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2), ((b[0] - a[0]) / L, (b[1] - a[1]) / L)
             out.append({"room": r["id"], "p": (c[0] - u[0] * w / 2, c[1] - u[1] * w / 2),
                         "q": (c[0] + u[0] * w / 2, c[1] + u[1] * w / 2), "n": n, "ancho": round(w, 2),
                         "alto": S["alto"], "area": round(w * S["alto"], 2), "minimo": round(req, 2)})
             hecho, n_ = hecho + w * S["alto"], n_ + 1
+            usadas.append(n)
         if not n_:
             checks.append({"ok": False, "room": r["id"], "msg": "%s: no entra una ventana en su fachada (vano mínimo "
                                                                 "%.2f m²)" % (r["name"], req)})
@@ -272,9 +279,19 @@ def _ventanas(rooms, borde, is_facade, v1, S):
     return out, checks
 
 
-def _plan_rects(x0, v0, x1, v1, nb, warnings, acc=None):
+def _frente_noche(W, nb, lateral=False):
+    """Frente de la zona de noche y el que pide: los dormitorios al fondo (R5.3, lateral: menos el último, que va al
+    costado). Si el frente no alcanza para el estar, se ajusta."""
+    need = BED_MAIN + BED_W * (nb - 2 if lateral else nb - 1)
+    if W - need >= LIV_MIN:
+        return need + min(max((W - need) - 6.0, 0.0), 0.8 * nb), need    # estar de más de 6 m: a los dormitorios
+    return max(0.0, W - max(3.0, W * 0.38)), need
+
+
+def _plan_rects(x0, v0, x1, v1, nb, warnings, acc=None, lateral=False):
     """Rectángulos de estancias y conexiones con puerta (las abiertas de la zona de día se deducen después). acc: frente
-    y fondo del baño de una vivienda accesible (None si no lo es)."""
+    y fondo del baño de una vivienda accesible (None si no lo es). lateral (R5.3): el costado x1 es fachada y el frente
+    no alcanza: el último dormitorio va a ese costado, entre el pasillo común y el pasillo interno."""
     W, D = x1 - x0, v1 - v0
     R = {}          # id -> (kind, rect, name)
     E = []          # (id_a, id_b, tipo)
@@ -297,24 +314,20 @@ def _plan_rects(x0, v0, x1, v1, nb, warnings, acc=None):
         return R, E
 
     # ---- reparto del frente entre día y noche
-    need = BED_MAIN + BED_W * (nb - 1)
-    if W - need >= LIV_MIN:
-        Wn = need
-        extra = (W - need) - 6.0                       # estar de más de 6 m: repartir a dormitorios
-        if extra > 0:
-            Wn += min(extra, 0.8 * nb)
-    else:
-        Wn = max(0.0, W - max(3.0, W * 0.38))
-        hard = 3.0 + V["dorm_principal"]["min_side"] + V["dorm_secundario"]["min_side"] * (nb - 1)
+    nf = nb - 1 if lateral else nb                     # dormitorios al fondo (R5.3: el último, al costado)
+    ws = BED_W if lateral else 0.0                     # frente del dormitorio lateral
+    Wn, need = _frente_noche(W, nb, lateral)
+    if W - need < LIV_MIN:
+        hard = 3.0 + V["dorm_principal"]["min_side"] + V["dorm_secundario"]["min_side"] * (nf - 1)
         if W >= hard:
             warnings.append(("info", "Frente de %.1f m: estar y dormitorios ajustados por debajo del frente típico (%.1f m)" %
-                             (W, facade_min(nb))))
+                             (W, LIV_MIN + need)))
         else:
             warnings.append("Frente de %.1f m insuficiente para estar + %d dormitorio(s) (mín. %.1f m)" %
                             (W, nb, hard))
     xs = x1 - Wn                                       # inicio de la zona de noche
-    bedD = max(3.0, min(4.5, D - HALL - 2.4))
-    widths = [BED_MAIN] + [BED_W] * (nb - 1)
+    bedD = max(3.0, min(4.5, D - HALL - (BED_D if lateral else 2.4)))
+    widths = [BED_MAIN] + [BED_W] * (nf - 1)
     k = Wn / sum(widths)
     widths = [w * k for w in widths]
     inner = D - HALL - bedD
@@ -328,24 +341,28 @@ def _plan_rects(x0, v0, x1, v1, nb, warnings, acc=None):
         ib = min(inner, 2.8)
         bv0 = hv0 - ib
         bx = xs
-        nbaths = 2 if nb >= 2 and Wn >= BATH_W1 + BATH_W2 + 1.0 and ib + 1e-6 >= BATH2_D else 1
+        xb = x1 - ws                                   # R5.3: el dormitorio lateral, en el extremo
+        nbaths = 2 if nb >= 2 and xb - xs >= BATH_W1 + BATH_W2 + 1.0 and ib + 1e-6 >= BATH2_D else 1
         for j in range(nbaths):
             bw = BATH_W1 if j == 0 else BATH_W2
-            add("bath%d" % (j + 1), "bath", (bx, bv0, min(x1, bx + bw), hv0), "Baño" if j == 0 else "Baño 2")
+            add("bath%d" % (j + 1), "bath", (bx, bv0, min(xb, bx + bw), hv0), "Baño" if j == 0 else "Baño 2")
             E.append(("hallway", "bath%d" % (j + 1), "puerta"))
             bx += bw
-        if x1 - bx > 1.0:
-            lw = min(x1 - bx, max(LAV_W, V["lavadero"]["typ_area"] / max(hv0 - bv0, 0.5)))
-            if x1 - bx - lw < 0.8:
-                lw = x1 - bx
+        if xb - bx > 1.0:
+            lw = min(xb - bx, max(LAV_W, V["lavadero"]["typ_area"] / max(hv0 - bv0, 0.5)))
+            if xb - bx - lw < 0.8:
+                lw = xb - bx
             add("laundry", "laundry", (bx, bv0, bx + lw, hv0), "Lavadero")
             E.append(("hallway", "laundry", "puerta"))
-            if x1 - bx - lw >= 0.8:
-                add("closet", "storage", (bx + lw, bv0, x1, hv0), "Placard")
+            if xb - bx - lw >= 0.8:
+                add("closet", "storage", (bx + lw, bv0, xb, hv0), "Placard")
                 E.append(("hallway", "closet", "puerta"))
         if bv0 - v0 >= 1.0:
-            add("storage", "storage", (xs, v0, x1, bv0))
+            add("storage", "storage", (xs, v0, xb, bv0))
             E.append(("hall", "storage", "puerta"))
+        if lateral:
+            add("bed%d" % nb, "bedroom", (xb, v0, x1, hv0), "Dormitorio %d" % nb)
+            E.append(("hallway", "bed%d" % nb, "puerta"))
         kd = max(1.8, min(KITCH_D, hv0 - v0))
     else:
         # unidad poco profunda: pasillo interno junto al pasillo común, dormitorios detrás
@@ -357,7 +374,7 @@ def _plan_rects(x0, v0, x1, v1, nb, warnings, acc=None):
         kd = min(2.6, max(1.8, D * 0.4))
 
     # que cada dormitorio alcance su área mínima con el fondo disponible (si el frente lo permite)
-    specs = [V["dorm_principal"]] + [V["dorm_secundario"]] * (nb - 1)
+    specs = [V["dorm_principal"]] + [V["dorm_secundario"]] * (nf - 1)
     mw = [max(sp["min_side"], sp["min_area"] / max(bedD, 0.1) + 0.02) for sp in specs]
     if sum(mw) <= Wn + 1e-6:
         widths = [max(w, m_) for w, m_ in zip(widths, mw)]
@@ -493,15 +510,108 @@ def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None, accesible=F
     ediciones (R5.7): [(k, {"op": "pared", "p", "a"} | {"op": "puerta", "p", "entre"?, "a"?, "ancho"?, "abre"?})] en el
     marco de la unidad, en orden; el resultado trae en "ediciones" las k aplicadas y en "paredes" los tabiques interiores.
     ventanas (R5.5): medidas de standards["ventanas"]; el resultado trae "ventanas" [{room, p, q, n, ancho, alto, area,
-    minimo}] (p-q sobre la fachada, n hacia afuera)."""
+    minimo}] (p-q sobre la fachada, n hacia afuera).
+    R5.3: una vivienda con fachada al fondo y en un costado (de esquina o de extremo) la usa: el estar va a la esquina o,
+    si el frente no alcanza, el último dormitorio va a ese costado (ver _segunda_fachada); el plano se hace al revés
+    cuando hace falta y se devuelve en el marco de la vivienda."""
     equip = equip or ST.DEFAULTS["equipamiento"]
     configure(vivienda or ST.DEFAULTS["vivienda"], equip, accesible)
     poly = G.ensure_ccw(poly)
+    espejar, lateral, lado = _segunda_fachada(poly, nb, is_facade)
+
+    def plano(espejar, lateral, ediciones):
+        if not espejar:
+            return _distribuir(poly, nb, is_facade, equip, accesible, ediciones, ventanas, lateral)
+        bx0, _, bx1, _ = G.bbox(poly)
+        m = lambda p: (bx0 + bx1 - p[0], p[1])
+        fac = lambda p, q: is_facade(m(p), m(q))
+        if hasattr(is_facade, "ventana"):
+            fac.ventana = lambda p, q: is_facade.ventana(m(q), m(p))     # la estancia sigue a la izquierda
+        ed = [(k, dict(e, p=m(e["p"]), a=m(e["a"]) if e.get("a") else None)) for k, e in (ediciones or [])]
+        return _espejar(_distribuir([m(p) for p in poly][::-1], nb, fac, equip, accesible, ed, ventanas, lateral), m)
+    programa = lambda res: [sum(1 for r in res["rooms"] if r["kind"] == k or (k == "kitchen" and "Cocina" in r["name"]))
+                            for k in ("bath", "kitchen", "bedroom", "laundry", "living")]
+    elegido = None                                     # se comparan sin los cambios a mano: la elección no depende
+    if lateral:                                        # de ellos. El dormitorio al costado, solo si el plano mejora y
+        con, sin = plano(espejar, True, None), plano(lado == 1, False, None)   # no pierde estancias (solo el baño 2)
+        lat = next((r for r in con["rooms"] if r["id"] == "bed%d" % nb), None)
+        pc, ps = programa(con), programa(sin)
+        if lat and lat["area"] >= V["dorm_secundario"]["min_area"] - 1e-6 and con["score"] > sin["score"] and \
+                pc[0] >= 1 and all(a >= b for a, b in zip(pc[1:], ps[1:])):
+            elegido = con
+        else:
+            espejar, lateral, elegido = lado == 1, False, sin
+    if espejar and not lateral:                        # el estar a la esquina, si el plano al revés no es peor ni
+        elegido = elegido or plano(True, False, None)  # pierde estancias (en una vivienda irregular, el rectángulo
+        recto = plano(False, False, None)              # principal puede cambiar)
+        if elegido["score"] < recto["score"] or any(a < b for a, b in zip(programa(elegido), programa(recto))):
+            espejar, elegido = False, recto
+    res = elegido if elegido is not None and not ediciones else plano(espejar, lateral, ediciones)
+    usa = "dormitorio" if lateral else ("estar" if lado == -1 or espejar else None)
+    if usa:
+        res["checks"].append({"ok": True, "info": True, "msg": "Fachada lateral: " + (
+            "Dormitorio %d al costado, con su ventana a esa fachada" % nb if lateral else
+            "el estar en la esquina, con luz por dos fachadas")})
+    res["segunda_fachada"] = usa
+    return res
+
+
+def _segunda_fachada(poly, nb, is_facade):
+    """R5.3: (espejar, lateral, lado) para una vivienda con fachada al fondo y en un solo costado (lado: -1 el de x0,
+    1 el de x1; 0 si no hay o están los dos). El plano pone el estar en x0 y la zona de noche en x1: si el frente
+    alcanza, el estar va al costado con fachada (espejar si es x1); si no alcanza y hay fondo para un dormitorio entre
+    el pasillo común y el interno, la zona de noche va a ese costado (espejar si es x0) y el último dormitorio, ahí."""
+    if is_facade is None or nb < 1:
+        return False, False, 0
+    (x0, v0, x1, v1), annexes = _main_rect(poly)
+    (x0, v0, x1, v1), _ = _main_con_luz(poly, (x0, v0, x1, v1), annexes, is_facade)
+    if _luz(is_facade, (x0, v1), (x1, v1)) < 0.95:        # el fondo, todo fachada: el plano al revés no deja
+        return False, False, 0                             # un dormitorio sin luz
+    izq, der = _luz(is_facade, (x0, v0), (x0, v1)) >= 0.75, _luz(is_facade, (x1, v0), (x1, v1)) >= 0.75
+    if izq == der:
+        return False, False, 0
+    lado = -1 if izq else 1
+    W = x1 - x0
+    corto = W - _frente_noche(W, nb)[1] < LIV_MIN
+    entra = _frente_noche(W, nb, True)[0] >= V["dorm_principal"]["min_side"] + \
+        V["dorm_secundario"]["min_side"] * (nb - 2) - 1e-6     # el baño y el lavadero los comprueba layout_unit
+    lateral = corto and entra and nb >= 2 and (v1 - v0) - HALL - BED_D >= 3.0
+    return (lado == -1) if lateral else (lado == 1), lateral, lado
+
+
+def _luz(is_facade, p, q, paso=0.25):
+    """Fracción del segmento p-q que da a la fachada."""
+    n = max(1, int(round(((q[0] - p[0]) ** 2 + (q[1] - p[1]) ** 2) ** 0.5 / paso)))
+    pt = lambda k: (p[0] + (q[0] - p[0]) * k / n, p[1] + (q[1] - p[1]) * k / n)
+    return sum(1 for k in range(n) if is_facade(pt(k), pt(k + 1))) / float(n)
+
+
+def _espejar(res, m):
+    """R5.3: devuelve al marco de la vivienda un plano hecho al revés (m: la simetría x -> x0 + x1 - x)."""
+    for r in res["rooms"]:
+        r["poly"] = [m(p) for p in r["poly"]][::-1]
+    for d in res["doors"]:                             # la bisagra sigue en p; una hoja vertical abre hacia el otro x
+        d["p"], d["q"] = m(d["p"]), m(d["q"])
+        if d["vertical"]:
+            d["into"] = -d["into"]
+    for q in res["equipamiento"]:
+        q["poly"] = [m(p) for p in q["poly"]][::-1]
+        q["lines"] = [[m(p) for p in ln] for ln in q["lines"]]
+    res["paredes"] = [(m(a), m(b)) for a, b in res["paredes"]]
+    for w in res["ventanas"]:                          # la estancia, a la izquierda de p-q
+        w["p"], w["q"], w["n"] = m(w["q"]), m(w["p"]), (-w["n"][0], w["n"][1])
+    for n in res["graph"]["nodes"]:
+        n["pos"] = m(n["pos"])
+    return res
+
+
+def _distribuir(poly, nb, is_facade, equip, accesible, ediciones, ventanas, lateral=False):
+    """El plano de layout_unit (poly antihorario, medidas ya configuradas)."""
     (x0, v0, x1, v1), annexes = _main_rect(poly)
     if is_facade is not None:
         (x0, v0, x1, v1), annexes = _main_con_luz(poly, (x0, v0, x1, v1), annexes, is_facade)
     warnings = []
-    R, E = _plan_rects(x0, v0, x1, v1, nb, warnings, equip["bano_accesible"] if accesible else None)
+    R, E = _plan_rects(x0, v0, x1, v1, nb, warnings, equip["bano_accesible"] if accesible else None, lateral)
     hechas = [k for k, e in (ediciones or []) if e.get("op") == "pared" and e.get("a") and _mover_pared(R, e)]
     # conexiones abiertas de la zona de día: entre estancias de día que comparten borde
     day = [i for i, (k, r, n) in R.items() if k in DAY]
