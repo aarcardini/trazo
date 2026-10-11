@@ -688,7 +688,7 @@ function masaDelTerreno(t){   // huella y medianeras: los linderos sin medianera
  if(m.b) meds.push({a:[x1,y1],b:[x0,y1],retiro:r.b});
  if(m.i) meds.push({a:[x0,y1],b:[x0,y0],retiro:r.i});
  return {footprint:[[x0,y0],[x1,y0],[x1,y1],[x0,y1]],medianeras:meds}; }
-function terrenoRectangular(t){ const n=k=>Math.max(0,+$(k).value||0), num=v=>(+v.toFixed(2)).toString().replace('.',',');
+function terrenoRectangular(t){ const n=k=>Math.max(0,+$(k).value||0), num=v=>String(+v.toFixed(2));
  const nuevo=!t; t=t||{frente:n('ter_frente'),fondo:n('ter_fondo'),medianeras:{i:$('ter_m_i').checked,d:$('ter_m_d').checked,b:$('ter_m_b').checked},
   retiros:{i:n('ter_r_i'),d:n('ter_r_d'),b:n('ter_r_b'),f:n('ter_r_f')}};
  const r=t.retiros, anchoMasa=t.frente-r.i-r.d, fondoMasa=t.fondo-r.f-r.b;
