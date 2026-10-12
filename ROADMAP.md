@@ -125,7 +125,7 @@ Hecho en v1.5: zonas día/noche, pasillo interno, puertas, grafo de conexiones (
 
 ## Fase 7 — Salida
 - [ ] **R7.1 (M) Exportar a Rhino con muros con espesor** (extrusiones por nivel) además de las polilíneas. Va después de R5.8.
-- [ ] **R7.2 (S) Tabla de unidades** en CSV (id, tipo, m², dormitorios, nivel, evacuación).
+- [x] **R7.2 (S) Tabla de unidades** en CSV (id, tipo, m², dormitorios, nivel, evacuación) (v2.50: botón «Tabla CSV» en Proyecto → Exportar, junto al DXF, y `GET /api/csv` con `engine/tabla_viviendas.py`; una fila por vivienda y por nivel residencial, con las columnas Nivel, Vivienda, Tipo, Dormitorios, Superficie (m²), Con muros (m²), Frente (m), Fondo (m), Pasillo, Evacuación (m), Fondo de saco (m), Evacuación (cumple / fondo de saco / no cumple), Calidad del plano y Observaciones (los avisos de la vivienda que no cumplen, separados por « | »), y tras una línea en blanco los totales (viviendas, niveles residenciales, NSA y eficiencia); UTF-8 con BOM, «;» y coma decimal, para Excel o LibreOffice en español; la tabla se baja desde la web, Rhino no cambia; probado con el lector de CSV de Python y descargándolo desde un navegador, no con Excel ni LibreOffice reales).
 - [ ] **R7.3 (M) Lámina PDF** de la planta tipo con métricas.
 
 ## Fase 8 — Modo Terreno (masterplan / fraccionamiento)

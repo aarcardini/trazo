@@ -4050,3 +4050,167 @@ def test_equipamiento_orden():
 
 if __name__ == "__main__":
     test_equipamiento_orden(); print("OK64")
+
+
+def test_tabla_csv():
+    """R7.2: la tabla de viviendas en CSV (engine/tabla_viviendas.py y GET /api/csv), para abrirla en Excel o LibreOffice en
+    español: UTF-8 con BOM, separador «;», coma decimal y CRLF; una fila por vivienda y por nivel residencial (la planta tipo
+    se repite en cada nivel) y, tras una línea en blanco, los totales. Lo que falta va vacío, nunca «None»."""
+    import contextlib, copy, csv, io, threading, urllib.error, urllib.parse, urllib.request
+    import server
+    from engine import layout, tabla_viviendas as T
+    raiz = os.path.join(os.path.dirname(__file__), "..")
+    muestra = lambda n: json.load(open(os.path.join(raiz, "samples", n + ".json"), encoding="utf-8"))
+    COLUMNAS = ["Nivel", "Vivienda", "Tipo", "Dormitorios", "Superficie (m²)", "Con muros (m²)", "Frente (m)", "Fondo (m)",
+                "Pasillo", "Evacuación (m)", "Fondo de saco (m)", "Evacuación", "Calidad del plano", "Observaciones"]
+    PALABRAS = {"ok": "cumple", "saco": "fondo de saco", "fail": "no cumple"}
+    coma = lambda v, d: ("%.*f" % (d, v)).replace(".", ",")
+
+    def partes(texto):                    # como la planilla: sin BOM, separador «;», comillas de CSV; (encabezados, filas, totales)
+        assert texto.startswith("﻿") and not texto.startswith("﻿﻿")
+        assert "\r\n" in texto and "\n" not in texto.replace("\r\n", "") and "\r" not in texto.replace("\r\n", "")
+        filas = list(csv.reader(io.StringIO(texto[1:], newline=""), delimiter=";"))
+        corte = filas.index([])           # la línea en blanco entre la tabla y los totales
+        return filas[0], filas[1:corte], dict(filas[corte + 1:])
+
+    # 1. barra con un solo núcleo manual: las tres evacuaciones (cumple, fondo de saco, no cumple) y todos los datos
+    barra = muestra("barra")
+    pedido = {"footprint": barra["footprint"], "height": barra["height"], "stage": "plans",
+              "params": {"cores_mode": "manual", "cores": [[3, 8]], "auto_cores": False}}
+    res = layout.generate(pedido)
+    texto = T.result_to_csv(res)
+    cab, filas, tot = partes(texto)
+    niveles = [s["index"] for s in res["stories"] if s["program"] == "Residential"]
+    assert cab == COLUMNAS and niveles == [0, 1, 2, 3, 4] and len(res["units"]) == 9 and len(filas) == 45
+    esperadas = [(n, u) for n in niveles for u in res["units"]]            # por nivel y, en cada uno, las viviendas de la planta tipo
+    for f, (n, u) in zip(filas, esperadas):
+        assert f == [str(n), u["id"], u["type"], str(u["bedrooms"]), coma(u["area"], 1), coma(u["area_muros"], 1),
+                     coma(u["width"], 2), coma(u["depth"], 2), u["pasillo"], coma(u["egress"], 1), coma(u["saco"], 1),
+                     PALABRAS[u["egress_status"]], str(u["plan_score"]), ""], (f, u["id"])
+        assert all("," in f[i] and "." not in f[i] for i in (4, 5, 6, 7, 9, 10)), f          # coma decimal, nunca punto
+    assert {f[11] for f in filas} == {"cumple", "fondo de saco", "no cumple"}
+    m = res["metrics"]
+    assert m["units_total"] == 45 and tot == {"Viviendas totales": "45", "Niveles residenciales": "5",
+                                              "Superficie vendible total, NSA (m²)": coma(m["nsa_total"], 1),
+                                              "Eficiencia (%)": coma(m["efficiency_total"], 1)}, tot
+    assert "None" not in texto and texto.split("\r\n")[1 + 45] == "" and texto.endswith("\r\n")
+
+    # 2. las observaciones: los avisos de la vivienda que no cumplen, separados por « | » (T_dos_lineas tiene planos con fallas)
+    t2 = muestra("T_dos_lineas")
+    res2 = layout.generate({"footprint": t2["footprint"], "height": t2["height"], "stage": "plans",
+                            "params": {"centerlines": t2["centerlines"]}})
+    cab, filas2, _ = partes(T.result_to_csv(res2))
+    con_avisos = 0
+    for f, u in zip(filas2, res2["units"]):
+        falla = [c["msg"] for c in u["checks"] if not c["ok"]]
+        assert f[13] == " ".join(" | ".join(falla).split()), (u["id"], f[13])
+        assert f[12] == str(u["plan_score"])
+        con_avisos += bool(falla)
+    assert 0 < con_avisos < len(res2["units"]) and any(" | " in f[13] for f in filas2)
+
+    # 3. un resultado sin planos (etapa «mix»): sin dormitorios, calidad ni avisos todavía, y vacío es vacío
+    mix = layout.generate({"footprint": barra["footprint"], "height": barra["height"], "stage": "mix", "params": {}})
+    texto3 = T.result_to_csv(mix)
+    cab, filas3, tot3 = partes(texto3)
+    assert len(filas3) == 40 and all(f[3] == "" and f[12] == "" and f[13] == "" and f[4] and f[11] == "cumple" for f in filas3)
+    assert "None" not in texto3 and tot3["Viviendas totales"] == "40"
+
+    # 4. torre mixta: los niveles de estacionamiento, comercio y oficinas no llevan viviendas; los residenciales conservan su índice
+    tm = muestra("torre_mixta")
+    res4 = layout.generate({"footprint": tm["footprint"], "height": tm["height"], "stage": "plans",
+                            "params": {"stories": tm["stories"]}})
+    cab, filas4, tot4 = partes(T.result_to_csv(res4))
+    assert [s["index"] for s in res4["stories"] if s["program"] != "Residential"] == [0, 1, 2, 3]
+    assert len(filas4) == 50 == res4["metrics"]["units_total"] and sorted({f[0] for f in filas4}) == ["4", "5", "6", "7", "8"]
+    assert tot4["Viviendas totales"] == "50" and tot4["Niveles residenciales"] == "5"
+
+    # 5. celdas con «;», comillas y saltos de línea van entre comillas; una fórmula no se ejecuta; 1e9 (sin salida) y el cero
+    r5 = copy.deepcopy(res)
+    u = r5["units"][0]
+    u.update(type="=SUMA(A1:A9)", egress=1e9, egress_status="fail", bedrooms=0)
+    u["checks"] = [{"ok": False, "msg": 'Primero; con "comillas"\ny salto'}, {"ok": False, "msg": "Segundo"},
+                   {"ok": True, "info": True, "msg": "No debe salir"}]
+    texto5 = T.result_to_csv(r5)
+    cab, filas5, _ = partes(texto5)
+    assert '"Primero; con ""comillas"" y salto | Segundo"' in texto5 and "No debe salir" not in texto5
+    assert filas5[0][13] == 'Primero; con "comillas" y salto | Segundo' and filas5[0][2] == "'=SUMA(A1:A9)"
+    assert filas5[0][3] == "0" and filas5[0][9] == "" and filas5[0][11] == "no cumple" and filas5[1][3] != ""
+
+    # 6. el servidor: 404 en español sin resultado o sin viviendas; con resultado, el archivo con sus cabeceras
+    server.STATE.update(mass=None, result=None)
+    srv = server.ThreadingHTTPServer(("127.0.0.1", 0), server.H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    url = "http://127.0.0.1:%d" % srv.server_address[1]
+
+    def pedir(ruta, cuerpo=None):
+        req = urllib.request.Request(url + ruta, data=None if cuerpo is None else json.dumps(cuerpo).encode(),
+                                     method="GET" if cuerpo is None else "POST", headers={"Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=10) as r:
+                return r.status, r.headers, r.read()
+        except urllib.error.HTTPError as ex:
+            return ex.code, ex.headers, ex.read()
+    try:
+        cod, _, cuerpo = pedir("/api/csv")
+        error = json.loads(cuerpo.decode("utf-8"))["error"]
+        assert cod == 404 and error.startswith("Trazo: primero genera una planta") and "Generar planos" in error, (cod, error)
+        pedir("/api/generate", {"footprint": barra["footprint"], "height": 15, "stage": "massing"})
+        cod, _, cuerpo = pedir("/api/csv")                                  # solo la masa: todavía no hay viviendas
+        error = json.loads(cuerpo.decode("utf-8"))["error"]
+        assert cod == 404 and error.startswith("Trazo:") and "todavía no tiene viviendas" in error, (cod, error)
+        pide_barra = {"footprint": barra["footprint"], "height": 15, "stage": "plans", "params": {}}
+        assert pedir("/api/generate", pide_barra)[0] == 200
+        cod, cabeceras, cuerpo = pedir("/api/csv")
+        assert cod == 200 and cabeceras["Content-Type"] == "text/csv; charset=utf-8", (cod, cabeceras["Content-Type"])
+        assert cabeceras["Content-Disposition"] == 'attachment; filename="trazo_viviendas.csv"'
+        assert cuerpo[:3] == b"\xef\xbb\xbf" and int(cabeceras["Content-Length"]) == len(cuerpo)
+        texto6 = cuerpo.decode("utf-8")
+        esperado = layout.generate({"footprint": barra["footprint"], "height": 15, "stage": "plans", "params": {}})
+        assert texto6 == T.result_to_csv(esperado)                          # el mismo CSV que arma la función con el resultado
+        cab, filas6, tot6 = partes(texto6)
+        assert cab == COLUMNAS and len(filas6) == 40 == int(tot6["Viviendas totales"]) and tot6["Niveles residenciales"] == "5"
+        assert {f[11] for f in filas6} == {"cumple"} and {f[0] for f in filas6} == {"0", "1", "2", "3", "4"}
+        # el nombre de la masa va en el nombre del archivo, sin tildes ni caracteres que no valgan en una cabecera o en Windows
+        for nombre, archivo in (("Barra 60x16", "trazo_viviendas_Barra_60x16.csv"),
+                                ("Torre Ñandú (2ª etapa)", "trazo_viviendas_Torre_Nandu_2a_etapa.csv"),
+                                ('x"\r\nSet-Cookie: a=b', "trazo_viviendas_x_Set-Cookie_a_b.csv"),
+                                ("../../etc/pasaporte", "trazo_viviendas_etc_pasaporte.csv"),
+                                ("", "trazo_viviendas.csv"), ("¡¡¡", "trazo_viviendas.csv"), ("a" * 200, "trazo_viviendas_" + "a" * 60 + ".csv")):
+            cod, cabeceras, _ = pedir("/api/csv?nombre=" + urllib.parse.quote(nombre))
+            assert cod == 200 and cabeceras["Content-Disposition"] == 'attachment; filename="%s"' % archivo, (nombre, cabeceras["Content-Disposition"])
+            assert server.nombre_csv(nombre) == archivo
+        # siempre el último resultado: la torre mixta (niveles 4 a 8) reemplaza a la barra
+        assert pedir("/api/generate", {"footprint": tm["footprint"], "height": tm["height"], "stage": "plans",
+                                       "params": {"stories": tm["stories"]}})[0] == 200
+        cab, filas7, tot7 = partes(pedir("/api/csv")[2].decode("utf-8"))
+        assert len(filas7) == 50 and sorted({f[0] for f in filas7}) == ["4", "5", "6", "7", "8"] and tot7["Viviendas totales"] == "50"
+        original, tabla_rota = server.result_to_csv, io.StringIO()
+        server.result_to_csv = lambda res: 1 / 0                            # un fallo al armar la tabla: 500 en español, no una conexión cortada
+        try:
+            with contextlib.redirect_stderr(tabla_rota):
+                cod, _, cuerpo = pedir("/api/csv")
+        finally:
+            server.result_to_csv = original
+        error = json.loads(cuerpo.decode("utf-8"))["error"]
+        assert cod == 500 and error.startswith("Trazo: no pude armar la tabla de viviendas (ZeroDivisionError") and "ZeroDivisionError" in tabla_rota.getvalue()
+        assert pedir("/api/csv")[0] == 200
+        pedir("/api/reset", {})                                             # «Nuevo»: el servidor olvida el resultado
+        assert pedir("/api/csv")[0] == 404
+    finally:
+        srv.shutdown()
+        srv.server_close()
+        server.STATE.update(mass=None, result=None)
+
+    # 7. la web: «Tabla CSV» junto al DXF, pide /api/csv con el nombre de la masa y guarda el archivo tal cual (con el BOM)
+    html = open(os.path.join(raiz, "web", "index.html"), encoding="utf-8").read()
+    exportar = html.split("<h2>Exportar</h2>", 1)[1].split("</div>", 1)[0]
+    assert "dl('dxf')" in exportar and 'id="btnCsv"' in exportar and 'onclick="bajarCsv()"' in exportar
+    assert exportar.index("dl('dxf')") < exportar.index('id="btnCsv"') and ">Tabla CSV</button>" in exportar
+    js = html.split("<script>", 1)[1]
+    bajar = js.split("async function bajarCsv(", 1)[1].split("\nasync function dl(", 1)[0]
+    assert "fetch('/api/csv?nombre='+encodeURIComponent(nombre" in bajar and "Genera primero la planta con viviendas" in bajar
+    assert "r.blob()" in bajar and ".text()" not in bajar          # text() descarta el BOM y Excel leería mal las tildes
+    assert "a.download=f?f[1]:'trazo_viviendas.csv'" in bajar
+
+if __name__ == "__main__":
+    test_tabla_csv(); print("OK66")
