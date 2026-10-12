@@ -204,7 +204,8 @@ def build_pieces(plate, params):
         if up:
             return up
     holes = params.get("_huecos")
-    dec = decompose_wings(plate, holes=holes, blind=params.get("_blind"))
+    cands = decompose_wings(plate, holes=holes, blind=params.get("_blind"), candidatos=True)
+    dec = (cands[0][1], cands[0][2]) if cands else None
     alas = None
     if not dec and not holes:                           # planta no ortogonal: alas con su propio eje (R3.4)
         alas = descomponer_alas(plate)
@@ -225,20 +226,52 @@ def build_pieces(plate, params):
             pc = _make_piece(plate, o, a, xa, xb, an)
             pc["single"] = True
         return [pc]
+    if dec and len(cands) > 1:
+        # las dos direcciones de corte dejan alas: la que deja los pasillos unidos entre sí (la punta de uno entra en
+        # otra ala, como lo ve _connect) y, a igual cantidad de grupos, la de mejor puntaje. Si no, en una planta en C
+        # o en U el corte a lo largo deja tres tiras paralelas cuyos pasillos no se tocan: cada uno es una isla con
+        # sus dos puntas libres, con un núcleo en cada una (seis núcleos y seis ascensores en una planta de 15 × 30)
+        opciones = [_piezas_de([(p, th) for p in polys], plate, holes, pedidos, params) for _, th, polys in cands]
+        return min(opciones, key=_componentes)
     alas = [(p, dec[0]) for p in dec[1]] if dec else alas
-    polys = [p for p, _ in alas]
-    centre = G.centroid(plate)
-    pieces = []
-    bl = params.get("_blind")
-    for poly, th in alas:
-        an = _ancho_ala(poly, pedidos, params)
-        pieces.append(_pieza_ala(poly, th, polys, holes, bl, centre, an, _con_ancho(params, an)))
+    pieces = _piezas_de(alas, plate, holes, pedidos, params)
     if not dec:
         for pc in pieces:                               # el eje termina donde corta el borde del ala (inglete, cuerda)
             ivs = G.line_intervals(pc["loc_plate"], 0.0)
             if ivs:
                 pc["eje"] = max(ivs, key=lambda t: t[1] - t[0])
     return pieces
+
+
+def _piezas_de(alas, plate, holes, pedidos, params):
+    """Las piezas de una descomposición en alas [(polígono, ángulo)] del modo automático."""
+    polys = [p for p, _ in alas]
+    centre = G.centroid(plate)
+    bl = params.get("_blind")
+    pieces = []
+    for poly, th in alas:
+        an = _ancho_ala(poly, pedidos, params)
+        pieces.append(_pieza_ala(poly, th, polys, holes, bl, centre, an, _con_ancho(params, an)))
+    return pieces
+
+
+def _componentes(pieces):
+    """Cuántos grupos de pasillos unidos forman las piezas: dos se unen si la punta del pasillo de una entra en el ala
+    de la otra (la misma prueba de _connect). Alas vecinas por el lado largo (pasillos paralelos) no se unen."""
+    padre = list(range(len(pieces)))
+
+    def raiz(i):
+        while padre[i] != i:
+            i = padre[i]
+        return i
+    for i, pc in enumerate(pieces):
+        ea, eb = pc.get("eje", (pc["xa"], pc["xb"]))
+        for xe, sgn in ((ea, -1), (eb, 1)):
+            probe = G.to_world([(xe + sgn * 0.8, 0.0)], pc["origin"], pc["angle"])[0]
+            nb = next((j for j, q in enumerate(pieces) if j != i and G.point_in_poly(probe, q["poly"])), None)
+            if nb is not None:
+                padre[raiz(i)] = raiz(nb)
+    return len({raiz(i) for i in range(len(pieces))})
 
 
 def _pieza_ala(poly, th, polys, holes, bl, centre, an, params):
