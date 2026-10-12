@@ -2298,8 +2298,19 @@ def test_grilla_y_snap():
               "e.key==='F7'", "e.key==='F8'", "e.key==='F9'", "localStorage.getItem('trazo.'+id)", "'trazo.'+c.id",
               "if(scp) p.scp=scp;", "scp:p.scp}", "scp=m.scp&&", "terreno=null; scp=null;", "ESCALA_MAX/s0"):
         assert t in js, t
-    g = js[js.index("function dibujarGrilla("):js.index("function scpObjeto(")]
+    g = js[js.index("function dibujarGrilla("):js.index("function iconoScp(")]
     assert "'pointer-events':'none'" in g and "scpActual()" in g
+    # revisión: un arrastre que el snap devuelve a su lugar no es un cambio; el vértice se arrastra después de 5 px;
+    # el patio conserva sus esquinas en la grilla; otra masa con la herramienta SCP; acercar nunca aleja; el paso se
+    # borra en blanco; un SCP guardado inválido no se usa; el ícono del SCP va encima de la planta; las barras entran
+    for t in ("if(!t||Math.abs(g.d)<1e-3) return drawOverlay();", "if(!sg||!r||Math.abs(g.d)<1e-3) return drawOverlay();",
+              "drag={li,vi,moved:false,x:e.clientX,y:e.clientY}", "Math.abs(e.clientX-drag.x)+Math.abs(e.clientY-drag.y)<5",
+              "patios.push(p.map(q=>[+q[0].toFixed(3),+q[1].toFixed(3)]", "olvidarHistoria(); medHover=null;",
+              "&&medHover!=null&&footprint[medHover]", "nz=f>1?Math.max(zoom,", "view=null; $('pasoTxt').textContent='';",
+              ".every(Number.isFinite)", "drawMeds(go); iconoScp(go);"):
+        assert t in js, t
+    assert "max-width:calc(100% - 20px);overflow-x:auto}" in html.split('.dibujo{', 1)[1].split("\n")[0]
+    assert ".herr>span:first-child{white-space:normal" in html
     assert "Math.min(12,zoom*f)" not in js
     # «Hecho cuando»: en quiebre_45 (de 8,1 a 19,5 px/m sin zoom según la pantalla y el panel) el zoom llega a 1 m,
     # 0,10 m y 0,05 m
