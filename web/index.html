@@ -141,6 +141,8 @@ table{width:100%;border-collapse:collapse;font-size:12px}
    <h2>Líneas centrales (polilíneas)</h2>
    <div class="hint">Se dibujan con <b>Línea</b> en la barra de dibujo: clic para cada vértice; doble clic, Enter o «Terminar» cierran la línea. Arrastra los vértices para editarlos; clic derecho sobre un vértice lo borra. Sin líneas dibujadas, el pasillo es automático.</div>
    <label><span class="hint" id="lineInfo" style="margin:0">Pasillo automático</span><button class="s" onclick="clearLines()" title="Borra las líneas dibujadas y vuelve al pasillo automático">Auto</button></label>
+   <div class="hint">Para mover o quitar un tramo del pasillo automático, pásalo a líneas: los núcleos quedan donde están (también desde la ficha de un tramo). Con un patio interior no se puede: el pasillo se traza solo alrededor del patio.</div>
+   <button class="s" onclick="pasarALineas()" title="Los pasillos pasan a polilíneas, una por tramo, y los núcleos a modo manual donde están">Pasar a líneas</button>
    <h2>Núcleos</h2>
    <label>Modo <select id="cores_mode" onchange="coresModeChanged()"><option value="auto">automático</option><option value="manual">manual</option></select></label>
    <label>Núcleo automático (escalera + ascensores) <input type="checkbox" id="core_auto" checked onchange="$('core_width').disabled=$('core_depth').disabled=this.checked"></label>
@@ -583,6 +585,7 @@ function pasilloPanel(){ const c=$('ctx'), ps=result.pasillos[selPas], gen=+$('c
   <div class="hint">Los demás tramos siguen con el ancho general (${gen.toFixed(2)} m, en Circulación).${aplica?' Las viviendas de este tramo ganan o pierden el fondo que cambia el pasillo.':''}</div>
   <button class="s" onclick="aplicarAncho()">Aplicar</button>${ps.propio?` <button class="s" onclick="aplicarAncho(true)">Como los demás (${gen.toFixed(2)} m)</button>`:''}`
   :'<div class="hint">Entre medianeras, este pasillo es la franja del núcleo: su ancho lo da el núcleo.</div>'}
+  ${lineasPanel(ps)}
   <button class="s" onclick="selPas=null;draw();unitPanel()">Cerrar</button>`;
  c.style.display='block'; }
 function medioEje(e){ return [+((e[0][0]+e[1][0])/2).toFixed(3),+((e[0][1]+e[1][1])/2).toFixed(3)]; }
@@ -606,6 +609,49 @@ function anchosInfo(){ const sin=sinTramo(), n=result&&result.pasillos?result.pa
 function quitarAnchos(){ recordar('quitar anchos de pasillo'); anchosPasillo=[]; anchosInfo(); if(lastStage) runCirc(); }
 function quitarSinTramo(){ const sin=new Set(sinTramo()); if(!sin.size) return; recordar('quitar anchos sin tramo'); anchosPasillo=anchosPasillo.filter((a,i)=>!sin.has(i)); selPas=null; anchosInfo(); if(lastStage) runCirc(); else unitPanel(); }
 function distSeg(p,a,b){ const dx=b[0]-a[0], dy=b[1]-a[1], L2=dx*dx+dy*dy, t=L2?Math.max(0,Math.min(1,((p[0]-a[0])*dx+(p[1]-a[1])*dy)/L2)):0; return Math.hypot(p[0]-a[0]-t*dx,p[1]-a[1]-t*dy); }
+
+/* ---------- pasar los pasillos a líneas y quitar un tramo (R4.11) ---------- */
+const TOL_EJE=0.30;   // m: el eje de un tramo cae a esta distancia o menos del segmento que lo generó (el motor recorta puntas y corta las líneas en los cruces)
+function enAnillo(ps){ const b=((result&&result.blocks)||[])[ps.bloque]; return !!(b&&(b.holes||[]).length); }   // con un patio interior el motor ignora las polilíneas
+function segDeTramo(ps){ let m=null;   // [polilínea i, tramo j] de centerlines sobre el que cae el eje del tramo; null si el pasillo es automático
+ centerlines.forEach((pl,i)=>{ for(let j=0;j<pl.length-1;j++){ const d=Math.max(distSeg(ps.eje[0],pl[j],pl[j+1]),distSeg(ps.eje[1],pl[j],pl[j+1])); if(d<=TOL_EJE&&(!m||d<m.d-1e-9)) m={i,j,d}; } });
+ return m; }
+function tramosAuto(){ const L=(result&&result.pasillos)||[], dib=new Set(L.filter(q=>segDeTramo(q)).map(q=>q.bloque));   // los que ninguna línea dibujada genera, en bloques sin líneas ni patio interior
+ return L.filter(q=>!dib.has(q.bloque)&&!enAnillo(q)); }
+function encadenar(ejes){ const r=p=>[+p[0].toFixed(3),+p[1].toFixed(3)], cerca=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1])<=0.05, cad=[];   // los tramos que se tocan por un extremo son una sola polilínea (en un quiebre se reparte mucho mejor); los repetidos se quitan
+ ejes.forEach(e=>{ const c=e.map(r); if(!cad.some(x=>x.length===2&&((cerca(x[0],c[0])&&cerca(x[1],c[1]))||(cerca(x[0],c[1])&&cerca(x[1],c[0]))))) cad.push(c); });
+ for(let sigue=true;sigue;){ sigue=false; for(let i=0;i<cad.length&&!sigue;i++) for(let j=0;j<cad.length&&!sigue;j++){ if(i===j) continue; const A=cad[i], B=cad[j];
+   if(cerca(A[A.length-1],B[0])){ cad[i]=A.concat(B.slice(1)); cad.splice(j,1); sigue=true; }
+   else if(cerca(A[A.length-1],B[B.length-1])){ cad[i]=A.concat(B.slice(0,-1).reverse()); cad.splice(j,1); sigue=true; } } }
+ return cad; }
+function juntosDe(ps){ const d=segDeTramo(ps); if(!d) return [ps];   // las dos mitades de una línea cortada donde cruza otro pasillo caen sobre el mismo segmento: se quitan juntas
+ return result.pasillos.filter(q=>{ const s=segDeTramo(q); return !!s&&s.i===d.i&&s.j===d.j; }); }
+function unicoTxt(ps,juntos){ if(result.pasillos.some(q=>q.bloque===ps.bloque&&!juntos.includes(q))) return '';   // sin otro pasillo en su bloque, el motor traza uno automático y el tramo vuelve
+ return 'Es el único pasillo'+(new Set(result.pasillos.map(q=>q.bloque)).size>1?' de su bloque':'')+': sin él el motor traza uno automático. Dibuja otro antes de quitarlo.'; }
+function sinAuto(){ const L=(result&&result.pasillos)||[];   // por qué no hay pasillo automático que pasar a líneas (mensajes cortos: la etiqueta de abajo es angosta)
+ return !L.length?'Calcula el pasillo primero':L.every(q=>enAnillo(q))?'Con patio interior no se pasa a líneas':'Ya está en líneas'; }
+function lineasPanel(ps){ const t='<h2 style="margin:10px 0 4px">Mover o quitar</h2>', b=(txt,f,tt,off)=>`<button class="s" onclick="${f}" title="${tt}"${off?' disabled':''}>${txt}</button>`;   // la parte de la ficha del tramo
+ if(enAnillo(ps)) return t+'<div class="hint">Con un patio interior el pasillo no se pasa a líneas: el motor lo traza solo alrededor del patio.</div>';
+ const dib=segDeTramo(ps), juntos=juntosDe(ps), unico=unicoTxt(ps,juntos), quitar=b('Quitar este tramo','quitarTramo()','Pasa los pasillos a líneas, sin este tramo',!!unico);
+ if(dib) return t+'<div class="hint">Es una línea dibujada: arrastra sus vértices en la planta para moverla, o quita este tramo (los demás siguen). «Auto», en Circulación, vuelve al pasillo automático.'+(juntos.length>1?' Como cruza otro pasillo, la línea está cortada en '+juntos.length+' tramos ('+juntos.map(q=>q.id).join(', ')+'): se quitan juntos.':'')+'</div>'+(unico?'<div class="hint">'+unico+'</div>':'')+quitar;
+ return t+'<div class="hint">Pasillo automático. «Pasar a líneas» lo convierte, con los demás, en líneas que puedes mover o quitar; los núcleos quedan donde están.'+(ps.editable?'':' Entre medianeras, la franja del núcleo se reparte distinto como línea (puede dar más o menos viviendas): compara y deshaz con ↶ si no te sirve.')+'</div>'+(unico?'<div class="hint">'+unico+'</div>':'')
+  +b('Pasar a líneas','pasarALineas()','Los pasillos pasan a polilíneas, una por tramo, y los núcleos a modo manual donde están')+' '+quitar; }
+async function pasarALineas(){ const auto=tramosAuto(); if(!auto.length){ $('tag').textContent=sinAuto(); return; }
+ const ps=selPas!=null&&result.pasillos[selPas]?result.pasillos[selPas]:auto[0];   // la ficha queda en el tramo elegido (o en el primero) y dice qué hacer ahora
+ recordar('pasar los pasillos a líneas'); ensureManual(); if(autoPatios().length) ensurePatiosManual();   // los núcleos quedan donde están; sin líneas el motor traza solo los patios automáticos, con líneas no: pasan a manuales
+ centerlines=centerlines.concat(encadenar(auto.map(q=>q.eje))); coreInfo();
+ selPasP=medioEje(ps.eje); selPasK=null; selPas=null; lineInfo(); drawOverlay();
+ const antes=result; await runCirc(); if(result!==antes) $('tag').textContent='Pasado a líneas'; }
+async function quitarTramo(){ const ps=result&&result.pasillos&&result.pasillos[selPas]; if(!ps) return;
+ if(enAnillo(ps)){ $('tag').textContent='Con patio interior no se quita'; return; }
+ const dib=segDeTramo(ps), juntos=juntosDe(ps);
+ if(!dib&&!tramosAuto().includes(ps)){ $('tag').textContent='No encuentro su línea: bórrala desde un vértice'; return; }
+ if(unicoTxt(ps,juntos)){ $('tag').textContent='Es el único pasillo de su bloque'; return; }
+ recordar('quitar el pasillo '+ps.id);
+ if(dib){ const pl=centerlines[dib.i]; centerlines.splice(dib.i,1,...[pl.slice(0,dib.j+1),pl.slice(dib.j+1)].filter(q=>q.length>=2)); }   // la línea queda partida en las partes de antes y de después del segmento
+ else { ensureManual(); if(autoPatios().length) ensurePatiosManual(); centerlines=centerlines.concat(encadenar(tramosAuto().filter(q=>q!==ps).map(q=>q.eje))); coreInfo(); }
+ selPas=null; lineInfo(); drawOverlay(); const antes=result; await runCirc();
+ if(result!==antes) $('tag').textContent='Quitado '+juntos.map(q=>q.id).join(', '); }
 
 /* ---------- patios ---------- */
 function rectAlign(p0,p1){ const th=domAngle(footprint.length?footprint:[p0,p1]), c=Math.cos(th), s=Math.sin(th), L=q=>[q[0]*c+q[1]*s,-q[0]*s+q[1]*c], W=q=>[q[0]*c-q[1]*s,q[0]*s+q[1]*c], a=L(p0), b=L(p1);

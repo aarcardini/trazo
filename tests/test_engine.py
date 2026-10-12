@@ -3215,3 +3215,176 @@ def test_modo_claro_oscuro():
 
 if __name__ == "__main__":
     test_modo_claro_oscuro(); print("OK59")
+
+
+def test_quitar_pasillo():
+    """R4.11: quitar o mover un pasillo desde la web. «Pasar a líneas» (en la ficha del tramo y en Circulación) convierte
+    los pasillos automáticos en polilíneas, una por tramo (las que se tocan por un extremo, una sola), y los núcleos y los
+    patios automáticos pasan a manuales tal como están; «Quitar este tramo» lo hace en un paso (con líneas dibujadas, quita
+    el segmento que generó el tramo). El motor no cambia: sin líneas en un bloque traza el pasillo solo (por eso no se
+    puede quitar el único pasillo de un bloque) y con un patio interior ignora las polilíneas (por eso ahí no se ofrece).
+    (El comportamiento se comprobó en navegador; esta prueba vigila la web con comprobaciones del código y el motor con el
+    mismo recorrido que hace la web, que se repite acá en Python.)"""
+    import math
+    base = os.path.join(os.path.dirname(__file__), "..")
+    html = open(os.path.join(base, "web", "index.html"), encoding="utf-8").read()
+    js = html.split("<script>", 1)[1].split("</script>", 1)[0]
+
+    def cuerpo(nombre):
+        ini = js.index("function %s(" % nombre)
+        fin = min(k for k in (js.find("\nfunction ", ini + 1), js.find("\nasync function ", ini + 1), js.find("\n/*", ini + 1),
+                              len(js)) if k >= 0)
+        return js[ini:fin]
+    # ---- la web: los botones, el orden de las acciones y el deshacer
+    for f in ("function enAnillo(", "function segDeTramo(", "function tramosAuto(", "function encadenar(", "function juntosDe(",
+              "function unicoTxt(", "function lineasPanel(", "async function pasarALineas(", "async function quitarTramo("):
+        assert f in js, f
+    assert "const TOL_EJE=0.30;" in js
+    assert "${lineasPanel(ps)}" in cuerpo("pasilloPanel")                                   # en la ficha del tramo
+    circ = html.split("<body>", 1)[1].split("<script>", 1)[0].split('<div class="grupo" data-grupo="circ"', 1)[1] \
+        .split('<div class="grupo"', 1)[0]
+    assert circ.index('id="lineInfo"') < circ.index('onclick="pasarALineas()"') < circ.index("<h2>Núcleos</h2>")   # y en Circulación
+    ficha = cuerpo("lineasPanel")
+    assert ficha.index("enAnillo(ps)") < min(ficha.index("pasarALineas()"), ficha.index("quitarTramo()"))   # con un patio interior, sin botones
+    assert "Con un patio interior el pasillo no se pasa a líneas" in ficha and "disabled" in ficha
+    pasar = cuerpo("pasarALineas")                       # antes de cambiar nada guarda el estado; los núcleos y los patios, tal como están
+    assert pasar.index("tramosAuto()") < pasar.index("recordar('pasar los pasillos a líneas')") < pasar.index("ensureManual()") \
+        < pasar.index("ensurePatiosManual()") < pasar.index("centerlines=centerlines.concat(encadenar(") < pasar.index("runCirc()")
+    quitar = cuerpo("quitarTramo")
+    assert quitar.index("enAnillo(ps)") < quitar.index("unicoTxt(") < quitar.index("recordar('quitar el pasillo '") \
+        < quitar.index("centerlines.splice(") < quitar.index("runCirc()")
+    assert "filter(q=>q.length>=2)" in quitar and "ensureManual()" in quitar and "ensurePatiosManual()" in quitar
+    foto = cuerpo("foto")                                # lo que cambian estas acciones va en la foto de deshacer
+    assert all(k in foto for k in ("centerlines", "coresManual", "cores_mode", "patios,", "patios_mode"))
+
+    # ---- lo que hace la web, en Python
+    def dist_seg(p, a, b):
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        L2 = dx * dx + dy * dy
+        t = max(0.0, min(1.0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L2)) if L2 else 0.0
+        return math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy)
+
+    def seg_de_tramo(eje, lineas):                       # como segDeTramo: (línea, segmento, distancia) o None
+        mejor = None
+        for i, pl in enumerate(lineas):
+            for j in range(len(pl) - 1):
+                d = max(dist_seg(eje[0], pl[j], pl[j + 1]), dist_seg(eje[1], pl[j], pl[j + 1]))
+                if d <= 0.30 and (mejor is None or d < mejor[2] - 1e-9):
+                    mejor = (i, j, d)
+        return mejor
+
+    def encadenar(ejes):                                 # los tramos que se tocan (5 cm o menos) son una sola polilínea
+        cerca = lambda a, b: math.hypot(a[0] - b[0], a[1] - b[1]) <= 0.05
+        cad = []
+        for e in ejes:
+            c = [[round(q[0], 3), round(q[1], 3)] for q in e]
+            if not any(len(x) == 2 and ((cerca(x[0], c[0]) and cerca(x[1], c[1])) or (cerca(x[0], c[1]) and cerca(x[1], c[0])))
+                       for x in cad):
+                cad.append(c)
+        sigue = True
+        while sigue:
+            sigue = False
+            for i in range(len(cad)):
+                for j in range(len(cad)):
+                    if i != j and cerca(cad[i][-1], cad[j][0]):
+                        cad[i] = cad[i] + cad[j][1:]
+                        sigue = True
+                    elif i != j and cerca(cad[i][-1], cad[j][-1]):
+                        cad[i] = cad[i] + cad[j][:-1][::-1]
+                        sigue = True
+                    if sigue:
+                        del cad[j]
+                        break
+                if sigue:
+                    break
+        return cad
+
+    def sin_segmento(lineas, i, j):                      # la línea queda partida en las partes de antes y de después
+        partes = [q for q in (lineas[i][:j + 1], lineas[i][j + 1:]) if len(q) >= 2]
+        return lineas[:i] + partes + lineas[i + 1:]
+
+    def a_lineas(r):                                     # «Pasar a líneas»: las líneas y los núcleos tal como están
+        return encadenar([p["eje"] for p in r["pasillos"]]), [c["center"] for c in r["cores"]]
+    muestra = lambda n: json.load(open(os.path.join(base, "samples", n + ".json"), encoding="utf-8"))
+    fondo_max = lambda r: max(max(q[1] for q in u["poly"]) - min(q[1] for q in u["poly"]) for u in r["units"])
+
+    # las líneas y las partes de una línea
+    assert sin_segmento([[[0, 0], [5, 0], [9, 0]]], 0, 0) == [[[5, 0], [9, 0]]]                # solo queda lo que sigue
+    assert sin_segmento([[[0, 0], [5, 0], [9, 0]]], 0, 1) == [[[0, 0], [5, 0]]]
+    assert sin_segmento([[[0, 0], [5, 0]], [[1, 1], [2, 2]]], 0, 0) == [[[1, 1], [2, 2]]]      # de dos vértices: se quita entera
+    assert sin_segmento([[[0, 0], [5, 0], [9, 0], [12, 0]]], 0, 1) == [[[0, 0], [5, 0]], [[9, 0], [12, 0]]]
+    assert encadenar([[[0, 0], [5, 0]], [[5, 0], [9, 3]], [[5, 0], [0, 0]]]) == [[[0, 0], [5, 0], [9, 3]]]   # repetidos, una sola
+
+    # 1) L (dos alas): cada tramo cae sobre su línea; el plano casi no cambia; quitar un tramo deja menos viviendas y el aviso
+    fp = [[0, 0], [50, 0], [50, 14], [16, 14], [16, 40], [0, 40]]
+    r0 = run(fp)
+    lin, nuc = a_lineas(r0)
+    r1 = run(fp, centerlines=lin, cores_mode="manual", cores=nuc)
+    assert len(lin) == 2 and len(r0["pasillos"]) == len(r1["pasillos"]) == 2 and len(r0["cores"]) == len(r1["cores"]) == 3
+    assert abs(len(r1["units"]) - len(r0["units"])) <= 1, (len(r0["units"]), len(r1["units"]))
+    for p in r1["pasillos"]:
+        s = seg_de_tramo(p["eje"], lin)
+        assert s is not None and s[2] < 0.05, (p["id"], s)
+    mayor = max(r1["pasillos"], key=lambda p: p["viviendas"])
+    i, j, _ = seg_de_tramo(mayor["eje"], lin)
+    r2 = run(fp, centerlines=sin_segmento(lin, i, j), cores_mode="manual", cores=nuc)
+    assert len(r2["pasillos"]) == 1 and len(r2["units"]) < len(r1["units"]), (len(r1["units"]), len(r2["units"]))
+    assert any("servido por el pasillo" in w for w in r2["warnings"]), r2["warnings"]            # lo que ningún pasillo sirve, con aviso
+
+    # 2) un quiebre a 45°: los dos tramos se tocan y son una sola línea; por separado, el plano pierde viviendas
+    s = muestra("quiebre_45")
+    q0 = run(s["footprint"], h=s["height"])
+    lin, nuc = a_lineas(q0)
+    assert len(q0["pasillos"]) == 2 and len(lin) == 1 and len(lin[0]) == 3, lin
+    q1 = run(s["footprint"], h=s["height"], centerlines=lin, cores_mode="manual", cores=nuc)
+    sep = [[[round(q[0], 3), round(q[1], 3)] for q in p["eje"]] for p in q0["pasillos"]]
+    q2 = run(s["footprint"], h=s["height"], centerlines=sep, cores_mode="manual", cores=nuc)
+    assert abs(len(q1["units"]) - len(q0["units"])) <= 1 and len(q1["units"]) >= len(q2["units"]), \
+        (len(q0["units"]), len(q1["units"]), len(q2["units"]))
+
+    # 3) entre medianeras 15 × 30 con patio automático: con líneas solas el motor ya no traza el patio automático, así que la
+    #    web lo pasa a manual (los mismos bloques y viviendas); y sin líneas en un bloque, el motor traza el pasillo solo
+    fp = [[0, 0], [15, 0], [15, 30], [0, 30]]
+    med = [{"a": [15, 0], "b": [15, 30], "retiro": 0}, {"a": [0, 30], "b": [0, 0], "retiro": 0}]
+    e0 = run(fp, medianeras=med)
+    assert e0["patios_auto"] and len(e0["blocks"]) == 2 and [p["bloque"] for p in e0["pasillos"]] == [0, 1]
+    lin, nuc = a_lineas(e0)
+    manual = dict(medianeras=med, cores_mode="manual", cores=nuc, patios_mode="manual", patios=e0["patios"])
+    e1 = run(fp, centerlines=lin, **manual)
+    assert len(e1["blocks"]) == 2 and len(e1["units"]) == len(e0["units"]) and len(e1["cores"]) == len(e0["cores"]), \
+        (len(e0["units"]), len(e1["units"]))
+    assert [p["bloque"] for p in e1["pasillos"]] == [0, 1]
+    e2 = run(fp, centerlines=lin[:1], **manual)                      # sin líneas en el segundo bloque: pasillo automático
+    assert len(e2["pasillos"]) == 2 and sorted(p["bloque"] for p in e2["pasillos"]) == [0, 1]
+
+    # 4) con un patio interior el motor ignora las polilíneas (con un aviso): la web no ofrece pasar a líneas
+    s = muestra("patio_central")
+    a0 = run(s["footprint"], h=s["height"], patios=s["patios"], patios_mode="manual")
+    assert a0["blocks"][0]["holes"], "el patio central deja un hueco"
+    lin, nuc = a_lineas(a0)
+    a1 = run(s["footprint"], h=s["height"], patios=s["patios"], patios_mode="manual", centerlines=lin, cores_mode="manual",
+             cores=nuc)
+    assert any("las polilíneas dibujadas todavía no se usan ahí" in w for w in a1["warnings"]), a1["warnings"]
+    assert len(a1["pasillos"]) == len(a0["pasillos"]) == 4 and len(a1["units"]) == len(a0["units"])
+
+    # 5) las dos mitades de una línea cortada donde cruza otra caen sobre el mismo segmento y se quitan juntas
+    s = muestra("cruz_dos_lineas")
+    x0 = run(s["footprint"], h=s["height"], centerlines=s["centerlines"])
+    segs = [seg_de_tramo(p["eje"], s["centerlines"]) for p in x0["pasillos"]]
+    assert len(segs) == 3 and all(segs) and all(g[2] < 0.05 for g in segs), segs
+    mitades = [g for g in segs if segs.count(g) > 1]
+    assert len(mitades) == 2 and mitades[0][:2] == mitades[1][:2] == (1, 0), segs
+    x1 = run(s["footprint"], h=s["height"], centerlines=sin_segmento(s["centerlines"], 1, 0))
+    assert len(x1["pasillos"]) == 1 and len(x1["units"]) < len(x0["units"])
+
+    # 6) dos pasillos paralelos en un mismo bloque: al quitar uno, las viviendas del otro ocupan su lugar (ganan fondo)
+    fp = [[0, 0], [40, 0], [40, 22], [0, 22]]
+    dos = [[[1, 5.5], [39, 5.5]], [[1, 16.5], [39, 16.5]]]
+    p2 = run(fp, centerlines=dos, cores_mode="manual", cores=[[3, 9], [36, 13]])
+    p1 = run(fp, centerlines=dos[:1], cores_mode="manual", cores=[[3, 9], [36, 13]])
+    assert len(p2["pasillos"]) == 2 and len(p1["pasillos"]) == 1
+    assert len(p1["units"]) > len(p2["units"]) and fondo_max(p1) > fondo_max(p2) + 5, (fondo_max(p2), fondo_max(p1))
+    assert p1["metrics"]["efficiency"] > p2["metrics"]["efficiency"]
+
+if __name__ == "__main__":
+    test_quitar_pasillo(); print("OK60")
