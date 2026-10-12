@@ -19,10 +19,11 @@ from .circulation import (pick_frame, core_positions, side_for, _frame_for_poly,
                           _add_core, _propagate_core_blocks, generate_circulation, is_between, _between_depth,
                           _generate_circulation, nucleo_punto, medidas_nucleo, ancho_de)  # noqa: F401
 from .units import (_bisect_x, _chain_union, _is_rect, _segments, generate_unit_mix, metrics_mix, bedrooms_for,
-                    unit_rooms, sin_solapes, editar_unidades, vecinas, formar_frentes, entradas)  # noqa: F401
+                    unit_rooms, sin_solapes, editar_unidades, vecinas, formar_frentes, entradas,
+                    superficie_con_muros)  # noqa: F401
 from .patios import (auto_patios, _anillo, split_blocks, make_patio_dark, _block_of, _block_of_line)  # noqa: F401
 
-VERSION = "2.40"
+VERSION = "2.41"
 
 DEFAULT_PARAMS = {
     # Masa
@@ -225,12 +226,16 @@ def generate(data):
     fp, plate, stories = build_massing(footprint, height, params)
     res = {"stage": stage, "footprint": G.pol_to_list(fp), "stories": stories, "warnings": []}
     meds = params.get("medianeras") or []
-    rmin = S0["predio"]["retiro_ventanas"]
+    rmin, rdiv = S0["predio"]["retiro_ventanas"], S0["predio"]["retiro_divisoria"]
     res["medianeras"] = [{"a": m["a"], "b": m["b"], "retiro": float(m.get("retiro") or 0),
                           "ventanas": float(m.get("retiro") or 0) >= rmin} for m in meds]
     for m in res["medianeras"]:
-        if 0 < m["retiro"] < rmin:
-            res["warnings"].append("Retiro de %.1f m en medianera: menor a %.1f m, sigue sin admitir ventanas" % (m["retiro"], rmin))
+        if 0 < m["retiro"] < rdiv - 1e-9:                   # R10.8: separado de la divisoria, 1 m o más (art. 53 e)
+            res["warnings"].append("Retiro de %g m en medianera: si el edificio se separa de la divisoria, la norma "
+                                   "nacional pide %g m como mínimo (art. 53 e); pon 0 (adosado) o %g m o más" % (
+                                       m["retiro"], rdiv, rdiv))
+        elif 0 < m["retiro"] < rmin:
+            res["warnings"].append("Retiro de %g m en medianera: menor a %g m, sigue sin admitir ventanas" % (m["retiro"], rmin))
     # ---- núcleo real: escalera + ascensores según altura y unidades servidas
     S = ST.merged(params.get("standards"))
     cw = params["corridor_width"]
@@ -527,13 +532,17 @@ def generate(data):
     res["units"] = []
     interiores = list(enumerate(params.get("room_edits") or []))     # R5.7: cambios dentro de las viviendas
     hechos_dentro = set()
-    for u in units:
+    # R10.8: superficie con muros (norma nacional, art. 3), con lo que cada vivienda tiene alrededor
+    mundo = [W(u["_pc"], u["poly_local"]) for u in units]
+    muros = superficie_con_muros(mundo, [[u["_plate"]] + list(u["_pb"].get("_huecos") or []) for u in units],
+                                 res["corridors"], [c["poly"] for c in res["cores"]], params, S)
+    for u, um, am in zip(units, mundo, muros):
         pc = u["_pc"]
         eg, sc = u["egress"], u["saco"]
         status = "fail" if eg > params["egress_multi"] else ("saco" if sc > params["egress_single"] else "ok")
         item = {"id": u["id"], "type": u["type"], "area": round(u["area"], 1), "target": u["target"],
                 "width": round(u["width"], 2), "depth": round(u["depth"], 2), "egress": round(eg, 1),
-                "saco": round(sc, 1), "egress_status": status, "poly": W(pc, u["poly_local"]),
+                "saco": round(sc, 1), "egress_status": status, "poly": um, "area_muros": round(am, 1),
                 "door": [round(v, 3) for v in G.to_world([u["door_local"]], pc["origin"], pc["angle"])[0]]}
         item["pasillo"] = res["pasillos"][pc["_pas"]]["id"]   # R10.8: el tramo de pasillo de su puerta
         if u.get("editada"):
@@ -546,6 +555,7 @@ def generate(data):
             item["vestidor"] = True                         # R5.10: tipo del mix con vestidor
         if stage == "plans":
             pl = unit_rooms(u, u["_pb"], pc, u["_plate"], [(k, e) for k, e in interiores if k not in hechos_dentro])
+            P.superficie_vivienda(pl, am, S["vivienda"])     # R10.8: arts. 3 y 2, igual para todas las variantes
             hechos_dentro.update(pl["ediciones"])
             Wp = lambda pt, pc=pc: [round(v, 3) for v in G.to_world([pt], pc["origin"], pc["angle"])[0]]
             item["bedrooms"] = pl["bedrooms"]

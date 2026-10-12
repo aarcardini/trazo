@@ -516,6 +516,121 @@ def metrics_mix(units, params):
             "by_type": {k: {"count": v["count"], "avg_area": round(v["area"] / v["count"], 1)} for k, v in by.items()}}
 
 
+# ---------------------------------------------------------------- superficie con muros (R10.8)
+def superficie_con_muros(polys, bordes, pasillos, nucleos, params, S=None, paso=0.25):
+    """R10.8 (norma nacional, art. 3: la superficie de la vivienda se mide con los muros exteriores hasta su cara exterior
+    y hasta el eje de los divisorios): cada tramo del contorno (de a unos `paso` m) se corre hacia afuera según lo que
+    tiene del otro lado. Fachada (el borde de la planta o de un patio interior) y medianera (criterio del usuario: el muro
+    entero): el muro exterior hasta su cara exterior, outer_wall. Otra vivienda: el eje del muro entre las dos,
+    party_wall / 2. El pasillo común (a medio muro de la vivienda): el eje de ese muro, party_wall / 4. Un núcleo (su muro
+    está dentro de su caja): el eje de ese muro, nucleo["muro"] / 2. Nada cerca (una zona sin luz, un rincón): un
+    tabique, party_wall / 2. Con la vecina o el pasillo se mide la separación real (la sonda en que aparecen: pegados,
+    a medio muro o a un muro) y se va hasta su mitad; con el núcleo, hasta la mitad de la separación más su muro. Un
+    tramo es fachada si está entero sobre el borde de la planta, y los tramos también se cortan donde un vértice de la
+    planta cae sobre el contorno (ahí cambia lo que hay del otro lado). En un rincón entrante de la planta (el codo de
+    una L, la esquina de un patio), el cuadrado de muro exterior se parte por la bisectriz: cada vivienda cuenta la mitad
+    junto a su fachada. polys: contornos de mundo de las viviendas; bordes[i]: los de la planta de la vivienda i
+    (exterior y patios interiores); pasillos y núcleos: sus polígonos de mundo. Devuelve las superficies, en orden. Los
+    puntos del desfase van desde el primer vértice de la vivienda (precisos con coordenadas UTM)."""
+    ow, pw = params["outer_wall"], params["party_wall"]
+    muro = (S or ST.merged(params.get("standards")))["nucleo"]["muro"]
+    otros = [(G.bbox(p), p, "vivienda", i) for i, p in enumerate(polys) if len(p) >= 3] + \
+        [(G.bbox(p), p, "pasillo", None) for p in pasillos if len(p) >= 3] + \
+        [(G.bbox(p), p, "nucleo", None) for p in nucleos if len(p) >= 3]
+    sondas = (0.05, pw / 2 + 0.05, pw + 0.05)
+    lejos = sondas[-1] + 1e-6
+    out = []
+    for i, pl in enumerate(polys):
+        poly = G.ensure_ccw(G.clean_rel(pl))           # sin quiebres mínimos ni puntas de ancho cero (redondeo)
+        if len(poly) < 3:
+            out.append(0.0)
+            continue
+        bx0, by0, bx1, by1 = G.bbox(poly)
+        cerca = [o for o in otros if o[3] != i and o[0][0] <= bx1 + lejos and o[0][2] >= bx0 - lejos and
+                 o[0][1] <= by1 + lejos and o[0][3] >= by0 - lejos]
+        lazos = [(h, b) for h, b in enumerate(bordes[i]) if b and len(b) >= 3]     # h = 0: el contorno exterior
+        en_borde = lambda q: any(_dist_to_boundary(q, lz) < 0.05 for _, lz in lazos)
+        vert = [v for _, lz in lazos for v in lz if bx0 - 0.1 <= v[0] <= bx1 + 0.1 and by0 - 0.1 <= v[1] <= by1 + 0.1]
+        ox, oy = poly[0]
+        pts, ds = [], []
+        for k in range(len(poly)):
+            a, b = poly[k], poly[(k + 1) % len(poly)]
+            L = math.hypot(b[0] - a[0], b[1] - a[1])
+            ux, uy = (b[0] - a[0]) / L, (b[1] - a[1]) / L
+            nx, ny = uy, -ux                                       # hacia afuera
+            n = max(1, int(round(L / paso)))
+            # los tramos: de a `paso` y cortados donde un vértice de la planta cae sobre el borde (ahí cambia la fachada)
+            ts = sorted(set([j / float(n) for j in range(n)] +
+                            [((v[0] - a[0]) * ux + (v[1] - a[1]) * uy) / L for v in vert
+                             if abs((v[0] - a[0]) * nx + (v[1] - a[1]) * ny) < 0.05 and
+                             0.02 < (v[0] - a[0]) * ux + (v[1] - a[1]) * uy < L - 0.02]))
+            pt = lambda t: (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
+            prev = None
+            for j, t0 in enumerate(ts):
+                t1 = ts[j + 1] if j + 1 < len(ts) else 1.0
+                m = pt((t0 + t1) / 2)
+                if en_borde(pt(t0)) and en_borde(m) and en_borde(pt(t1)):
+                    d = ow                                         # fachada o medianera (el tramo entero sobre el borde)
+                else:
+                    d = pw / 2                                     # otra vivienda, o nada: un tabique
+                    for t in sondas:
+                        q = (m[0] + nx * t, m[1] + ny * t)
+                        tipo = next((o[2] for o in cerca if o[0][0] <= q[0] <= o[0][2] and o[0][1] <= q[1] <= o[0][3]
+                                     and G.point_in_poly(q, o[1])), None)
+                        if tipo:                           # la separación: 0, medio muro o un muro (sin muro: 0)
+                            hueco = round((t - sondas[0]) / (pw / 2)) * (pw / 2) if pw > 1e-9 else 0.0
+                            d = (hueco + muro) / 2 if tipo == "nucleo" else hueco / 2
+                            break
+                if prev is None or abs(prev - d) > 1e-9:
+                    pts.append((a[0] - ox + (b[0] - a[0]) * t0, a[1] - oy + (b[1] - a[1]) * t0))
+                    ds.append(d)
+                    prev = d
+        con = G.desfase(pts, ds)
+        out.append(abs(G.area(con)) - _rincones(con, poly, lazos, ow, (ox, oy)))
+    return out
+
+
+def _rincones(con, poly, lazos, ow, o):
+    """R10.8: lo que superficie_con_muros quita del polígono con muros con (desde el punto o) de la vivienda poly en los
+    rincones entrantes de la planta (lazos: [(h, contorno)], h = 0 el exterior): el cuadrado de muro exterior del rincón
+    se parte por la bisectriz y la vivienda que llega por un solo lado no cuenta la mitad del otro (la cuenta la vecina)."""
+    ox, oy = o
+    rel = [(p[0] - ox, p[1] - oy) for p in poly]
+    sobre = lambda q: _dist_to_boundary(q, rel) < 0.03
+    quita = 0.0
+    for h, lz in lazos:
+        lz = G.ensure_ccw([(p[0] - ox, p[1] - oy) for p in lz])
+        if h:
+            lz = lz[::-1]                                  # un patio: la planta, a la izquierda
+        for k in range(len(lz)):
+            p0, P_, p2 = lz[k - 1], lz[k], lz[(k + 1) % len(lz)]
+            if _dist_to_boundary(P_, rel) > 0.03:
+                continue
+            l1, l2 = math.hypot(P_[0] - p0[0], P_[1] - p0[1]), math.hypot(p2[0] - P_[0], p2[1] - P_[1])
+            if l1 < 1e-9 or l2 < 1e-9:
+                continue
+            d1 = ((P_[0] - p0[0]) / l1, (P_[1] - p0[1]) / l1)
+            d2 = ((p2[0] - P_[0]) / l2, (p2[1] - P_[1]) / l2)
+            den = d1[0] * d2[1] - d1[1] * d2[0]
+            if den > -1e-6:
+                continue                                   # no es un rincón entrante
+            q1 = (P_[0] + ow * d1[1], P_[1] - ow * d1[0])  # la cara exterior de cada muro, junto al rincón
+            q2 = (P_[0] + ow * d2[1], P_[1] - ow * d2[0])
+            t = ((q2[0] - q1[0]) * d2[1] - (q2[1] - q1[1]) * d2[0]) / den
+            F = (q1[0] + t * d1[0], q1[1] + t * d1[1])     # la esquina exterior: la bisectriz va de P_ a F
+            e = min(0.1, l1 / 2, l2 / 2)
+            por1, por2 = sobre((P_[0] - d1[0] * e, P_[1] - d1[1] * e)), sobre((P_[0] + d2[0] * e, P_[1] + d2[1] * e))
+            if por1 == por2:
+                continue                                   # por los dos lados (o por ninguno): el cuadrado es suyo
+            tri = G.ensure_ccw([P_, F, q1] if por1 else [P_, q2, F])     # la mitad del lado que no es suyo
+            c = con
+            for r in range(3):
+                A, B = tri[r], tri[(r + 1) % 3]
+                c = G.clip_halfplane(c, -(B[1] - A[1]), B[0] - A[0], -(B[1] - A[1]) * A[0] + (B[0] - A[0]) * A[1])
+            quita += abs(G.area(c)) if len(c) >= 3 else 0.0
+    return quita
+
+
 # ---------------------------------------------------------------- planos de unidad
 def bedrooms_for(area):
     return P.bedrooms_for(area)

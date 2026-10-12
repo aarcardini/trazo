@@ -45,6 +45,24 @@ def clean(poly, tol=1e-7):
     return pts
 
 
+def clean_rel(poly, ang=1e-3, dist=1e-3):
+    """Como clean, con tolerancias relativas: quita los vértices a menos de dist del anterior, los casi colineales y las
+    puntas de ancho cero (el seno del giro, menor que ang). Sirve con contornos redondeados (pol_to_list) o en UTM."""
+    pts = [tuple(p) for p in poly]
+    changed = True
+    while changed and len(pts) > 3:
+        changed = False
+        for i in range(len(pts)):
+            a, b, c = pts[i - 1], pts[i], pts[(i + 1) % len(pts)]
+            ab, bc = math.hypot(b[0] - a[0], b[1] - a[1]), math.hypot(c[0] - b[0], c[1] - b[1])
+            cr = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0])
+            if ab < dist or abs(cr) <= ang * ab * bc:
+                pts.pop(i)
+                changed = True
+                break
+    return pts
+
+
 def centroid(poly):
     a = area(poly)
     if abs(a) < EPS:
@@ -150,6 +168,45 @@ def inset(poly, dist):
         t = ((p2[0] - p1[0]) * d2[1] - (p2[1] - p1[1]) * d2[0]) / den
         out.append((p1[0] + t * d1[0], p1[1] + t * d1[1]))
     return out
+
+
+def desfase(poly, ds):
+    """R10.8: desfase de cada borde por su propia distancia: ds[i] mueve el borde i (poly[i] -> poly[i+1]) hacia afuera
+    (negativo, hacia adentro). Dos bordes seguidos paralelos, o casi (una mitra a más de 4 veces la distancia del vértice:
+    un quiebre mínimo, un puente de ancho cero), dejan un escalón con los dos puntos; los demás se cortan en su mitra.
+    Calcula desde el primer vértice (preciso con coordenadas UTM). Devuelve el polígono antihorario (polígonos simples
+    no muy degenerados)."""
+    n = len(poly)
+    if area(poly) < 0:                             # antihorario: el borde i del polígono al revés es el n-2-i
+        poly, ds = poly[::-1], [ds[(n - 2 - i) % n] for i in range(n)]
+    ox, oy = poly[0]
+    poly = [(p[0] - ox, p[1] - oy) for p in poly]
+    lines = []
+    for i in range(n):
+        a, b = poly[i], poly[(i + 1) % n]
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        L = math.hypot(dx, dy) or 1.0
+        nx, ny = dy / L, -dx / L                   # normal hacia afuera (antihorario)
+        lines.append(((a[0] + nx * ds[i], a[1] + ny * ds[i]), (dx / L, dy / L), (nx, ny)))
+    out = []
+    for i in range(n):
+        p1, d1, n1 = lines[i - 1]
+        p2, d2, n2 = lines[i]
+        v = poly[i]
+        den = d1[0] * d2[1] - d1[1] * d2[0]
+        q = None
+        if abs(den) >= 1e-9:
+            t = ((p2[0] - p1[0]) * d2[1] - (p2[1] - p1[1]) * d2[0]) / den
+            q = (p1[0] + t * d1[0], p1[1] + t * d1[1])
+            if math.hypot(q[0] - v[0], q[1] - v[1]) > 4 * max(abs(ds[i - 1]), abs(ds[i]), 1e-9):
+                q = None                           # casi paralelos: la mitra se iría lejos
+        if q is not None:
+            out.append(q)
+            continue
+        out.append((v[0] + n1[0] * ds[i - 1], v[1] + n1[1] * ds[i - 1]))     # el escalón (o un solo punto si la
+        if abs(ds[i] - ds[i - 1]) > 1e-9 or abs(den) >= 1e-9:                  # distancia es la misma y son paralelos)
+            out.append((v[0] + n2[0] * ds[i], v[1] + n2[1] * ds[i]))
+    return [(p[0] + ox, p[1] + oy) for p in out]
 
 
 def point_in_poly(pt, poly):
