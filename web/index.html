@@ -447,22 +447,25 @@ function drawDims(g){ if(!showDims||!view||!footprint.length) return;
  const px=m*view.s, x=Wd-px-24, y=Hd-22;
  [0,1].forEach(i=>g.appendChild(el('rect',{x:x+i*px/2,y:y-5,width:px/2,height:5,fill:i?HALO():TINTA(),stroke:TINTA(),'stroke-width':1,'pointer-events':'none'})));
  [[0,'0'],[px/2,String(m/2)],[px,m+' m']].forEach(([dx,t])=>g.appendChild(el('text',{x:x+dx,y:y-9,'text-anchor':'middle','font-size':10,fill:TINTA(),'pointer-events':'none'},t))); }
-function drawOverlay(){ const go=$('go'); go.innerHTML=''; if(!view) return; if(medidaModo()!==medModo) herramientaBar(true); drawMeds(go); iconoScp(go);
+function drawOverlay(){ const go=$('go'); go.innerHTML=''; if(!view) return; if(medidaModo()!==medModo) herramientaBar(true); drawMeds(go); iconoScp(go); const et=[];   // R4.13a: las medidas en vivo de lo que se dibuja o se arrastra; se dibujan al final, encima de todo
  if(result&&viewMode==='plan'&&(!result.stories||planStory==null||(result.stories[planStory]||{}).program==='Residential'))
   (result.pasillos||[]).forEach(ps=>{ if(!ps.propio) return; const a=ps.eje[0], b=ps.eje[1], m=[(a[0]+b[0])/2,(a[1]+b[1])/2];   // R10.8: la medida de los tramos con ancho propio, a lo largo del pasillo
    let g=Math.atan2(Y(b)-Y(a),X(b)-X(a))*180/Math.PI; if(g>90) g-=180; if(g<-90) g+=180;
    go.appendChild(el('text',{x:X(m),y:Y(m)+4,'text-anchor':'middle','font-size':11,'font-weight':600,fill:'#2f6fed',stroke:'var(--bg)','stroke-width':3,'paint-order':'stroke',transform:`rotate(${g.toFixed(1)} ${X(m).toFixed(1)} ${Y(m).toFixed(1)})`,'pointer-events':'none'},ps.ancho.toFixed(2)+' m')); });
  if(dragTab&&dragTab.moved&&result&&result.tabiques&&result.tabiques[dragTab.k]){ const t=result.tabiques[dragTab.k], q=t.seg.map(p=>[p[0]+t.dir[0]*dragTab.d,p[1]+t.dir[1]*dragTab.d]);   // tabique arrastrado
-  go.appendChild(el('line',{x1:X(q[0]),y1:Y(q[0]),x2:X(q[1]),y2:Y(q[1]),stroke:'#2f6fed','stroke-width':3,'stroke-dasharray':'6 4','pointer-events':'none'})); }
+  go.appendChild(el('line',{x1:X(q[0]),y1:Y(q[0]),x2:X(q[1]),y2:Y(q[1]),stroke:'#2f6fed','stroke-width':3,'stroke-dasharray':'6 4','pointer-events':'none'}));
+  et.push(...etqTab(t,dragTab)); }   // R4.13a: el frente de cada vecina, a cada lado
  if(dragIn&&dragIn.moved){ const sg=segIn(dragIn), r=dirIn(dragIn); if(sg&&r){ const q=sg.map(p=>[p[0]+r[0]*dragIn.d,p[1]+r[1]*dragIn.d]);   // tabique interior o puerta arrastrados
-  go.appendChild(el('line',{x1:X(q[0]),y1:Y(q[0]),x2:X(q[1]),y2:Y(q[1]),stroke:dragIn.tipo==='pared'?'#0f9d76':'#c2410c','stroke-width':3,'stroke-dasharray':'6 4','pointer-events':'none'})); } }
+  go.appendChild(el('line',{x1:X(q[0]),y1:Y(q[0]),x2:X(q[1]),y2:Y(q[1]),stroke:dragIn.tipo==='pared'?'#0f9d76':'#c2410c','stroke-width':3,'stroke-dasharray':'6 4','pointer-events':'none'}));
+  et.push(...(dragIn.tipo==='pared'?etqPared(dragIn):etqPuerta(dragIn))); } }   // R4.13a: el ancho de las estancias de cada lado, o la distancia de la puerta a las puntas de su tabique
  const pc=dragCore&&dragCore.moved?dragCore:flechas&&flechas.tipo==='nucleo'?flechas:null;   // núcleo arrastrado (o movido con las flechas): dónde va a quedar (el motor lo ajusta al pasillo)
- if(pc&&result&&result.cores&&result.cores[pc.i]){ const d=pc.d;
-  go.appendChild(el('polygon',{points:pts(result.cores[pc.i].poly.map(p=>[p[0]+d[0],p[1]+d[1]])),fill:'rgba(47,111,237,.15)',stroke:'#2f6fed','stroke-width':2,'stroke-dasharray':'5 3','pointer-events':'none'})); }
- const pv=dragPatio&&dragPatio.moved?dragPatio:flechas&&flechas.tipo==='patio'?flechas:null, pq=pv&&(pv===flechas?patios[pv.j]:listaPatios()[pv.i]);   // R4.12: el patio arrastrado o movido con las flechas, dónde va a quedar y su posición
- if(pq){ const q=pv===flechas?pq:pq.map(a=>[a[0]+pv.d[0],a[1]+pv.d[1]]), e0=esquinaPatio(cajaPatio(q)), c=centroArea(q);
+ if(pc&&result&&result.cores&&result.cores[pc.i]){ const d=pc.d, q=result.cores[pc.i].poly.map(p=>[p[0]+d[0],p[1]+d[1]]);
   go.appendChild(el('polygon',{points:pts(q),fill:'rgba(47,111,237,.15)',stroke:'#2f6fed','stroke-width':2,'stroke-dasharray':'5 3','pointer-events':'none'}));
-  go.appendChild(el('text',{x:X(c),y:Y(c)+4,'text-anchor':'middle','font-size':11,'font-weight':600,fill:'#2f6fed',stroke:'var(--bg)','stroke-width':3,'paint-order':'stroke','pointer-events':'none'},'X '+e0[0].toFixed(2)+' · Y '+e0[1].toFixed(2)+' m')); }
+  et.push([arribaDe(q),[deltaTxt(d)],{}]); }   // R4.13a: cuánto se corrió, en los ejes del SCP
+ const pv=dragPatio&&dragPatio.moved?dragPatio:flechas&&flechas.tipo==='patio'?flechas:null, pq=pv&&(pv===flechas?patios[pv.j]:listaPatios()[pv.i]);   // R4.12: el patio arrastrado o movido con las flechas, dónde va a quedar y su posición
+ if(pq){ const q=pv===flechas?pq:pq.map(a=>[a[0]+pv.d[0],a[1]+pv.d[1]]), e0=esquinaPatio(cajaPatio(q));
+  go.appendChild(el('polygon',{points:pts(q),fill:'rgba(47,111,237,.15)',stroke:'#2f6fed','stroke-width':2,'stroke-dasharray':'5 3','pointer-events':'none'}));
+  et.push([arribaDe(q),[deltaTxt(pv.d),'esquina X '+med2(e0[0])+' · Y '+med2(e0[1])+' m'],{}]); }   // R4.13a: cuánto se corrió y la posición de su esquina (como la ficha)
  const line=(a,b,dash)=>go.appendChild(el('line',{x1:X(a),y1:Y(a),x2:X(b),y2:Y(b),stroke:'#2f6fed','stroke-width':2,'stroke-dasharray':dash||'6 3','pointer-events':'none'}));   // el clic pasa al tramo de pasillo de abajo
  centerlines.forEach((pl,li)=>{ for(let i=0;i<pl.length-1;i++) line(pl[i],pl[i+1]);
   pl.forEach((p,vi)=>{ const c=el('circle',{cx:X(p),cy:Y(p),r:6,fill:'#fff',stroke:'#2f6fed','stroke-width':2,style:'cursor:grab'});
@@ -471,12 +474,16 @@ function drawOverlay(){ const go=$('go'); go.innerHTML=''; if(!view) return; if(
    go.appendChild(c); }); });
  const nx=curLine.length&&ptr?puntoLinea(ptr,{altKey:ptrAlt}):mouse, np=tool==='patio'&&curPatio.length&&ptr?puntoPatio(ptr,{altKey:ptrAlt}):mouse;   // R4.13b: el punto que va a quedar (con medidas tipeadas, no el del puntero)
  medidasVivas(nx,np);
+ if(curLine.length&&nx) et.push(...etqLinea(curLine[curLine.length-1],nx));   // R4.13a: largo y ángulo del tramo que se dibuja (lo tipeado manda)
+ if(tool==='patio'&&curPatio.length&&np) et.push(...etqPatio(curPatio[0],np));   // ancho × fondo
+ if(tool==='medianera'&&medHover!=null) et.push(...etqMedianera(medHover));   // largo del borde que se marcaría
  if(curLine.length){ for(let i=0;i<curLine.length-1;i++) line(curLine[i],curLine[i+1]);
   if(nx) line(curLine[curLine.length-1],nx,'2 3'); curLine.forEach(p=>go.appendChild(el('circle',{cx:X(p),cy:Y(p),r:4,fill:'#2f6fed'}))); }
  if(tool==='patio'&&curPatio.length&&np){ go.appendChild(el('polygon',{points:pts(rectAlign(curPatio[0],np)),fill:'url(#hatch)',stroke:'#2f6fed','stroke-dasharray':'5 3','pointer-events':'none'}));
   curPatio.forEach(v=>go.appendChild(el('circle',{cx:X(v),cy:Y(v),r:4,fill:'#2f6fed','pointer-events':'none'}))); }
  if(tool==='addcore'&&mouse){ go.appendChild(el('rect',{x:X(mouse)-8,y:Y(mouse)-8,width:16,height:16,fill:circColor('core'),'fill-opacity':.6,stroke:circStroke()})); }
- const cz=tool==='line'?nx:np; if((tool==='line'||tool==='patio')&&cz){ const x=X(cz), y=Y(cz); go.appendChild(el('path',{d:`M${x-6} ${y}H${x+6}M${x} ${y-6}V${y+6}`,stroke:'#2f6fed','stroke-width':1.5,'pointer-events':'none'})); } }   // R4.7: dónde cae el punto (la grilla no se ve dentro de las viviendas)
+ const cz=tool==='line'?nx:np; if((tool==='line'||tool==='patio')&&cz){ const x=X(cz), y=Y(cz); go.appendChild(el('path',{d:`M${x-6} ${y}H${x+6}M${x} ${y-6}V${y+6}`,stroke:'#2f6fed','stroke-width':1.5,'pointer-events':'none'})); }   // R4.7: dónde cae el punto (la grilla no se ve dentro de las viviendas)
+ const oc=[]; et.forEach(a=>etiquetaMedida(go,a[0],a[1],Object.assign({ocupado:oc},a[2]))); }   // R4.13a: todas con el mismo estilo y sin pisarse
 
 /* ---------- medidas y normativa ---------- */
 const STD_LABELS={predio:'Predio',retiro_ventanas:'Retiro de medianera para ventanas (m)',patio_min:'Ancho mínimo de patio para iluminar (m)',retiro_divisoria:'Retiro mínimo si se separa de la divisoria (art. 53 e, m)',vivienda:'Vivienda',nucleo:'Núcleo',oficinas:'Oficinas',comercial:'Comercial',estacionamiento:'Estacionamiento',equipamiento:'Equipamiento y muebles',ventanas:'Ventanas',
@@ -860,11 +867,10 @@ function tabiqueSel(){ if(!selTab||tool||!result||!result.tabiques) return null;
  const st=result.stories&&planStory!=null?result.stories[planStory]:null, k=result.tabiques.findIndex(t=>t.a===selTab.a&&t.b===selTab.b);
  if(k<0||selUnit!==selTab.u||(st&&st.program!=='Residential')){ selTab=null; return null; }
  return {k,t:result.tabiques[k]}; }
-function frentesTab(t){ const A=result.units.find(u=>u.id===t.a), B=result.units.find(u=>u.id===t.b); if(!A||!B) return null;   // el frente de cada vecina, a lo largo del pasillo: el de la geometría (más fino que el u.width redondeado a cm) si la figura llena su franja
- const d=t.dir, pw=+$('party_wall').value, dot=p=>p[0]*d[0]+p[1]*d[1], s=(dot(t.seg[0])+dot(t.seg[1]))/2;
- let wA=s-pw/2-Math.min(...A.poly.map(dot)), wB=Math.max(...B.poly.map(dot))-s-pw/2;
- if(Math.abs(wA-A.width)>0.006) wA=A.width; if(Math.abs(wB-B.width)>0.006) wB=B.width;   // no llena su franja (muro oblicuo, recorte): vale el del reparto
- return {wA,wB}; }
+function frentesTab(t,sx){ const A=result.units.find(u=>u.id===t.a), B=result.units.find(u=>u.id===t.b); if(!A||!B) return null;   // el frente de cada vecina, a lo largo del pasillo: el de la geometría (más fino que el u.width redondeado a cm) si la figura llena su franja; sx (R4.13a): con el tabique en esa posición, a lo largo de su dirección
+ const d=t.dir, pw=+$('party_wall').value, dot=p=>p[0]*d[0]+p[1]*d[1], s=(dot(t.seg[0])+dot(t.seg[1]))/2, x=sx==null?s:sx, nA=Math.min(...A.poly.map(dot)), xB=Math.max(...B.poly.map(dot));
+ const fA=Math.abs(s-pw/2-nA-A.width)>0.006, fB=Math.abs(xB-s-pw/2-B.width)>0.006;   // no llena su franja (muro oblicuo, recorte): vale el del reparto
+ return {wA:fA?A.width+(x-s):x-pw/2-nA, wB:fB?B.width-(x-s):xB-x-pw/2}; }
 async function frenteTipeado(id,v){ if(frenteBusy) return; const s=tabiqueSel(), f=s&&frentesTab(s.t); if(!f) return; const t=s.t, esA=id===t.a, w=esA?f.wA:f.wB, tot=f.wA+f.wB, mn=0.5*(+$('min_unit_width').value);   // el frente de una vecina queda como se tipeó y la otra toma el resto
  if(v<mn-1e-9||v>tot-mn+1e-9) return avisoMedida('El frente de '+id+' puede ir de '+mn.toFixed(2)+' a '+(tot-mn).toFixed(2)+' m ('+t.a+' y '+t.b+' suman '+tot.toFixed(2)+' m)');
  const d=esA?v-w:w-v; if(Math.abs(d)<5e-4) return avisoMedida(id+' ya mide '+v.toFixed(2)+' m de frente');   // d: cuánto se corre el tabique, hacia la vivienda b si es positivo
@@ -875,8 +881,8 @@ async function frenteTipeado(id,v){ if(frenteBusy) return; const s=tabiqueSel(),
 function medidasVivas(nx,np){ const k=medModo.split('|')[0], poner=(c,v)=>{ const f=medidaCampo(c); if(f) f.placeholder=v; };   // lo que da el puntero, en gris dentro de los campos vacíos
  if(k==='linea'&&nx){ const S=scpActual(), P=aLocal(curLine[curLine.length-1],S), Q=aLocal(nx,S); poner('largo',Math.hypot(Q[0]-P[0],Q[1]-P[1]).toFixed(2)); poner('angulo',String(+((Math.atan2(Q[1]-P[1],Q[0]-P[0])*180/Math.PI+360)%360).toFixed(1))); }
  else if(k==='patio'&&np){ const R=marcoPatio(curPatio[0],np), a=R.L(curPatio[0]), b=R.L(np); poner('ancho',Math.abs(b[0]-a[0]).toFixed(2)); poner('fondo',Math.abs(b[1]-a[1]).toFixed(2)); }
- else if(k==='tab'){ const s=tabiqueSel(), f=s&&frentesTab(s.t), d=dragTab&&dragTab.moved?dragTab.d:0;   // los frentes de ahora (con el tabique en el aire, los de ese momento), salvo en un campo que se está escribiendo
-  if(f) [[s.t.a,f.wA+d],[s.t.b,f.wB-d]].forEach(([i,w])=>{ const c=medidaCampo(i); if(c&&!c.dataset.sucio) c.value=c.dataset.ini=w.toFixed(2); }); } }
+ else if(k==='tab'){ const s=tabiqueSel(), f=s&&frentesCon(s.t,dragTab&&dragTab.moved?dragTab.d:0);   // los frentes de ahora (con el tabique en el aire, los de ese momento: los mismos de las etiquetas), salvo en un campo que se está escribiendo o que tiene el foco
+  if(f) [[s.t.a,f.wA],[s.t.b,f.wB]].forEach(([i,w])=>{ const c=medidaCampo(i); if(c&&!c.dataset.sucio&&document.activeElement!==c) c.value=c.dataset.ini=w.toFixed(2); }); } }
 function medidaInput(f){ const t=f.value.trim(); f.dataset.sucio='1'; f.classList.toggle('mal',t!==''&&!(numTipeado(t)>(f.dataset.medida==='angulo'?-Infinity:0))); if(tool) drawOverlay(); }   // en rojo si no es una medida; la vista previa sigue lo que se escribe
 function medidaTecla(e){ if(e.key!=='Enter') return; e.preventDefault(); e.stopPropagation(); medidaEnter(e.target); }   // Enter coloca lo tipeado (y no llega al Enter que termina la línea)
 function medidaEnter(f){ const k=medModo.split('|')[0];
@@ -895,6 +901,80 @@ function medidaEnter(f){ const k=medModo.split('|')[0];
   if(t===f.dataset.ini) return avisoMedida(id+' ya mide '+t+' m de frente: escribe otro');
   const v=numTipeado(t); if(!(v>0)) return avisoMedida('El frente es un número mayor que 0, por ejemplo 4,50');
   return frenteTipeado(id,v); } }
+
+/* ---------- medidas en vivo (R4.13a): la medida de lo que se dibuja o se arrastra, en una etiqueta junto a eso (en #go, sin capturar eventos) ---------- */
+const PARED_MIN=0.6, PUERTA_MARGEN=0.05;   // lo que el motor deja a cada estancia al mover un tabique (plans._mover_pared) y a cada lado de una puerta corrida (plans._editar_puerta); más allá, el motor frena y la etiqueta sale en rojo
+const med2=v=>(Math.abs(v)<0.005?0:v).toFixed(2);   // 2 decimales, como las cotas, y nunca «-0.00»
+const FRENO=0.005;   // si el motor frena en menos de medio centímetro no se nota en los dos decimales de la etiqueta: no sale en rojo
+function etiquetaMedida(go,p,lineas,opt){ opt=opt||{}; lineas=[].concat(lineas); if(!view||!lineas.length) return null;   // la única función que dibuja una medida en vivo: p (mundo) es lo medido; opt.lado, hacia dónde se corre la etiqueta en pantalla ([0,0]: centrada en p); opt.mal: el motor frena antes de esa medida (en rojo); opt.fijo: no cambia de lado
+ const lh=14, pad=7, g=el('g',{class:'etq','pointer-events':'none'}), tx=lineas.map((s,i)=>g.appendChild(el('text',{x:0,y:(i-(lineas.length-1)/2)*lh+4,'text-anchor':'middle','font-size':11,'font-weight':600,fill:opt.mal?EVAC.fail:TINTA(),'pointer-events':'none'},s)));
+ go.appendChild(g);   // para medir el texto tiene que estar en la página
+ const w=Math.max(...tx.map((t,i)=>{ let a=0; try{ a=t.getComputedTextLength(); }catch(e){} return a>0?a:lineas[i].length*6.3; }))+2*pad, h=lineas.length*lh+6;
+ const L=opt.lado||[0,-1], n=Math.hypot(L[0],L[1]), u=[L[0]/(n||1),L[1]/(n||1)], sep=opt.sep==null?14:opt.sep, W=$('svg').clientWidth||800, H=$('svg').clientHeight||600;
+ const cur=opt.cursor===undefined?ptr:opt.cursor, k=cur?[X(cur),Y(cur)]:null, ex=w/2+14, ey=h/2+14;   // el puntero (en pantalla) y cuánto hay que alejarse de él
+ const dentro=c=>[Math.max(w/2+4,Math.min(W-w/2-4,c[0])),Math.max(h/2+4,Math.min(H-h/2-4,c[1]))], choca=c=>!!k&&Math.abs(c[0]-k[0])<ex&&Math.abs(c[1]-k[1])<ey;   // en la planta; debajo del puntero (o a menos de 14 px)
+ const lugar=v=>{ const e=Math.abs(v[0])*w/2+Math.abs(v[1])*h/2, a=[X(p)+v[0]*(sep+e),Y(p)+v[1]*(sep+e)], c=dentro(a); return {c,costo:(choca(c)?1e4:0)+Math.hypot(c[0]-a[0],c[1]-a[1])}; };   // el borde de la etiqueta más cercano a p queda a `sep` px
+ let m=lugar(u); if(n&&!opt.fijo&&m.costo>0){ const o=lugar([-u[0],-u[1]]); if(o.costo<m.costo) m=o; }   // si de ese lado no entra o cae sobre el puntero, del otro (salvo si el lado dice algo: fijo)
+ let [cx,cy]=m.c;
+ if(choca([cx,cy])){ const c=[[k[0]-ex-cx,0],[k[0]+ex-cx,0],[0,k[1]-ey-cy],[0,k[1]+ey-cy]].sort((a,b)=>Math.abs(a[0]+a[1])-Math.abs(b[0]+b[1]))[0]; [cx,cy]=dentro([cx+c[0],cy+c[1]]); }   // aún sobre el puntero: se corre lo menos posible
+ const caja=c=>({x0:c[0]-w/2,x1:c[0]+w/2,y0:c[1]-h/2,y1:c[1]+h/2}), oc=opt.ocupado||[], pisa=oc.find(b=>{ const a=caja([cx,cy]); return a.x0<b.x1&&b.x0<a.x1&&a.y0<b.y1&&b.y0<a.y1; });
+ if(pisa) [cx,cy]=dentro([cx,pisa.y1+h/2+4]); oc.push(caja([cx,cy]));   // si pisa otra etiqueta (opt.ocupado: las ya dibujadas), va debajo de ella
+ g.insertBefore(el('rect',{x:-w/2,y:-h/2,width:w,height:h,rx:5,fill:HALO(),'fill-opacity':.95,stroke:opt.mal?EVAC.fail:'#2f6fed','stroke-width':1.2,'pointer-events':'none'}),g.firstChild);
+ g.setAttribute('transform','translate('+cx.toFixed(1)+' '+cy.toFixed(1)+')'); return g; }
+function normalPantalla(a,b,lejos){ const dx=X(b)-X(a), dy=Y(b)-Y(a), n=Math.hypot(dx,dy)||1; let u=[dy/n,-dx/n];   // la perpendicular al tramo a-b, en pantalla
+ if(lejos){ if(u[0]*(X(lejos)-(X(a)+X(b))/2)+u[1]*(Y(lejos)-(Y(a)+Y(b))/2)>0) u=[-u[0],-u[1]]; }   // hacia el lado opuesto a `lejos`
+ else if(u[1]>1e-9||(Math.abs(u[1])<=1e-9&&u[0]<0)) u=[-u[0],-u[1]];   // sin referencia: hacia arriba (a la derecha si el tramo es vertical)
+ return u; }
+const arribaDe=poly=>{ const xs=poly.map(p=>p[0]), ys=poly.map(p=>p[1]); return [(Math.min(...xs)+Math.max(...xs))/2,Math.max(...ys)]; };   // el punto de arriba al medio de una figura, en pantalla
+const deltaTxt=d=>{ const v=aLocal(d,{o:[0,0],a:scpActual().a}), f=x=>(x>=0.005?'+':'')+med2(x); return 'ΔX '+f(v[0])+' · ΔY '+f(v[1])+' m'; };   // lo que se corrió, en los ejes del SCP actual
+/* Cada etq*() devuelve las etiquetas [punto, líneas, opciones] de una cosa que se dibuja o se arrastra; drawOverlay las junta y las dibuja al final. */
+function etqLinea(prev,q){ const S=scpActual(), P=aLocal(prev,S), Q=aLocal(q,S), tL=medidaNum('largo'), tA=medidaNum('angulo');   // largo y ángulo (en el SCP) del tramo que se dibuja; lo tipeado manda (R4.13b)
+ const L=tL>0?tL:Math.hypot(Q[0]-P[0],Q[1]-P[1]), A=isNaN(tA)?Math.atan2(Q[1]-P[1],Q[0]-P[0])*180/Math.PI:tA; if(L<0.005) return [];
+ return [[[(prev[0]+q[0])/2,(prev[1]+q[1])/2],[med2(L)+' m · '+(+(((A%360)+360)%360).toFixed(1))+'°'],{lado:normalPantalla(prev,q)}]]; }
+function etqPatio(p0,p1){ const R=marcoPatio(p0,p1), a=R.L(p0), b=R.L(p1), A=Math.abs(b[0]-a[0]), F=Math.abs(b[1]-a[1]); if(A<0.005&&F<0.005) return [];   // ancho × fondo del patio que se dibuja, en los ejes del edificio (los mismos con que se dibuja)
+ const c=[(p0[0]+p1[0])/2,(p0[1]+p1[1])/2];
+ return [[p1,[med2(A)+' × '+med2(F)+' m'],{lado:[X(p1)-X(c),Y(p1)-Y(c)]}]]; }   // por fuera de la esquina que se mueve
+function etqMedianera(i){ const a=footprint[i], b=footprint[(i+1)%footprint.length]; if(!a||!b) return [];   // el largo del borde que se marcaría (o desmarcaría) como medianera, hacia afuera de la planta
+ return [[[(a[0]+b[0])/2,(a[1]+b[1])/2],[med2(Math.hypot(b[0]-a[0],b[1]-a[1]))+' m'],{lado:normalPantalla(a,b,centroidOf(footprint))}]]; }
+const posTab=(t,d)=>{ const m=mitad(t.seg); return (+(m[0]+t.dir[0]*d).toFixed(3))*t.dir[0]+(+(m[1]+t.dir[1]*d).toFixed(3))*t.dir[1]; };   // dónde queda el tabique (a lo largo de su dirección) si se corre d: el punto que recibe el motor al soltarlo (sin el redondeo del dibujo)
+function frentesCon(t,d){ const f=frentesTab(t); if(!f||Math.abs(d)<1e-3) return f&&Object.assign({frenado:false},f);   // los frentes con el tabique corrido d, como los deja el motor (editar_unidades: cada vecina conserva la mitad de min_unit_width); frenado: lo frena antes de donde lo llevas
+ const mn=0.5*(+$('min_unit_width').value), x=posTab(t,d); let g=frentesTab(t,x), fr=false;
+ if(g.wA<mn-FRENO){ g=frentesTab(t,x+(mn-g.wA)); fr=true; } else if(g.wB<mn-FRENO){ g=frentesTab(t,x-(mn-g.wB)); fr=true; }
+ return {wA:g.wA,wB:g.wB,frenado:fr}; }
+function etqTab(t,g){ const f=frentesCon(t,g.d); if(!f) return [];   // el frente de cada vecina con el tabique donde va (una etiqueta a cada lado), junto a donde se lo tomó; en rojo si el motor lo frena
+ const s0=t.seg[0], L=Math.hypot(t.seg[1][0]-s0[0],t.seg[1][1]-s0[1])||1, u=[(t.seg[1][0]-s0[0])/L,(t.seg[1][1]-s0[1])/L],
+  s=Math.max(0,Math.min(L,(g.w[0]-s0[0])*u[0]+(g.w[1]-s0[1])*u[1])), p=[s0[0]+u[0]*s+t.dir[0]*g.d,s0[1]+u[1]*s+t.dir[1]*g.d];
+ return [[t.a,f.wA,-1],[t.b,f.wB,1]].map(([id,w,k])=>[p,[id+' · '+med2(w)+' m'],{lado:[k*t.dir[0],-k*t.dir[1]],mal:f.frenado,fijo:true}]); }
+function tramoEn(poly,o,r,t0){ const ts=[];   // el tramo [a, b] (en m) de la recta o + t·r que está dentro del polígono y contiene a t0; null si t0 queda fuera
+ poly.forEach((p,i)=>{ const q=poly[(i+1)%poly.length], ex=q[0]-p[0], ey=q[1]-p[1], den=r[0]*ey-r[1]*ex; if(Math.abs(den)<1e-9) return;
+  const wx=p[0]-o[0], wy=p[1]-o[1], s=(wx*r[1]-wy*r[0])/den; if(s>=-1e-9&&s<=1+1e-9) ts.push((wx*ey-wy*ex)/den); });
+ ts.sort((a,b)=>a-b);
+ for(let i=0;i<ts.length-1;i++){ const m=(ts[i]+ts[i+1])/2; if(ts[i]<=t0&&t0<=ts[i+1]&&ts[i+1]-ts[i]>1e-6&&enPoly([o[0]+r[0]*m,o[1]+r[1]*m],poly)) return [ts[i],ts[i+1]]; }
+ return null; }
+function dPared(u,sg,r,d){ const w=[-r[1],r[0]], q=P=>P[0]*r[0]+P[1]*r[1], z=P=>P[0]*w[0]+P[1]*w[1], c=q(sg[0]);   // cuánto corre el motor el tabique pedido d (plans._mover_pared): el tabique sigue por todas las estancias que se apoyan en él y cada una conserva PARED_MIN
+ const rs=(u.rooms||[]).map(rm=>{ const a=rm.poly.map(q), b=rm.poly.map(z); return {r0:Math.min(...a),r1:Math.max(...a),w0:Math.min(...b),w1:Math.max(...b)}; });
+ let lo=Math.min(z(sg[0]),z(sg[1])), hi=Math.max(z(sg[0]),z(sg[1])), mueven;
+ for(;;){ mueven=rs.filter(e=>(Math.abs(e.r1-c)<1e-3||Math.abs(e.r0-c)<1e-3)&&Math.min(e.w1,hi)-Math.max(e.w0,lo)>-0.05);
+  const lo2=Math.min(lo,...mueven.map(e=>e.w0)), hi2=Math.max(hi,...mueven.map(e=>e.w1)); if(lo2>=lo-1e-9&&hi2<=hi+1e-9) break; lo=lo2; hi=hi2; }
+ let A=-Infinity, B=Infinity; mueven.forEach(e=>{ if(Math.abs(e.r1-c)<1e-3) A=Math.max(A,PARED_MIN-(c-e.r0)); else B=Math.min(B,e.r1-c-PARED_MIN); });   // las de -r no pasan de PARED_MIN; las de +r, tampoco
+ const dd=Math.min(B,Math.max(A,d)); return !mueven.length||Math.abs(dd)<0.01?0:dd; }   // si no mueve nada o es menos de 1 cm, el motor no cambia nada
+function etqPared(g){ const u=result&&result.units.find(x=>x.id===g.u), sg=segIn(g), r=dirIn(g); if(!u||!sg||!r) return [];   // el ancho de la estancia de cada lado del tabique interior, en la dirección del arrastre: la que está junto al punto donde se lo tomó
+ const L=Math.hypot(sg[1][0]-sg[0][0],sg[1][1]-sg[0][1])||1, w=[(sg[1][0]-sg[0][0])/L,(sg[1][1]-sg[0][1])/L], e=Math.min(0.1,L/2),
+  s=Math.max(e,Math.min(L-e,(g.w[0]-sg[0][0])*w[0]+(g.w[1]-sg[0][1])*w[1])), o=[sg[0][0]+w[0]*s,sg[0][1]+w[1]*s], p=[o[0]+r[0]*g.d,o[1]+r[1]*g.d], out=[], e0=dPared(u,sg,r,g.d);   // o: ese punto, sobre el tabique; p: donde lo lleva el puntero; e0: hasta donde lo deja el motor
+ [-1,1].forEach(k=>{ for(const rm of u.rooms||[]){ const tr=tramoEn(rm.poly,o,r,k*0.05); if(!tr) continue;   // k = -1 / +1: el lado de -r / +r; el tabique se corre e0 hacia +r
+  out.push([p,[med2(tr[1]-tr[0]-k*e0)+' m'],{lado:[k*r[0],-k*r[1]],mal:Math.abs(e0-g.d)>=FRENO,fijo:true}]); break; } });
+ return out; }
+function bordeDePuerta(u,d){ const L=Math.hypot(d.q[0]-d.p[0],d.q[1]-d.p[1])||1, r=[(d.q[0]-d.p[0])/L,(d.q[1]-d.p[1])/L], nn=[-r[1],r[0]],   // [t0, t1] (m desde d.p, a lo largo de la puerta): el borde que comparte con la otra estancia, por donde se corre
+  t=P=>(P[0]-d.p[0])*r[0]+(P[1]-d.p[1])*r[1], h=P=>(P[0]-d.p[0])*nn[0]+(P[1]-d.p[1])*nn[1];
+ let lo=-Infinity, hi=Infinity, hay=false;
+ [d.a,d.b].forEach(id=>{ const rm=(u.rooms||[]).find(x=>x.id===id); if(!rm) return;   // «exterior» (la puerta de entrada) no es una estancia: vale el borde del hall
+  const iv=[], m=[]; let c=null; rm.poly.forEach((P,i)=>{ const Q=rm.poly[(i+1)%rm.poly.length]; if(Math.abs(h(P))<2e-3&&Math.abs(h(Q))<2e-3) iv.push([Math.min(t(P),t(Q)),Math.max(t(P),t(Q))]); });
+  iv.sort((a,b)=>a[0]-b[0]); iv.forEach(v=>{ if(c&&v[0]<=c[1]+0.05) c[1]=Math.max(c[1],v[1]); else { c=[v[0],v[1]]; m.push(c); } });   // los bordes de la estancia sobre esa línea que se tocan son uno solo
+  const s=m.find(v=>v[0]<=0.05&&v[1]>=L-0.05); if(!s) return; lo=Math.max(lo,s[0]); hi=Math.min(hi,s[1]); hay=true; });
+ return hay?[lo,hi]:null; }
+function etqPuerta(g){ const u=result&&result.units.find(x=>x.id===g.u), d=u&&u.doors[g.k], b=d&&bordeDePuerta(u,d); if(!b) return [];   // la distancia de cada borde de la puerta a las puntas de su tabique: «a | b»
+ const L=Math.hypot(d.q[0]-d.p[0],d.q[1]-d.p[1])||1, r=[(d.q[0]-d.p[0])/L,(d.q[1]-d.p[1])/L], e=b[1]-b[0]<L+2*PUERTA_MARGEN?(b[0]+b[1]-L)/2:Math.max(b[0]+PUERTA_MARGEN,Math.min(b[1]-L-PUERTA_MARGEN,g.d));   // e: hasta donde la deja el motor (plans._editar_puerta)
+ return [[[(d.p[0]+d.q[0])/2+r[0]*g.d,(d.p[1]+d.q[1])/2+r[1]*g.d],[med2(e-b[0])+' | '+med2(b[1]-L-e)+' m'],{lado:normalPantalla(d.p,d.q),mal:Math.abs(e-g.d)>=FRENO}]]; }
 
 const svg=$('svg');
 svg.addEventListener('click',e=>{ if(!view||svg._skipClick) return;
@@ -969,19 +1049,19 @@ svg.addEventListener('wheel',ocultarDato,{passive:true});
 svg.addEventListener('pointermove',e=>{ if(!drag||!view) return; if(!drag.moved){ if(Math.abs(e.clientX-drag.x)+Math.abs(e.clientY-drag.y)<5) return; recordar('mover vértice'); } const pl=centerlines[drag.li]; pl[drag.vi]=ajustar(toWorld(e),null,e); drag.moved=true; drawOverlay(); });
 svg.addEventListener('pointerup',e=>{ if(drag){ const d=drag; drag=null; if(d.moved&&lastStage) runCirc(); } });
 svg.addEventListener('pointermove',e=>{ if(!dragTab||!view) return; if(!dragTab.moved){ if(Math.abs(e.clientX-dragTab.x)+Math.abs(e.clientY-dragTab.y)<5) return; svg.setPointerCapture(e.pointerId); }
- const w=toWorld(e), t=result.tabiques[dragTab.k]; dragTab.moved=true; dragTab.d=ajustarDesp(mitad(t.seg),t.dir,(w[0]-dragTab.w[0])*t.dir[0]+(w[1]-dragTab.w[1])*t.dir[1],e); drawOverlay(); });   // solo a lo largo del pasillo
+ const w=toWorld(e), t=result.tabiques[dragTab.k]; ptr=w; dragTab.moved=true; dragTab.d=ajustarDesp(mitad(t.seg),t.dir,(w[0]-dragTab.w[0])*t.dir[0]+(w[1]-dragTab.w[1])*t.dir[1],e); drawOverlay(); });   // solo a lo largo del pasillo
 svg.addEventListener('pointerup',e=>{ if(!dragTab) return; const g=dragTab; dragTab=null; if(!g.moved) return;
  svg._skipClick=true; setTimeout(()=>svg._skipClick=false,0); const t=result.tabiques[g.k]; if(!t||Math.abs(g.d)<1e-3) return drawOverlay();
  const m=mitad(t.seg); editar({op:'tabique',p:m,a:[+(m[0]+t.dir[0]*g.d).toFixed(3),+(m[1]+t.dir[1]*g.d).toFixed(3)]},'mover el tabique entre '+t.a+' y '+t.b); });
 svg.addEventListener('pointermove',e=>{ if(!dragIn||!view) return; if(!dragIn.moved){ if(Math.abs(e.clientX-dragIn.x)+Math.abs(e.clientY-dragIn.y)<5) return; svg.setPointerCapture(e.pointerId); }
- const w=toWorld(e), r=dirIn(dragIn); if(!r) return; dragIn.moved=true; const sg=segIn(dragIn); dragIn.d=(w[0]-dragIn.w[0])*r[0]+(w[1]-dragIn.w[1])*r[1]; if(sg) dragIn.d=ajustarDesp(dragIn.tipo==='pared'?mitad(sg):sg[0],r,dragIn.d,e); drawOverlay(); });   // el tabique, perpendicular a sí mismo; la puerta, a lo largo de su pared
+ const w=toWorld(e), r=dirIn(dragIn); if(!r) return; ptr=w; dragIn.moved=true; const sg=segIn(dragIn); dragIn.d=(w[0]-dragIn.w[0])*r[0]+(w[1]-dragIn.w[1])*r[1]; if(sg) dragIn.d=ajustarDesp(dragIn.tipo==='pared'?mitad(sg):sg[0],r,dragIn.d,e); drawOverlay(); });   // el tabique, perpendicular a sí mismo; la puerta, a lo largo de su pared
 svg.addEventListener('pointerup',e=>{ if(!dragIn) return; const g=dragIn; dragIn=null; if(!g.moved) return;
  svg._skipClick=true; setTimeout(()=>svg._skipClick=false,0); const sg=segIn(g), r=dirIn(g); if(!sg||!r||Math.abs(g.d)<1e-3) return drawOverlay();
  const m=mitad(sg), op={op:g.tipo,p:m,a:[+(m[0]+r[0]*g.d).toFixed(3),+(m[1]+r[1]*g.d).toFixed(3)]};
  if(g.tipo==='puerta'){ const d=result.units.find(x=>x.id===g.u).doors[g.k]; op.entre=[d.a,d.b]; }   // la puerta, por sus estancias
  editarInterior(op,(g.tipo==='pared'?'mover un tabique de ':'mover una puerta de ')+g.u); });
 svg.addEventListener('pointermove',e=>{ if(!dragCore||!view) return; if(!dragCore.moved){ if(Math.abs(e.clientX-dragCore.x)+Math.abs(e.clientY-dragCore.y)<5) return; svg.setPointerCapture(e.pointerId); }   // se captura al moverse: un clic sigue abriendo la ficha
- const w=toWorld(e), k=result.cores[dragCore.i]; dragCore.moved=true; dragCore.d=[w[0]-dragCore.w[0],w[1]-dragCore.w[1]];
+ const w=toWorld(e), k=result.cores[dragCore.i]; ptr=w; dragCore.moved=true; dragCore.d=[w[0]-dragCore.w[0],w[1]-dragCore.w[1]];
  if(k){ const c=ajustar([k.center[0]+dragCore.d[0],k.center[1]+dragCore.d[1]],null,e,{vertices:false}); dragCore.d=[c[0]-k.center[0],c[1]-k.center[1]]; } drawOverlay(); });   // el centro del núcleo cae en la grilla
 svg.addEventListener('pointerup',e=>{ if(!dragCore) return; const g=dragCore; dragCore=null; if(!g.moved) return;   // sin mover es un clic: abre la ficha
  svg._skipClick=true; setTimeout(()=>svg._skipClick=false,0); const k=result.cores[g.i]; if(!k) return drawOverlay();
@@ -989,7 +1069,7 @@ svg.addEventListener('pointerup',e=>{ if(!dragCore) return; const g=dragCore; dr
  ensureManual(); const o=coresManual[i], c=[+(k.center[0]+g.d[0]).toFixed(3),+(k.center[1]+g.d[1]).toFixed(3)];
  coresManual[i]=Array.isArray(o)?c:Object.assign({},o,{p:c}); if(selCore===g.i) selSpec=i; coreInfo(); $('tag').textContent='Núcleo movido'; runCirc(); });
 svg.addEventListener('pointermove',e=>{ if(!dragPatio||!view) return; if(!dragPatio.moved){ if(Math.abs(e.clientX-dragPatio.x)+Math.abs(e.clientY-dragPatio.y)<5) return; svg.setPointerCapture(e.pointerId); }   // R4.12: se captura al moverse, un clic sigue abriendo la ficha
- const w=toWorld(e), p=listaPatios()[dragPatio.i]; dragPatio.moved=true; dragPatio.d=[w[0]-dragPatio.w[0],w[1]-dragPatio.w[1]];
+ const w=toWorld(e), p=listaPatios()[dragPatio.i]; ptr=w; dragPatio.moved=true; dragPatio.d=[w[0]-dragPatio.w[0],w[1]-dragPatio.w[1]];
  if(p){ const b=cajaPatio(p), r=b.R.W([b.u0,b.v0]), c=ajustar([r[0]+dragPatio.d[0],r[1]+dragPatio.d[1]],null,e), q=[c[0]-r[0],c[1]-r[1]]; dragPatio.d=despLibre(p,q); dragPatio.bloq=Math.hypot(q[0]-dragPatio.d[0],q[1]-dragPatio.d[1])>1e-6; } drawOverlay(); });   // la esquina del patio cae en la grilla; si atraviesa la masa, solo se corre a lo largo de ella
 svg.addEventListener('pointerup',e=>{ if(!dragPatio) return; const g=dragPatio; dragPatio=null; if(!g.moved) return;   // sin mover es un clic: abre la ficha
  svg._skipClick=true; setTimeout(()=>svg._skipClick=false,0); soltarPatio(g); });
