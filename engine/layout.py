@@ -123,6 +123,27 @@ def _pasillo(pc, pb, bi, partes, W):
             "partes": partes}
 
 
+def _rectos(pieces, pasillos):
+    """R10.8: los tramos alineados de una misma línea (un vértice intermedio sobre la recta) son un solo pasillo recto
+    para el art. 35: cada uno toma el largo de todos y pc["_recto"] dice cuáles son (para contar sus viviendas)."""
+    grupo = {i: {i} for i in range(len(pieces))}
+    for i, pc in enumerate(pieces):
+        for j in pc["junctions"]:
+            q = pieces[j["nb"]]
+            d = q["angle"] - pc["angle"]
+            if j.get("llega") or abs(math.sin(d)) > 1e-3 or math.cos(d) < 0 or \
+                    abs(j["x"] - pc["xb"]) > 1e-6 or abs(j["nbx"] - q["xa"]) > 1e-6:
+                continue
+            g = grupo[i] | grupo[j["nb"]]
+            for k in g:
+                grupo[k] = g
+    largos = {i: sum(pasillos[pieces[k]["_pas"]]["largo"] for k in grupo[i]) for i in grupo}
+    for i, pc in enumerate(pieces):
+        pc["_recto"] = sorted(pieces[k]["_pas"] for k in grupo[i])
+        if len(grupo[i]) > 1:
+            pasillos[pc["_pas"]]["largo"] = round(largos[i], 2)
+
+
 def _art35(res, S):
     """R10.8: el ancho mínimo de cada tramo según la norma nacional (art. 35) y un aviso por cada uno que no llega."""
     for ps in res["pasillos"]:
@@ -310,6 +331,7 @@ def generate(data):
                 res["corridors"].append(G.pol_to_list(ext))
             pc["_pas"] = len(res["pasillos"])
             res["pasillos"].append(_pasillo(pc, pb, bi, partes, W))
+        _rectos(pieces, res["pasillos"])
         res["dark_zones"] += [G.pol_to_list(d_) for pc in pieces for d_ in pc.get("dark", [])]
         codos = [G.pol_to_list(d_) for pc in pieces for d_ in pc.get("codos", [])]
         res["dark_zones"] += codos
@@ -380,13 +402,15 @@ def generate(data):
             if d:
                 d["stalls"] = acc["count"] * d["stories"]
     res["program_layouts"] = layouts
-    pedidos = params.get("anchos_pasillo") or []
-    if len(pedidos) > len(params["_anchos_usados"]):
-        n_ = len(pedidos) - len(params["_anchos_usados"])
+    sin_tramo = [k for k in range(len(params.get("anchos_pasillo") or [])) if k not in params["_anchos_usados"]]
+    if sin_tramo:
+        res["anchos_sin_tramo"] = sin_tramo
         res["warnings"].append("%d ancho(s) de pasillo pedido(s) no tiene(n) tramo: la planta o las líneas cambiaron desde "
-                               "que los marcaste. Elige el tramo de nuevo o quita esos anchos (en Circulación)" % n_)
+                               "que los marcaste. Quítalos con «Quitar los que no tienen tramo» (en Circulación) y elige "
+                               "el tramo de nuevo" % len(sin_tramo))
     if stage == "corridor":
-        _art35(res, S["nucleo"])
+        if n_res_lv:                                       # el art. 35 es de la norma de vivienda
+            _art35(res, S["nucleo"])
         pide = _ascensores_pedidos(res["cores"], S["nucleo"], len(stories), sube, por_nucleo=units_est)
         if pide is not None and pide != n_elev and params.get("_ascensores") is None and not fijo.isdigit():
             return otra_pasada(pide)
@@ -400,13 +424,15 @@ def generate(data):
             u["egress"] = min(1e9, EV.recorrido(pb["_evac"], u["_i"], xd) + extra)
             u["saco"] = min(1e9, EV.saco(pb["_evac"], u["_i"], xd) + extra)
             u["_nucleo"] = _nucleo_de(pb["_evac"], pieces, u["_i"], xd)
-            for i in EV.piezas(pb["_evac"], u["_i"], xd):     # R10.8: las viviendas que sirve cada tramo
-                ps = res["pasillos"][pieces[i]["_pas"]]
-                ps["viviendas"] = ps.get("viviendas", 0) + 1
+            if n_res_lv:                                    # R10.8: las viviendas que sirve cada tramo recto
+                for k in {k for i in EV.piezas(pb["_evac"], u["_i"], xd) for k in pieces[i]["_recto"]}:
+                    ps = res["pasillos"][k]
+                    ps["viviendas"] = ps.get("viviendas", 0) + 1
         units += del_bloque
     for ps in res["pasillos"]:
         ps.setdefault("viviendas", 0)
-    _art35(res, S["nucleo"])
+    if n_res_lv:
+        _art35(res, S["nucleo"])
     pide = _ascensores_pedidos(res["cores"], S["nucleo"], len(stories), sube, units=units, n_res=n_res_lv)
     if pide is not None and pide != n_elev and params.get("_ascensores") is None and not fijo.isdigit():
         return otra_pasada(pide)              # R10.7: núcleos con los ascensores que piden las viviendas que sirven

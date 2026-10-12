@@ -2055,7 +2055,7 @@ def test_pasillo_por_tramo():
     # el art. 35
     S = ST.DEFAULTS["nucleo"]
     assert [ST.ancho_art35(S, n, 10.0)[0] for n in (2, 3, 4, 10, 11)] == [1.20, 1.20, 1.40, 1.40, 1.60]
-    assert ST.ancho_art35(S, 5, 20.0)[0] == 2.00 and ST.ancho_art35(S, None, 10.0)[0] == 0.0
+    assert ST.ancho_art35(S, 5, 20.0)[0] == 2.00 and ST.ancho_art35(S, None, 10.0)[0] == 1.20
     # L (automático): el tramo corto de 1,40 m; el largo sigue en 2,00 m y la planta, sin solapes
     L = [[0, 0], [50, 0], [50, 14], [16, 14], [16, 40], [0, 40]]
     base = run(L)
@@ -2109,3 +2109,102 @@ def test_pasillo_por_tramo():
 
 if __name__ == "__main__":
     test_pasillo_por_tramo(); print("OK49")
+
+
+def test_pasillo_por_tramo_casos():
+    """R10.8, casos de la revisión: pasillos paralelos de distinto ancho (la línea media entre sus bordes), un punto en
+    un empalme o un cruce (va al tramo en cuyo medio está), el núcleo de punta junto a un pasillo más ancho que llega,
+    el art. 35 en la etapa del pasillo (1,20 m como mínimo), con un vértice alineado (un solo tramo recto) y sin
+    viviendas (no se aplica), los segmentos de Rhino que el motor quita (sin aviso) y los anchos que quedaron sin
+    tramo (cuáles son, para quitarlos desde la web)."""
+    from engine import geometry as G
+    T_ = lambda p: [tuple(q) for q in p]
+    inter = lambda a, b: abs(G.area(T_(a))) - sum(abs(G.area(o)) for o, _ in G.subtract(T_(a), [T_(b)])[0])
+    medio = lambda ps: [(ps["eje"][0][0] + ps["eje"][1][0]) / 2, (ps["eje"][0][1] + ps["eje"][1][1]) / 2]
+    a35 = lambda r: [w for w in r["warnings"] if "art. 35" in w]
+    sin_tramo = lambda r: [w for w in r["warnings"] if "no tiene(n) tramo" in w]
+    gen = lambda fp, stage="plans", **p: generate({"footprint": fp, "height": 15, "stage": stage, "params": p})
+    muestra = lambda n: json.load(open(os.path.join(os.path.dirname(__file__), "..", "samples", n + ".json"),
+                                       encoding="utf-8"))
+    # pasillos paralelos de 1,40 y 3,00 m (en los dos órdenes): las viviendas de cada uno llegan hasta la mitad entre
+    # los bordes de los dos pasillos, con el tabique entre ellas, y no se pisan
+    pw = 0.3
+    for lineas in ([[[1, 7], [39, 7]], [[1, 21], [39, 21]]], [[[1, 21], [39, 21]], [[1, 7], [39, 7]]]):
+        for a7, a21 in ((1.4, 3.0), (3.0, 1.4), (2.0, 2.0)):
+            r = gen([[0, 0], [40, 0], [40, 28], [0, 28]], "units", centerlines=lineas, party_wall=pw,
+                    anchos_pasillo=[{"p": [20, 7], "ancho": a7}, {"p": [20, 21], "ancho": a21}])
+            us = [u["poly"] for u in r["units"]]
+            corte = (7 + a7 / 2 + 21 - a21 / 2) / 2
+            ys = sorted(set(round(q[1], 3) for u in us for q in u if 9 < q[1] < 19))
+            assert ys == [round(corte - pw / 2, 3), round(corte + pw / 2, 3)], (a7, a21, ys, corte)
+            assert all(len(u) == 4 for u in us) and max(inter(a, b) for i, a in enumerate(us) for b in us[i + 1:]) < 0.01
+    # un punto en el empalme de una T (ramal dibujado primero) o en el cruce de una X: va al tramo en cuyo medio está
+    t = muestra("T_dos_lineas")
+    r = gen(t["footprint"], centerlines=[[[30, 10], [30, 48]], [[0, 10], [60, 10]]],
+            anchos_pasillo=[{"p": [30, 10], "ancho": 3.5}])
+    assert [(p["eje"][0], p["propio"]) for p in r["pasillos"]] == [([30, 10], False), ([0, 10], True)], r["pasillos"]
+    x = muestra("cruz_dos_lineas")
+    r = gen(x["footprint"], centerlines=[[[1, 28], [55, 28]], [[28, 0.5], [28, 55.5]]],
+            anchos_pasillo=[{"p": [28, 28], "ancho": 3.0}])
+    assert [p["propio"] for p in r["pasillos"]] == [False, False, True] and r["pasillos"][2]["ancho"] == 3.0
+    # el núcleo de una punta no pisa el pasillo más ancho del ala que llega ahí: se va al otro lado del pasillo
+    nucleo = lambda r: round(sum(inter(p_["poly"], c) for n in r["cores"] for p_ in n["parts"]
+                                 if p_["kind"] in ("stair", "elevator", "duct", "service") for c in r["corridors"]), 2)
+    for fp, ancho in ((muestra("L")["footprint"], 6.0), ([[0, 0], [50, 0], [50, 12], [14, 12], [14, 40], [0, 40]], 3.5)):
+        p2 = gen(fp, "units")["pasillos"][1]
+        r = gen(fp, "units", anchos_pasillo=[{"p": medio(p2), "ancho": ancho}])
+        assert r["pasillos"][1]["ancho"] == ancho and nucleo(r) == 0, (ancho, nucleo(r))
+    # art. 35 en la etapa del pasillo (todavía sin viviendas): 1,20 m como mínimo en cualquier pasillo común
+    r = gen([[0, 0], [14, 0], [14, 14], [0, 14]], "corridor", corridor_width=1.0)
+    assert r["pasillos"][0]["minimo"] == 1.2 and r["pasillos"][0]["ok"] is False and len(a35(r)) == 1, r["pasillos"]
+    # una recta dibujada con un vértice intermedio es un solo tramo recto: su largo y sus viviendas son los de toda
+    # la recta (como sin el vértice)
+    barra = [[0, 0], [30, 0], [30, 16], [0, 16]]
+    una = gen(barra, corridor_width=1.4, centerlines=[[[1, 8], [29, 8]]])["pasillos"][0]
+    r = gen(barra, corridor_width=1.4, centerlines=[[[1, 8], [15, 8], [29, 8]]])
+    assert [(p["largo"], p["viviendas"], p["minimo"], p["ok"]) for p in r["pasillos"]] == \
+        [(una["largo"], una["viviendas"], 2.0, False)] * 2 and len(a35(r)) == 2, (una, r["pasillos"])
+    # sin niveles de vivienda (oficinas, comercio, cocheras), el art. 35 no se aplica
+    for prog, avisa in (("Office", 0), ("Parking", 0), ("Residential", 1)):
+        for stage in ("corridor", "plans"):
+            r = generate({"footprint": [[0, 0], [60, 0], [60, 18], [0, 18]], "height": 13.2, "stage": stage,
+                          "params": {"corridor_width": 1.5, "stories": [{"program": prog, "height": 3.3}] * 4}})
+            assert len(a35(r)) == avisa and (r["pasillos"][0].get("ok") is None) == (not avisa), (prog, stage)
+    # Rhino: un segmento que el motor quita (lo que sobra de un cruce o uno de 5 cm o menos) no es un ancho perdido
+    for lineas in ([[[28, 1], [28, 55]], [[1, 28], [30, 28], [30, 30]]], [[[28, 1], [28, 55]], [[1, 28], [29, 28], [31, 28]]]):
+        an = [{"seg": [a, b], "ancho": 1.6} for a, b in zip(lineas[1], lineas[1][1:])]
+        r = gen(x["footprint"], "corridor", centerlines=lineas, anchos_pasillo=an)
+        assert not sin_tramo(r) and "anchos_sin_tramo" not in r and [p["ancho"] for p in r["pasillos"]] == [2.0, 1.6]
+    L = muestra("L")["footprint"]
+    pts = [[8, 38], [8, 7.03], [8.03, 7.0], [46, 7]]
+    r = gen(L, "corridor", centerlines=[pts], anchos_pasillo=[{"seg": [a, b], "ancho": 1.5} for a, b in zip(pts, pts[1:])])
+    assert not sin_tramo(r) and [(p["ancho"], p["propio"]) for p in r["pasillos"]] == [(1.5, True)] * 2, r["pasillos"]
+    # un ancho que de verdad se quedó sin tramo (el codo se corrió): se avisa y se dice cuál es
+    r = gen(L, "corridor", centerlines=[[[8, 38], [8.5, 7], [46, 7]]],
+            anchos_pasillo=[{"seg": [[8, 38], [8, 7]], "ancho": 1.4}, {"seg": [[8, 7], [46, 7]], "ancho": 1.4}])
+    assert r["anchos_sin_tramo"] == [0] and len(sin_tramo(r)) == 1 and \
+        "Quitar los que no tienen tramo" in sin_tramo(r)[0], (r.get("anchos_sin_tramo"), r["warnings"])
+    assert "anchos_sin_tramo" not in gen(L, "corridor")
+    # la web: vuelve a elegir el tramo por su pedido, separa un segmento de Rhino que comparten dos tramos, quita los
+    # anchos sin tramo y la tabla de viviendas abre la ficha de la vivienda aunque haya un tramo elegido
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    for t_ in ("function tramoDe(", "selPas=tramoDe(j.pasillos||[],selPasP,selPasK)", "selPasP=m; selPasK=k;",
+               "x.spec===k", "function quitarSinTramo(", "result.anchos_sin_tramo",
+               "selUnit='${u.id}';selPas=null;selCore=null;"):
+        assert t_ in html, t_
+
+if __name__ == "__main__":
+    test_pasillo_por_tramo_casos(); print("OK50")
+
+
+def test_vivienda_elegida_otra_etapa():
+    """Con una vivienda elegida, «Generar pasillo y núcleos» (todavía sin viviendas) no deja la planta sin dibujar: al
+    recalcular, la web suelta la vivienda que ya no está en el resultado."""
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    run_ = html[html.index("async function run("):html.index("function render()")]
+    assert "if(selUnit&&!(j.units||[]).some(u=>u.id===selUnit)) selUnit=null;" in run_
+    assert run_.index("selUnit=null;") < run_.index("render();")
+    assert "units" not in generate({"footprint": [[0, 0], [40, 0], [40, 16], [0, 16]], "height": 15, "stage": "corridor"})
+
+if __name__ == "__main__":
+    test_vivienda_elegida_otra_etapa(); print("OK51")

@@ -527,18 +527,34 @@ def _sobre(A, B, seg, tol=0.05):
     return off(A) <= tol and off(B) <= tol and min(max(t(A), t(B)), L) - max(min(t(A), t(B)), 0.0) > tol
 
 
-def _anchos_segmentos(tramos, params):
+def _adentro(p, A, B):
+    """Cuánto entra la proyección de p en el segmento A-B: la distancia a su extremo más cercano (negativa si cae
+    afuera)."""
+    L = math.hypot(B[0] - A[0], B[1] - A[1])
+    if L < 1e-9:
+        return -1.0
+    t = ((p[0] - A[0]) * (B[0] - A[0]) + (p[1] - A[1]) * (B[1] - A[1])) / L
+    return min(t, L - t)
+
+
+def _anchos_segmentos(tramos, params, lineas=()):
     """R10.8, polilíneas: {(tramo, segmento): (k, ancho)}. Un pedido con un punto va al segmento más cercano (a 1 m o
-    menos); uno con un segmento (Rhino), a todos los que van sobre él (las dos mitades de una línea cortada en un
-    cruce)."""
+    menos; si el punto cae en un empalme o un cruce, al segmento en cuyo medio está); uno con un segmento (Rhino), a
+    todos los que van sobre él (las dos mitades de una línea cortada en un cruce). lineas: las polilíneas dibujadas,
+    antes de los cruces: un segmento que el motor quitó (lo que sobra de un cruce, uno de 5 cm o menos) no se avisa."""
     segs = [((t, i), pts[i], pts[i + 1]) for t, (_, pts) in enumerate(tramos) for i in range(len(pts) - 1)]
     out = {}
     for k, p, seg, a in _pedidos_ancho(params):
         if p is not None:
-            best = min(((_dist_point_segment(p, A, B), key) for key, A, B in segs), default=None)
-            hits = [best[1]] if best and best[0] <= 1.0 else []
+            ds = [(_dist_point_segment(p, A, B), key, A, B) for key, A, B in segs]
+            d0 = min((d for d, _, _, _ in ds), default=None)
+            hits = [min((c for c in ds if c[0] <= d0 + 1e-6), key=lambda c: (-_adentro(p, c[2], c[3]), c[1]))[1]] \
+                if d0 is not None and d0 <= 1.0 else []
         else:
             hits = [key for key, A, B in segs if _sobre(A, B, seg)]
+            if not hits and (math.hypot(seg[1][0] - seg[0][0], seg[1][1] - seg[0][1]) <= 0.05 or
+                             any(_sobre(A, B, seg) for pts in lineas for A, B in zip(pts, pts[1:]))):
+                _usado(params, k)      # un segmento dibujado que el motor quitó: no es un ancho perdido
         for key in hits:
             out[key] = (k, a)
             _usado(params, k)
@@ -563,7 +579,7 @@ def build_user_pieces(plate, params):
             lineas.append(pts)
     pieces, chains = [], []
     tramos = _cruces(lineas, params)
-    anchos = _anchos_segmentos(tramos, params)           # R10.8: el ancho pedido para cada tramo
+    anchos = _anchos_segmentos(tramos, params, lineas)   # R10.8: el ancho pedido para cada tramo
     for t_, (linea, pts) in enumerate(tramos):
         n = len(pts) - 1
         idxs = []
@@ -725,7 +741,7 @@ def _split_parallel(pieces, params):
             yo = (A[1] + Bq[1]) / 2.0
             if ov < 1.0 or abs(yo) > (cp + cq) / 2 + 2 * (pw + D) or abs(yo) < (cp + cq) / 2:
                 continue
-            cut = yo / 2.0 + math.copysign((cp - cq) / 4.0, yo)     # la mitad entre los bordes de los dos pasillos
+            cut = yo / 2.0 + (cp - cq) / 4.0 * (1 if yo > 0 else -1)     # la mitad entre los bordes de los dos pasillos
             _clip_sr(pc, (lambda r: G.clip_rect(r, None, None, None, cut - pw / 2)) if yo > 0 else
                      (lambda r: G.clip_rect(r, None, None, cut + pw / 2, None)))
 
@@ -897,11 +913,18 @@ def _sin_pisar(pieces, pc, x, side, params, sentido):
         if "eje" in pc:
             xx = _x_que_entra(pc, xx, side, params)
         _add_core(pc, xx, side, params)
-        pisa = _pisa_nucleo(pieces, pc, pc["cores"][-1])
+        pisa = _pisa_nucleo(pieces, pc, pc["cores"][-1]) or _pisa_conector(pc, pc["cores"][-1], params)
         pc["cores"].pop()
         if not pisa:
             return xx
     return None
+
+
+def _pisa_conector(pc, nuevo, params):
+    """R10.8: ¿el núcleo nuevo de la pieza pc pisa el conector del pasillo de otra ala que llega de su mismo lado?"""
+    pw, b = params["party_wall"], nuevo["box"]
+    return any(s_ == nuevo["side"] and b[0] < c1 - pw / 2 - 0.05 and c0 + pw / 2 + 0.05 < b[2]
+               for s_, c0, c1 in pc.get("conectores", []))
 
 
 def _pisa_nucleo(pieces, pc, nuevo):
@@ -1153,7 +1176,11 @@ def _generate_circulation(plate, params):
                     x = (pc["xa"] + pc["xb"]) / 2.0
                 lado = 1 if pc.get("single") else next_side()
                 _add_core(pc, _x_que_entra(pc, x, lado, params) if "eje" in pc else x, lado, params)
-                if _pisa_nucleo(pieces, pc, pc["cores"][-1]):
+                if not pc.get("single") and _pisa_conector(pc, pc["cores"][-1], params):
+                    pc["cores"].pop()       # R10.8: llega ahí el pasillo (más ancho) de la otra ala: del otro lado
+                    lado = -lado
+                    _add_core(pc, _x_que_entra(pc, x, lado, params) if "eje" in pc else x, lado, params)
+                if _pisa_nucleo(pieces, pc, pc["cores"][-1]) or _pisa_conector(pc, pc["cores"][-1], params):
                     pc["cores"].pop()       # pisa otro núcleo (dos puntas cercanas): se corre hacia adentro, si entra
                     x2 = _sin_pisar(pieces, pc, x, lado, params, 1 if e == 0 else -1)
                     if x2 is None:

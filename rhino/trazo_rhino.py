@@ -13,6 +13,7 @@ o ábrelo en _ScriptEditor y pulsa Run.
 Requiere que el servidor esté corriendo:  py server.py (Windows)  /  python3 server.py (Mac)
 """
 import json
+import math
 import socket
 import sys
 import traceback
@@ -214,7 +215,8 @@ def anchos_de_linea(pts, nombre):
         a = float(nm.split("ancho=")[1].split(";")[0].replace(",", "."))
     except ValueError:
         return []
-    return [{"seg": [p, q], "ancho": a} for p, q in zip(pts, pts[1:])] if a > 0 else []
+    return [{"seg": [p, q], "ancho": a} for p, q in zip(pts, pts[1:])
+            if math.hypot(q[0] - p[0], q[1] - p[1]) > 0.05] if a > 0 else []      # el motor une los vértices a 5 cm o menos
 
 
 def send_mass():

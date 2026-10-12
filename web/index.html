@@ -261,7 +261,7 @@ const UNIT_L=[0.58,0.72,0.46,0.82,0.38,0.88];
 const roomColor=(kind,prog)=>tone(progColor(prog||'Residential'),ROOM_L[kind]??0.7);
 const COL=new Proxy({},{get:(t,k)=>roomColor(k)});
 const KLABEL={bedroom:'Dormitorio',living:'Estar',dining:'Comedor',kitchen:'Cocina',bath:'Baño',hall:'Hall',hallway:'Pasillo',laundry:'Lavadero',storage:'Depósito',study:'Estudio',vestidor:'Vestidor'};
-let anchosPasillo=[], selPas=null, selPasP=null;   // R10.8: anchos propios de algunos tramos [{p|seg, ancho}]; tramo elegido (índice en result.pasillos) y su punto, para volver a elegirlo al recalcular
+let anchosPasillo=[], selPas=null, selPasP=null, selPasK=null;   // R10.8: anchos propios de algunos tramos [{p|seg, ancho}]; tramo elegido (índice en result.pasillos), su punto y su pedido, para volver a elegirlo al recalcular
 let selUnit=null, selCore=null, selSpec=null, showGraph=true, showDims=true, showEvac=true, showEquip=true, showTip=true;
 const EVAC={ok:'#1a9d5b',saco:'#e8890c',fail:'#d63b3b'};   // puerta de cada vivienda: cumple, fondo de saco largo, recorrido largo
 
@@ -280,7 +280,9 @@ async function run(stage,opt){ opt=opt||{}; if(!footprint.length){ $('tag').text
  catch(e){ j={error:'no hay conexión con el servidor de Trazo: arráncalo (py server.py en Windows, python3 server.py en Mac) y recarga la página'}; }
  if(j.error){ $('tag').textContent='Error: '+j.error; $('warns').innerHTML='<div class="w">⚠ Error: '+j.error+'. Si se repite, copia este mensaje y pégalo en la sesión de Claude Code.</div>'; return;} result=j;
  if(selSpec!=null){ const k=(j.cores||[]).findIndex(c=>c.spec===selSpec); selCore=k>=0?k:null; selSpec=null; } else if(selCore!=null&&!(j.cores||[])[selCore]) selCore=null;
- if(selPasP){ const k=(j.pasillos||[]).findIndex(ps=>distSeg(selPasP,ps.eje[0],ps.eje[1])<1); selPas=k>=0?k:null; selPasP=null; } else if(selPas!=null&&!(j.pasillos||[])[selPas]) selPas=null;
+ if(selPasP){ selPas=tramoDe(j.pasillos||[],selPasP,selPasK); selPasP=null; selPasK=null; } else if(selPas!=null&&!(j.pasillos||[])[selPas]) selPas=null;
+ anchosInfo();
+ if(selUnit&&!(j.units||[]).some(u=>u.id===selUnit)) selUnit=null;   // la vivienda elegida ya no está (otra etapa u otra planta)
  if(!stories||stories.length!==j.stories.length){stories=j.stories.map(s=>({program:s.program,height:s.height}));renderStories();}
  $('tag').textContent='Etapa: '+stage;
  if(!opt.keepView){ if(stage==='massing'&&viewMode!=='axo') setView('axo',true); else if(stage!=='massing'&&viewMode==='axo'&&!opt.stayAxo) setView('plan',true);
@@ -399,7 +401,7 @@ function drawOverlay(){ const go=$('go'); go.innerHTML=''; if(!view) return; dra
   go.appendChild(el('line',{x1:X(q[0]),y1:Y(q[0]),x2:X(q[1]),y2:Y(q[1]),stroke:dragIn.tipo==='pared'?'#0f9d76':'#c2410c','stroke-width':3,'stroke-dasharray':'6 4','pointer-events':'none'})); } }
  if(dragCore&&dragCore.moved&&result&&result.cores&&result.cores[dragCore.i]){ const d=dragCore.d;   // núcleo arrastrado: dónde va a quedar (el motor lo ajusta al pasillo)
   go.appendChild(el('polygon',{points:pts(result.cores[dragCore.i].poly.map(p=>[p[0]+d[0],p[1]+d[1]])),fill:'rgba(47,111,237,.15)',stroke:'#2f6fed','stroke-width':2,'stroke-dasharray':'5 3','pointer-events':'none'})); }
- const line=(a,b,dash)=>go.appendChild(el('line',{x1:X(a),y1:Y(a),x2:X(b),y2:Y(b),stroke:'#2f6fed','stroke-width':2,'stroke-dasharray':dash||'6 3'}));
+ const line=(a,b,dash)=>go.appendChild(el('line',{x1:X(a),y1:Y(a),x2:X(b),y2:Y(b),stroke:'#2f6fed','stroke-width':2,'stroke-dasharray':dash||'6 3','pointer-events':'none'}));   // el clic pasa al tramo de pasillo de abajo
  centerlines.forEach((pl,li)=>{ for(let i=0;i<pl.length-1;i++) line(pl[i],pl[i+1]);
   pl.forEach((p,vi)=>{ const c=el('circle',{cx:X(p),cy:Y(p),r:6,fill:'#fff',stroke:'#2f6fed','stroke-width':2,style:'cursor:grab'});
    c.addEventListener('pointerdown',e=>{ if(tool) return; e.stopPropagation(); drag={li,vi,moved:false}; $('svg').setPointerCapture(e.pointerId); });
@@ -533,16 +535,25 @@ function pasilloPanel(){ const c=$('ctx'), ps=result.pasillos[selPas], gen=+$('c
   :'<div class="hint">Entre medianeras, este pasillo es la franja del núcleo: su ancho lo da el núcleo.</div>'}
   <button class="s" onclick="selPas=null;draw();unitPanel()">Cerrar</button>`;
  c.style.display='block'; }
+function medioEje(e){ return [+((e[0][0]+e[1][0])/2).toFixed(3),+((e[0][1]+e[1][1])/2).toFixed(3)]; }
+function tramoDe(L,m,k){ // el tramo que recibió el pedido k (el más cercano a m si varios lo comparten) o, sin pedido, el de eje más cercano a m
+ const d=ps=>{ const q=medioEje(ps.eje); return Math.hypot(q[0]-m[0],q[1]-m[1]); }; let i=-1, b=Infinity;
+ [true,false].forEach(conK=>{ if(i>=0) return; L.forEach((ps,n)=>{ if(conK&&(k==null||ps.spec!==k)) return; const e=d(ps); if(e<b){ b=e; i=n; } }); });
+ return i>=0?i:null; }
 function aplicarAncho(general){ const ps=result&&result.pasillos&&result.pasillos[selPas]; if(!ps) return; const w=+$('pasAncho').value;
  if(!general&&!(w>=0.8&&w<=8)){ $('tag').textContent='El ancho del pasillo va de 0.80 a 8 m'; return; }
  recordar(general?'ancho del pasillo como los demás':'ancho del pasillo '+ps.id);
- const m=[(ps.eje[0][0]+ps.eje[1][0])/2,(ps.eje[0][1]+ps.eje[1][1])/2], k=ps.spec!=null&&anchosPasillo[ps.spec]?ps.spec:null;
- if(general){ if(k!=null) anchosPasillo.splice(k,1); }
+ const m=medioEje(ps.eje); let k=ps.spec!=null&&anchosPasillo[ps.spec]?ps.spec:null;
+ const otros=k!=null?result.pasillos.filter(x=>x!==ps&&x.spec===k):[];
+ if(otros.length){ const a0=anchosPasillo[k].ancho; anchosPasillo.splice(k,1); otros.forEach(x=>anchosPasillo.push({p:medioEje(x.eje),ancho:a0})); k=null; }   // un segmento de Rhino vale para las dos mitades de una línea cortada en un cruce: la otra conserva su ancho
+ if(general){ if(k!=null) anchosPasillo.splice(k,1); k=null; }
  else if(k!=null) anchosPasillo[k]=Object.assign({},anchosPasillo[k],{ancho:Math.round(w*100)/100});   // conserva su punto (o el segmento de Rhino)
- else anchosPasillo.push({p:[+m[0].toFixed(3),+m[1].toFixed(3)],ancho:Math.round(w*100)/100});
- selPasP=m; anchosInfo(); runCirc(); }
-function anchosInfo(){ $('anchosInfo').innerHTML=anchosPasillo.length?`${anchosPasillo.length} tramo(s) con ancho propio · <button class="s" style="padding:0 6px" onclick="quitarAnchos()">Quitar</button>`:'Clic en un tramo de pasillo de la planta para darle su propio ancho.'; }
+ else { anchosPasillo.push({p:m,ancho:Math.round(w*100)/100}); k=anchosPasillo.length-1; }
+ selPasP=m; selPasK=k; anchosInfo(); runCirc(); }
+function anchosInfo(){ const sin=((result&&result.anchos_sin_tramo)||[]).filter(i=>i<anchosPasillo.length), n=result&&result.pasillos?result.pasillos.filter(p=>p.propio).length:anchosPasillo.length;
+ $('anchosInfo').innerHTML=anchosPasillo.length?`${n} tramo(s) con ancho propio · <button class="s" style="padding:0 6px" onclick="quitarAnchos()">Quitar</button>`+(sin.length?` · <button class="s" style="padding:0 6px" onclick="quitarSinTramo()">Quitar los que no tienen tramo (${sin.length})</button>`:''):'Clic en un tramo de pasillo de la planta para darle su propio ancho.'; }
 function quitarAnchos(){ recordar('quitar anchos de pasillo'); anchosPasillo=[]; anchosInfo(); if(lastStage) runCirc(); }
+function quitarSinTramo(){ const sin=new Set((result&&result.anchos_sin_tramo)||[]); if(!sin.size) return; recordar('quitar anchos sin tramo'); anchosPasillo=anchosPasillo.filter((a,i)=>!sin.has(i)); selPas=null; anchosInfo(); if(lastStage) runCirc(); else unitPanel(); }
 function distSeg(p,a,b){ const dx=b[0]-a[0], dy=b[1]-a[1], L2=dx*dx+dy*dy, t=L2?Math.max(0,Math.min(1,((p[0]-a[0])*dx+(p[1]-a[1])*dy)/L2)):0; return Math.hypot(p[0]-a[0]-t*dx,p[1]-a[1]-t*dy); }
 
 /* ---------- patios ---------- */
@@ -856,7 +867,7 @@ function panels(){ const m=result.metrics||{}, mx=m.mix; drawDonut(m.programs||{
  if(m.core_count!=null) h+=`<div class="k"><span>Núcleos</span><b>${m.core_count}</b></div><div class="k"><span>Circulación</span><b>${m.circulation_pct??'-'}%</b></div>${m.core?`<div class="k"><span>Núcleo (frente × fondo)</span><b>${m.core.width} × ${m.core.depth} m</b></div><div class="k"><span>Ascensores</span><b>${ascensoresTxt(m)}</b></div><div class="k"><span>Escalera</span><b>${m.core.stair_type}</b></div><div class="k"><span>Contrahuellas por piso</span><b>${m.core.risers} × ${(m.core.riser_h*100).toFixed(1)} cm</b></div>`:''}<div class="k"><span>Tramos de pasillo</span><b>${m.wings}</b></div><div class="k"><span>Máx. distancia a núcleo</span><b>${m.egress_max} m</b></div>`;
  if(mx) h+=`<div class="k"><span>Sin usar</span><b>${m.unused_area??'-'} m²</b></div>${m.dark_area?`<div class="k"><span>Sin luz natural</span><b>${m.dark_area} m²</b></div>`:''}<div class="k"><span>Unidades/planta</span><b>${mx.count}</b></div><div class="k"><span>Unidades totales</span><b>${m.units_total}</b></div><div class="k"><span>Match score</span><b>${mx.match_score}%</b></div><div class="k"><span>Fit medio</span><b>±${mx.fit_m2} m²</b></div><div class="k"><span>Unidades únicas</span><b>${mx.unique_units}</b></div><div class="k"><span>NSA total</span><b>${m.nsa_total} m²</b></div><div class="k"><span>Eficiencia</span><b>${m.efficiency_total}%</b></div>`+(m.plan_score!=null?`<div class="k"><span>Calidad de planos</span><b>${m.plan_score}%</b></div>`:'')+Object.entries(mx.by_type).map(([k,v])=>`<div class="k"><span>${k}</span><b>${v.count} × ${v.avg_area} m²</b></div>`).join('');
  $('metrics').innerHTML=h; $('warns').innerHTML=(result.warnings||[]).slice(0,12).map(w=>`<div class="w">⚠ ${w}</div>`).join('')||'<div style="color:var(--mut)">Sin avisos</div>'; resumenPanel(); estadoTop();
- $('units').innerHTML=(result.units?'<table><tr><th>ID</th><th>Tipo</th><th>m²</th><th>Dorm</th><th>Evac.</th><th>Plano</th></tr>'+result.units.map(u=>`<tr style="cursor:pointer" onclick="selUnit='${u.id}';if(viewMode!=='plan')setView('plan');else{draw();unitPanel();}"><td>${u.id}</td><td>${u.type}</td><td>${u.area}</td><td>${u.bedrooms??'-'}</td><td style="color:${u.egress_status&&u.egress_status!=='ok'?EVAC[u.egress_status]:'inherit'}">${u.egress} m${u.egress_status==='saco'?' ⚠':''}</td><td>${u.plan_score!=null?u.plan_score+'%':'-'}</td></tr>`).join('')+'</table>':''); }
+ $('units').innerHTML=(result.units?'<table><tr><th>ID</th><th>Tipo</th><th>m²</th><th>Dorm</th><th>Evac.</th><th>Plano</th></tr>'+result.units.map(u=>`<tr style="cursor:pointer" onclick="selUnit='${u.id}';selPas=null;selCore=null;if(viewMode!=='plan')setView('plan');else{draw();unitPanel();}"><td>${u.id}</td><td>${u.type}</td><td>${u.area}</td><td>${u.bedrooms??'-'}</td><td style="color:${u.egress_status&&u.egress_status!=='ok'?EVAC[u.egress_status]:'inherit'}">${u.egress} m${u.egress_status==='saco'?' ⚠':''}</td><td>${u.plan_score!=null?u.plan_score+'%':'-'}</td></tr>`).join('')+'</table>':''); }
 function panels2(){ $('donut').innerHTML='';$('progList').innerHTML=''; $('metrics').innerHTML='';$('warns').innerHTML='';$('units').innerHTML=''; resumenPanel(); estadoTop(); }
 function selLabel(v,txt,off){ const s=$('sample'); let o=s.querySelector('option[value="'+v+'"]'); if(!o){ o=document.createElement('option'); o.value=v; s.prepend(o); } o.textContent=txt; o.disabled=!!off; s.value=v; estadoTop(); }
 function setMass(m,fromRhino,opt){ opt=opt||{}; olvidarHistoria(); const o=$('sample').querySelector('option[value="__nuevo"]'); if(o) o.remove();

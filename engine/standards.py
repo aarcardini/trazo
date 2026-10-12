@@ -204,9 +204,11 @@ def elevators_needed(S, n_levels, top_access_h, units_served):
 
 def ancho_art35(S, viviendas, largo):
     """Ancho mínimo del pasillo común (norma nacional, art. 35) que sirve a «viviendas» por planta (None: todavía sin
-    viviendas, solo cuenta el largo) con un tramo recto de «largo» m. S: standards["nucleo"]. Devuelve (mínimo, por qué)."""
+    viviendas; el menor de la norma, que vale para cualquier cantidad) con un tramo recto de «largo» m.
+    S: standards["nucleo"]. Devuelve (mínimo, por qué)."""
     anchos, hasta = S["pasillo_comun"], S["pasillo_viviendas"]
-    minimo, motivo = 0.0, ""
+    minimo, motivo = min(anchos), "para cualquier pasillo común (según las viviendas que sirva puede pedir más: se " \
+                                  "cuentan al repartirlas)"
     if viviendas is not None:
         k = 0 if viviendas <= hasta[0] else 1 if viviendas <= hasta[1] else 2
         minimo = anchos[k]

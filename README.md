@@ -155,6 +155,9 @@ Si algo falla en Rhino, ejecuta el script y elige **Diagnostico**. Si no se resu
   - Las viviendas de ese tramo ganan o pierden el fondo que cambia el pasillo; las de los demás tramos no cambian.
 - **Art. 35 de la norma nacional:** cada tramo se compara con lo que pide la norma: 1,20 m hasta 3 viviendas, 1,40 de 4 a 10, 1,60 con 11 o más, y 2,00 m si el tramo recto pasa de 15 m. Si no llega, el tramo se dibuja con borde rojo punteado y un aviso lo dice, por ejemplo «Pasillo P2 de 1.40 m: el art. 35 de la norma nacional pide 2.00 m en un tramo recto de más de 15 m (este mide 32.6 m)…». Los valores se cambian en «Normativa → Núcleo». Con 2,00 m, ningún ejemplo tiene avisos.
 - **Corrección:** entre medianeras con núcleos manuales, los pasillos que llegan a las viviendas medían siempre 2,00 m aunque cambiaras el ancho general.
+- **Si cambias la planta o las líneas** y un ancho se queda sin tramo, el aviso lo dice y Circulación ofrece «Quitar los que no tienen tramo», que borra solo esos.
+- Una recta dibujada con un vértice intermedio cuenta como un solo tramo recto para la norma. En edificios sin viviendas (oficinas, comercio, cocheras) el art. 35 no se aplica.
+- **Corrección:** con una vivienda elegida, «Generar pasillo y núcleos» dejaba la planta sin dibujar.
 - Sin anchos propios, los ejemplos dan exactamente la misma planta que antes.
 
 ## Novedades v2.38
