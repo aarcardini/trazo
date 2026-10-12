@@ -23,7 +23,7 @@ from .units import (_bisect_x, _chain_union, _is_rect, _segments, generate_unit_
                     superficie_con_muros)  # noqa: F401
 from .patios import (auto_patios, _anillo, split_blocks, make_patio_dark, _block_of, _block_of_line)  # noqa: F401
 
-VERSION = "2.44"
+VERSION = "2.46"
 
 DEFAULT_PARAMS = {
     # Masa
@@ -559,8 +559,10 @@ def generate(data):
             hechos_dentro.update(pl["ediciones"])
             Wp = lambda pt, pc=pc: [round(v, 3) for v in G.to_world([pt], pc["origin"], pc["angle"])[0]]
             item["bedrooms"] = pl["bedrooms"]
-            item["rooms"] = [{"id": r["id"], "name": r["name"], "kind": r["kind"], "area": round(r["area"], 1),
-                              "poly": W(pc, r["poly_local"])} for r in pl["rooms"]]
+            item["rooms"] = [dict({"id": r["id"], "name": r["name"], "kind": r["kind"], "area": round(r["area"], 1),
+                                   "poly": W(pc, r["poly_local"])},
+                                  **({"ventilacion": r["ventilacion"]} if r.get("ventilacion") else {}))   # R10.9
+                             for r in pl["rooms"]]
             item["doors"] = [{"p": Wp(d["p"]), "q": Wp(d["q"]), "entry": bool(d.get("entry")),
                               "a": d["a"], "b": d["b"]} for d in pl["doors"]]
             item["graph"] = {"nodes": [{"id": n["id"], "name": n["name"], "kind": n["kind"], "pos": Wp(n["pos"])}
