@@ -3,8 +3,9 @@
 
     python server.py            ->  http://127.0.0.1:8765
 """
-import json, os, sys, time, threading
+import json, os, re, sys, time, threading, unicodedata
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlsplit
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, ROOT)
@@ -23,6 +24,7 @@ import engine.units as _units
 import engine.patios as _patios
 import engine.dxf as _dxf
 import engine.dxf_lector as _dxf_lector
+import engine.tabla_viviendas as _tabla_viviendas
 
 
 def _stamp():
@@ -47,6 +49,7 @@ def engine():
             importlib.reload(m)
         importlib.reload(_dxf)
         importlib.reload(_dxf_lector)
+        importlib.reload(_tabla_viviendas)
         _loaded[0] = st
     return _layout, _dxf
 
@@ -57,6 +60,19 @@ def generate(data):
 
 def result_to_dxf(res):
     return engine()[1].result_to_dxf(res)
+
+
+def result_to_csv(res):
+    engine()
+    return _tabla_viviendas.result_to_csv(res)
+
+
+def nombre_csv(nombre):
+    """Nombre del archivo de la tabla de viviendas: «trazo_viviendas.csv» o, con el nombre de la masa, «trazo_viviendas_Barra_60x16.csv»
+    (sin tildes ni caracteres raros: va en una cabecera HTTP y el sistema de archivos de Windows no admite varios)."""
+    s = unicodedata.normalize("NFKD", str(nombre or "")).encode("ascii", "ignore").decode("ascii")
+    s = re.sub(r"[^A-Za-z0-9._-]+", "_", s).strip("._-")[:60].rstrip("._-")
+    return "trazo_viviendas%s.csv" % ("_" + s if s else "")
 
 
 def mp_samples():
@@ -85,13 +101,15 @@ class H(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
-    def _send(self, code, body, ctype="application/json"):
+    def _send(self, code, body, ctype="application/json", headers=None):
         if not isinstance(body, (bytes, bytearray)):
             body = json.dumps(body).encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", ctype + ("; charset=utf-8" if ctype.startswith("text") or ctype == "application/json" else ""))
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Access-Control-Allow-Origin", "*")
+        for k, v in (headers or {}).items():
+            self.send_header(k, v)
         self.end_headers()
         self.wfile.write(body)
 
@@ -131,6 +149,24 @@ class H(BaseHTTPRequestHandler):
                 if not STATE["result"]:
                     return self._send(404, {"error": "sin resultado"})
                 return self._send(200, result_to_dxf(STATE["result"]).encode(), "text/plain")
+        if p == "/api/csv":       # R7.2: tabla de viviendas del último resultado, para Excel o LibreOffice en español
+            with LOCK:
+                res = STATE["result"]
+            if not res:
+                return self._send(404, {"error": "Trazo: primero genera una planta con viviendas (en la web, «Generar mix» "
+                                                 "o «Generar planos») y vuelve a bajar la tabla."})
+            if not res.get("units"):
+                return self._send(404, {"error": "Trazo: el resultado todavía no tiene viviendas. Genera el mix o los planos "
+                                                 "en la web y vuelve a bajar la tabla."})
+            nombre = (parse_qs(urlsplit(self.path).query).get("nombre") or [""])[0]
+            try:
+                cuerpo = result_to_csv(res).encode("utf-8")
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                return self._send(500, {"error": "Trazo: no pude armar la tabla de viviendas (%s: %s). Vuelve a generar los "
+                                                 "planos y prueba de nuevo." % (type(e).__name__, e)})
+            return self._send(200, cuerpo, "text/csv", {"Content-Disposition": 'attachment; filename="%s"' % nombre_csv(nombre)})
         if p == "/api/samples":
             d = os.path.join(ROOT, "samples")
             out = {}
