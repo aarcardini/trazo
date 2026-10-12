@@ -1696,6 +1696,23 @@ if __name__ == "__main__":
     test_ascensores_por_nucleo(); print("OK42")
 
 
+def _cocina_comunicada(res):
+    """R5.11 (revisión): con su equipamiento puesto, desde las puertas de la cocina (o del «Hall / Cocina») y sus bordes
+    abiertos a la zona de día se llega a todos lados sin pisar la heladera ni la mesada (EQ._alcanza): la heladera no
+    encierra la puerta del lavadero. Las estancias, en un marco paralelo a los ejes (layout_unit o una vivienda de una
+    planta ortogonal)."""
+    from engine import plans as P, geometry as G, equipamiento as EQ
+    k = next(x for x in res["rooms"] if x["kind"] == "kitchen" or "Cocina" in x["name"])
+    R = {x["id"]: G.bbox(x["poly"]) for x in res["rooms"]}
+    B = R[k["id"]]
+    acc = [(tuple(d["p"]), tuple(d["q"])) for d in res["doors"] if k["id"] in (d["a"], d["b"])]
+    for x in res["rooms"]:
+        sg = P._shared(B, R[x["id"]]) if x["id"] != k["id"] and x["kind"] in P.DAY else None
+        if sg and ((sg[1][0] - sg[0][0]) ** 2 + (sg[1][1] - sg[0][1]) ** 2) ** 0.5 >= P.MIN_SHARE["abierto"] - 1e-6:
+            acc.append(sg)
+    cuerpos = [G.bbox(q["poly"]) for q in res["equipamiento"] if q["room"] == k["id"] and q["kind"] in ("heladera", "mesada")]
+    return EQ._alcanza(EQ._Estancia(B), cuerpos, acc, [], g=0.05)
+
 def test_sin_placards():
     """v2.33 (criterio del usuario): el placard es el armario del dormitorio, no una estancia. La franja sin luz entre el
     pasillo interno y el pasillo común lleva baños (con ducha), lavadero y un depósito de hasta 4 m² (editable; 0 = sin
@@ -1729,13 +1746,22 @@ def test_sin_placards():
     V0 = ST.merged({"vivienda": {"deposito": {"max_area": 0}}})["vivienda"]
     res = P.layout_unit(rect(11.73, 6.5), 2, fondo(6.5), V0)
     assert not [r for r in res["rooms"] if r["kind"] == "storage"] and "Baño en suite" in [r["name"] for r in res["rooms"]]
-    # muy profunda (10,15 m): el depósito junto al hall y lo que queda junto al pasillo común, C: sin uso, con aviso
+    # muy profunda (10,15 m; antes, 6,6 m² sin uso junto al pasillo común): R5.11, la tira es una banda de servicios. El
+    # hall va a x0, con la entrada; la cocina (5 m² como máximo) corre de él hacia la tira, seguida del lavadero (puerta
+    # desde la cocina) y, aquí, del depósito (puerta desde el lavadero); la franja ya no lleva el lavadero
     res = P.layout_unit(rect(8.7, 10.15), 2, fondo(10.15))
-    dep = next(r for r in res["rooms"] if r["kind"] == "storage")
-    assert dep["area"] <= 4.0 + 1e-6 and any({d["a"], d["b"]} == {"hall", "storage"} for d in res["doors"])
-    assert len(res["sin_uso"]) == 1 and abs(G.area(res["sin_uso"][0])) > 5
-    assert [c["msg"] for c in res["checks"] if not c["ok"]] == ["Sin uso: 6.6 m² junto al pasillo común: la vivienda "
-                                                                 "tiene 10.2 m de fondo"], res["checks"]
+    B = caja(res)
+    assert not res["sin_uso"] and res["score"] == 100 and not [c for c in res["checks"] if not c["ok"]], res["checks"]
+    assert all(abs(B[k][1]) < 1e-6 and abs(B[k][3] - B["kitchen"][3]) < 1e-6 for k in ("hall", "kitchen", "laundry"))
+    assert abs(B["hall"][0]) < 1e-6 and abs(B["kitchen"][0] - B["hall"][2]) < 1e-6 and \
+        abs(B["laundry"][0] - B["kitchen"][2]) < 1e-6 and B["laundry"][3] <= B["bath1"][1] + 1e-6, B
+    assert next(r for r in res["rooms"] if r["kind"] == "kitchen")["area"] <= 5.0 + 1e-6
+    assert {"heladera", "mesada", "bacha_cocina", "cocina_horno"} <= con(res, "kitchen")
+    assert {"lavarropas", "pileta_lavar"} <= con(res, "laundry")
+    assert _cocina_comunicada(res)          # la heladera no encierra la puerta del lavadero (antes, una rendija de 0,20 m)
+    assert any({d["a"], d["b"]} == {"kitchen", "laundry"} for d in res["doors"])
+    assert not any("laundry" in (d["a"], d["b"]) and "hallway" in (d["a"], d["b"]) for d in res["doors"])
+    assert next(d for d in res["doors"] if d.get("entry"))["p"][0] < B["hall"][2]     # la entrada, en el hall de x0
     # poco profunda (5,50 m): el pasillo junto al pasillo común termina en el último dormitorio, que toma lo que queda
     res = P.layout_unit(rect(13.3, 5.5), 2, fondo(5.5))
     B = caja(res)
@@ -2826,6 +2852,291 @@ if __name__ == "__main__":
     test_proporcion_y_divisoria(); print("OK57")
 
 
+def test_rincones():
+    """R5.11 (criterio del usuario): la tira sin luz junto al pasillo común de una vivienda muy profunda es una banda de
+    servicios. Con fondo para la mesada, la cocina integrada (5 m² como máximo, art. 27) corre desde el hall, que va a x0
+    con la entrada, hacia la tira, seguida del lavadero (puerta desde la cocina); el estar baja hasta la banda; el
+    depósito vuelve a la franja (o va a la banda, desde el lavadero, si deja menos sin uso) y la franja ya no lleva el
+    lavadero. Con una tira de 1,20 a 1,60 m, la cocina sigue en la zona de día y la tira lleva el lavadero, desde el hall
+    (o desde la cocina, con el hall en x0); con menos de 1,20 m (no entran el lavarropas y su paso), como antes. La banda
+    no pasa del fondo típico de una cocina: lo que queda, sin uso con el aviso del fondo. Un aviso por rincón sin uso,
+    aunque su primer trozo quede vacío (antes se perdía). Los planos sin tira no cambian (tampoco con un muro oblicuo). En
+    la cocina con la puerta del lavadero, la mesada entra en una parte de su pared si la puerta está junto a una punta, y
+    la heladera no encierra la puerta. Revisión: con un muro oblicuo o un entrante, cada banda se mide con el contorno
+    real (hall con su puerta de entrada, cocina con su mesada, lavadero y depósito con su superficie mínima y el lavadero
+    con sus artefactos) y, si ninguna entra, como antes; y va solo si el plano no empeora. La suite, solo si el muro
+    oblicuo no se come el principal ni su baño; la cocina en la banda no crea un comedor aparte; una vivienda sin hall
+    avisa «Sin puerta de entrada»."""
+    import hashlib
+    from engine import plans as P, geometry as G, equipamiento as EQ, standards as ST
+    rect = lambda w, d: [(0.0, 0.0), (w, 0.0), (w, d), (0.0, d)]
+    fondo = lambda D: (lambda p, q: abs(p[1] - D) < 0.05 and abs(q[1] - D) < 0.05)
+    caja = lambda res: {r["id"]: G.bbox(r["poly"]) for r in res["rooms"]}
+    malos = lambda res: [c["msg"] for c in res["checks"] if not c["ok"]]
+    puerta = lambda res, a, b: any({d["a"], d["b"]} == {a, b} for d in res["doors"])
+    con = lambda res, rid: {q["kind"] for q in res["equipamiento"] if q["room"] == rid}
+    cocina = lambda res: next(r for r in res["rooms"] if r["kind"] == "kitchen" or "Cocina" in r["name"])
+    K = ST.DEFAULTS["vivienda"]["cocina"]["typ"][1]                         # el fondo máximo de la banda (2,90 m)
+    avisado = lambda res: not res["sin_uso"] or any(m.startswith("Sin uso") for m in malos(res))
+
+    # el aviso perdido: un rincón sin uso se dibujaba sin aviso si su primer trozo (el que llevaba el aviso) quedaba de
+    # ancho cero. rect(5, 12) de 1 dormitorio: 3,4 m² sin uso sin aviso (ahora la tira lleva el lavadero, desde el hall,
+    # y no queda sin uso); rect(5, 13): 5,4 m² sin aviso (ahora 3,6 m² sobre la banda, con su aviso, aunque el trozo de
+    # la banda, que lo lleva, quede vacío)
+    res = P.layout_unit(rect(5, 12), 1, fondo(12))
+    assert not res["sin_uso"] and puerta(res, "hall", "laundry") and not puerta(res, "hallway", "laundry")
+    res = P.layout_unit(rect(5, 13), 1, fondo(13))
+    su = sum(abs(G.area(p)) for p in res["sin_uso"])
+    assert su > 3 and [m for m in malos(res) if m.startswith("Sin uso")] == [
+        "Sin uso: %.1f m² junto al pasillo común: la vivienda tiene 13.0 m de fondo" % su], malos(res)
+    P.configure(ST.DEFAULTS["vivienda"])
+    vacios = P._plan_rects(0.0, 0.0, 5.0, 13.0, 1, [])[2]
+    assert vacios[0][0][2] - vacios[0][0][0] < 1e-6 and vacios[0][1] and vacios[1][1] == "", vacios
+
+    # el tope de la banda: con 17 m de fondo, la cocina sigue en 5 m² como máximo y la banda (cocina, lavadero, depósito)
+    # no pasa del fondo típico de una cocina; lo que queda, sin uso, con el aviso del fondo
+    for W, nb in ((6.0, 1), (8.0, 2), (10.0, 3), (12.0, 4), (14.0, 1)):
+        res = P.layout_unit(rect(W, 17.0), nb, fondo(17.0))
+        B = caja(res)
+        assert cocina(res)["area"] - (P.HALL_W * (B["hall"][3] - B["hall"][1]) if cocina(res)["id"] == "hall" else 0) \
+            <= 5.0 + 1e-6, (W, nb)
+        assert all(B[k][3] <= K + 1e-6 for k in ("laundry", "storage") if k in B and B[k][1] < 1e-6), B
+        assert res["sin_uso"] and avisado(res) and any("tiene 17.0 m de fondo" in m for m in malos(res)), malos(res)
+    B = caja(P.layout_unit(rect(14.0, 17.0), 1, fondo(17.0)))               # aquí, la cocina en la banda
+    assert B["kitchen"][3] <= K + 1e-6 and abs(B["kitchen"][0] - B["hall"][2]) < 1e-6 and B["hall"][0] < 1e-6
+
+    # barra de 60 × 24 (viviendas de 10,50 m de fondo; antes 72 m² sin uso): cocina y lavadero en la banda, la cocina de
+    # 5 m² como máximo y con su mesada; las de 2 dormitorios, sin sin uso
+    r = run([[0, 0], [60, 0], [60, 24], [0, 24]])
+    banda = [u for u in r["units"] if puerta(u, "kitchen", "laundry")]
+    assert len(banda) >= 12 and sum(x["area"] for u in r["units"] for x in u["sin_uso"]) < 35
+    for u in banda:
+        k = next(x for x in u["rooms"] if x["kind"] == "kitchen")
+        assert k["area"] <= 5.0 + 1e-6 and {"heladera", "mesada"} <= {q["kind"] for q in u["equipamiento"]
+                                                                       if q["room"] == "kitchen"}
+        assert not puerta(u, "hallway", "laundry") and (u["type"] != "2 dorm" or not u["sin_uso"]), u["id"]
+        assert _cocina_comunicada(u), u["id"]       # la heladera no encierra la puerta del lavadero (antes, en 6)
+    assert all(avisado(u) for u in r["units"])
+
+    # patio_central: la U05 (2 dormitorios) queda sin sin uso y con 100 de calidad (antes, 6,6 m² y 50); la U04 (3, con
+    # la suite) baja de 6,6 a 3,6 m², en la franja: cocina, lavadero, depósito y baño ya están en su máximo
+    s = json.load(open(os.path.join(os.path.dirname(__file__), "..", "samples", "patio_central.json"), encoding="utf-8"))
+    r = run(s["footprint"], h=s["height"], patios_mode="manual", patios=s["patios"])
+    us = {u["id"]: u for u in r["units"]}
+    for uid in ("U04", "U05"):
+        assert puerta(us[uid], "kitchen", "laundry") and not puerta(us[uid], "hallway", "laundry")
+        assert next(x for x in us[uid]["rooms"] if x["kind"] == "kitchen")["area"] <= 5.0 + 1e-6
+        assert _cocina_comunicada(us[uid]), uid     # antes, la heladera encerraba la puerta del lavadero
+    assert not us["U05"]["sin_uso"] and us["U05"]["plan_score"] == 100
+    assert sum(x["area"] for x in us["U04"]["sin_uso"]) < 4.0 and r["metrics"]["plan_score"] >= 90
+
+    # sin tira (6,5 m de fondo) los planos no cambian: huellas de v2.41 (estancias, puertas, equipamiento, avisos y sin
+    # uso), cada uno solo (la memoria del equipamiento, vacía)
+    def huella(res):
+        r2 = lambda v: round(v, 2) + 0.0
+        return hashlib.md5(json.dumps([
+            res["score"],
+            sorted([x["id"], x["kind"], x["name"], r2(x["area"])] + [r2(c) for c in G.bbox(x["poly"])] for x in res["rooms"]),
+            sorted([d["a"], d["b"]] + [r2(c) for c in tuple(d["p"]) + tuple(d["q"])] for d in res["doors"]),
+            sorted([q["room"], q["kind"]] + [r2(c) for c in G.bbox(q["poly"])] for q in res["equipamiento"]),
+            [c["msg"] for c in res["checks"]], [r2(abs(G.area(p))) for p in res["sin_uso"]]]).encode("utf-8")).hexdigest()[:8]
+    HUELLAS = {
+        "6.5,1,base": "970283ca", "6.5,1,x0": "970283ca", "6.5,1,x1": "73b1204d", "6.5,1,acc": "5376c485", "6.5,1,vest": "1f45ef8c",
+        "6.5,2,base": "1b5e3392", "6.5,2,x0": "1b5e3392", "6.5,2,x1": "7fae8745", "6.5,2,acc": "dd3b8a6c", "6.5,2,vest": "9a124b5a",
+        "6.5,3,base": "66ddd815", "6.5,3,x0": "66ddd815", "6.5,3,x1": "18fd8e18", "6.5,3,acc": "fff94016", "6.5,3,vest": "efd1db9a",
+        "6.5,4,base": "81f90266", "6.5,4,x0": "81f90266", "6.5,4,x1": "b42bf859", "6.5,4,acc": "7880d1af", "6.5,4,vest": "7c630cd6",
+        "9,1,base": "b478f7bc", "9,1,x0": "3d2c4146", "9,1,x1": "360447a1", "9,1,acc": "644026c5", "9,1,vest": "74b0c8f5",
+        "9,2,base": "35437833", "9,2,x0": "01302d0b", "9,2,x1": "079234fe", "9,2,acc": "8aedc560", "9,2,vest": "b265f952",
+        "9,3,base": "290def12", "9,3,x0": "138608ec", "9,3,x1": "20475730", "9,3,acc": "3ca9adb2", "9,3,vest": "93f9e024",
+        "9,4,base": "ffb42b9a", "9,4,x0": "159cb0cc", "9,4,x1": "c167724f", "9,4,acc": "11f78110", "9,4,vest": "152aa6b4",
+        "12,1,base": "efaa47bd", "12,1,x0": "3b16fcd4", "12,1,x1": "8d970730", "12,1,acc": "6da13cbb", "12,1,vest": "d522e68a",
+        "12,2,base": "5b6215c1", "12,2,x0": "6e58b98f", "12,2,x1": "bb674e97", "12,2,acc": "ebc62872", "12,2,vest": "4765418d",
+        "12,3,base": "129c4f7a", "12,3,x0": "d1b830bb", "12,3,x1": "19351789", "12,3,acc": "68c0bb24", "12,3,vest": "6f703630",
+        "12,4,base": "0d7d73c8", "12,4,x0": "89ece6f1", "12,4,x1": "a63a725c", "12,4,acc": "47292d09", "12,4,vest": "abad4800",
+    }
+    for clave, h in HUELLAS.items():
+        W, nb, var = clave.split(",")
+        W, nb = float(W), int(nb)
+        kw = {"x0": {"entrada": (0.0, 2.0)}, "x1": {"entrada": (W - 2.0, W)}, "acc": {"accesible": True},
+              "vest": {"vestidor": True}}.get(var, {})
+        EQ._memo.clear()
+        assert huella(P.layout_unit(rect(W, 6.5), nb, fondo(6.5), **kw)) == h, clave
+
+    # el hall en x0 (R3.7) y el plano al revés: la banda sigue al hall
+    W, D = 8.7, 10.15
+    for ent in ((0.0, 2.0), (W - 2.0, W)):
+        res = P.layout_unit(rect(W, D), 2, fondo(D), entrada=ent)
+        B = caja(res)
+        e = next(d for d in res["doors"] if d.get("entry"))
+        assert ent[0] - 0.05 <= min(e["p"][0], e["q"][0]) and max(e["p"][0], e["q"][0]) <= ent[1] + 0.05
+        assert not res["sin_uso"] and res["score"] == 100 and puerta(res, "kitchen", "laundry"), malos(res)
+        assert _cocina_comunicada(res), ent
+        if ent[0] == 0.0:
+            assert B["hall"][0] < 1e-6 and abs(B["kitchen"][0] - B["hall"][2]) < 1e-6 < B["laundry"][0] - B["kitchen"][0]
+        else:                                                                 # al revés: el hall, en x1
+            assert abs(B["hall"][2] - W) < 1e-6 and abs(B["kitchen"][2] - B["hall"][0]) < 1e-6 and \
+                abs(B["laundry"][2] - B["kitchen"][0]) < 1e-6
+
+    # vivienda accesible, vestidor (R5.10), el dormitorio al costado (R5.3) y cambios a mano (R5.7), con la banda
+    res = P.layout_unit(rect(W, D), 2, fondo(D), accesible=True)
+    assert puerta(res, "kitchen", "laundry") and "ducha_nivel" in con(res, "bath1") and res["score"] == 100
+    assert _cocina_comunicada(res)
+    res = P.layout_unit(rect(W, D), 2, fondo(D), vestidor=True)
+    assert puerta(res, "kitchen", "laundry") and "vest" in caja(res) and res["score"] == 100 and _cocina_comunicada(res)
+    lat = lambda p, q: fondo(10.5)(p, q) or (abs(p[0] - 9.0) < 0.05 and abs(q[0] - 9.0) < 0.05)
+    res = P.layout_unit(rect(9.0, 10.5), 3, lat)
+    assert res["segunda_fachada"] == "dormitorio" and puerta(res, "kitchen", "laundry") and res["score"] == 100
+    assert _cocina_comunicada(res)
+    assert caja(res)["laundry"][2] <= caja(res)["bed3"][0] + 1e-6              # la banda termina en el dormitorio
+    xk = caja(P.layout_unit(rect(W, D), 2, fondo(D)))["kitchen"][2]
+    ed = [(0, {"op": "pared", "p": (xk, 1.2), "a": (xk - 0.3, 1.2)}),
+          (1, {"op": "puerta", "p": (xk, 0.5), "entre": ["kitchen", "laundry"], "a": (xk, 1.3)})]
+    res = P.layout_unit(rect(W, D), 2, fondo(D), ediciones=ed)
+    assert res["ediciones"] == [0, 1] and abs(caja(res)["kitchen"][2] - (xk - 0.3)) < 1e-6
+
+    # tira de 1,20 a 1,60 m (9,60 m de fondo): la cocina sigue en la zona de día y la tira lleva el lavadero, con puerta
+    # desde el hall (con el hall en x0, desde la cocina); la franja ya no lo lleva
+    res = P.layout_unit(rect(9.0, 9.6), 2, fondo(9.6))
+    B = caja(res)
+    assert puerta(res, "hall", "laundry") and not puerta(res, "hallway", "laundry") and B["laundry"][1] < 1e-6
+    assert B["laundry"][3] < 1.6 and res["score"] == 100 and not res["sin_uso"]
+    res = P.layout_unit(rect(9.0, 9.6), 2, fondo(9.6), entrada=(0.0, 2.0))
+    assert puerta(res, "kitchen", "laundry") and caja(res)["hall"][0] < 1e-6 and _cocina_comunicada(res)
+    # revisión: con una tira de 1,00 a 1,15 m (9,30 a 9,45 m de fondo), el lavadero iba a la tira aunque no entraran el
+    # lavarropas o la pileta (el lavarropas y su paso piden 1,20 m de fondo): ahora va solo si igual entran sus artefactos
+    # (el lavarropas, contra una pared del costado) y, si no, queda en la franja, como en v2.41
+    for D in (9.3, 9.35, 9.4, 9.45):
+        res = P.layout_unit(rect(8.7, D), 2, fondo(D))
+        assert {"lavarropas", "pileta_lavar"} <= con(res, "laundry") and res["score"] >= 50, D
+        assert not [m for m in malos(res) if m.startswith("Lavadero")], (D, malos(res))
+    assert puerta(P.layout_unit(rect(8.7, 9.3), 2, fondo(9.3)), "hallway", "laundry")      # 1,00 m: en la franja
+    r = run([[0, 0], [60, 0], [60, 21.6], [0, 21.6]])                   # viviendas de 9,30 m (antes, 6 sin sus artefactos)
+    assert not [c["msg"] for u in r["units"] for c in u["checks"] if not c["ok"] and c["msg"].startswith("Lavadero")]
+
+    # la mesada en una parte de su pared: la puerta del lavadero, junto a una punta (antes, «no entra la mesada»)
+    rm = {"id": "kitchen", "kind": "kitchen", "name": "Cocina", "rect": (1.4, 0.0, 4.8, 1.85),
+          "poly": [(1.4, 0.0), (4.8, 0.0), (4.8, 1.85), (1.4, 1.85)]}
+    pz, falta, _ = EQ.resolver(rm, [{"p": (4.8, 0.1), "q": (4.8, 0.8), "a": "kitchen", "b": "laundry", "ancho": 0.7}],
+                               {"kitchen": [((1.4, 0.0), (1.4, 1.85), "hall"), ((1.4, 1.85), (4.8, 1.85), "living")]},
+                               ST.DEFAULTS["equipamiento"])
+    assert not falta and {"heladera", "mesada", "bacha_cocina", "cocina_horno"} == {p[0] for p in pz}, falta
+    # revisión: en una cocina más corta (2,70 m), la heladera en L junto a la puerta del lavadero la encerraba (al lavadero
+    # se llegaba por una rendija de 0,20 m, sin aviso): ahora, o se llega desde las puertas y aberturas o se avisa
+    rm = dict(rm, rect=(1.4, 0.0, 4.1, 1.85), poly=[(1.4, 0.0), (4.1, 0.0), (4.1, 1.85), (1.4, 1.85)])
+    EQ._memo.clear()
+    pz, falta, _ = EQ.resolver(rm, [{"p": (4.1, 0.1), "q": (4.1, 0.8), "a": "kitchen", "b": "laundry", "ancho": 0.7}],
+                               {"kitchen": [((1.4, 0.0), (1.4, 1.85), "hall"), ((1.4, 1.85), (4.1, 1.85), "living")]},
+                               ST.DEFAULTS["equipamiento"])
+    esq = lambda o, es, en, w, d: [o, (o[0] + es[0] * w + en[0] * d, o[1] + es[1] * w + en[1] * d)]
+    cuerpos = [G.bbox(esq(*x[1:])) for x in pz if x[0] in ("heladera", "mesada")]
+    assert falta or EQ._alcanza(EQ._Estancia((0.0, 0.0, 2.7, 1.85)), cuerpos, [((2.7, 0.1), (2.7, 0.8)), ((0.0, 0.0), (
+        0.0, 1.85)), ((0.0, 1.85), (2.7, 1.85))], [], g=0.05), pz
+    EQ._memo.clear()                                  # sin la puerta del lavadero, como en v2.41: la mesada, en un tramo
+    pz, falta, _ = EQ.resolver(rm, [{"p": (4.1, 0.1), "q": (4.1, 0.8), "a": "kitchen", "b": "storage", "ancho": 0.7}],
+                               {"kitchen": [((1.4, 0.0), (1.4, 1.85), "hall"), ((1.4, 1.85), (4.1, 1.85), "living")]},
+                               ST.DEFAULTS["equipamiento"])     # entero (aquí no entra: se avisa)
+    assert falta == ["la mesada con bacha y cocina (2.00 m en línea, con 0.90 m de paso delante)"], falta
+
+    # revisión: con un muro oblicuo o un entrante, la banda se mide con el contorno real
+    def en_hall(res):
+        """La puerta de entrada, dentro del borde real del hall sobre el pasillo común."""
+        hall = next((x for x in res["rooms"] if x["id"] == "hall"), None)
+        e = next((d for d in res["doors"] if d.get("entry")), None)
+        borde = [p[0] for p in hall["poly"] if abs(p[1]) < 1e-6] if hall else []
+        return bool(e and borde) and min(borde) - 0.02 <= min(e["p"][0], e["q"][0]) and \
+            max(e["p"][0], e["q"][0]) <= max(borde) + 0.02
+    # - el costado de x0 inclinado o su esquina cortada: el hall de la banda quedaba con menos de 1 m² y se perdía, y con él
+    #   la puerta de entrada (calidad 50, sin aviso), o la puerta salía a medias fuera de la vivienda
+    for poly, D in (([(1, 0), (9, 0), (9, 10.5), (0, 10.5)], 10.5), ([(2, 0), (10.5, 0), (10.5, 10), (0, 10), (0, 2)], 10.0),
+                    ([(1, 0), (7.5, 0), (7.5, 10.5), (0, 10.5), (0, 1)], 10.5)):
+        res = P.layout_unit(poly, 2, fondo(D))
+        assert en_hall(res) and not any(m.startswith(("Sin puerta", "Sin acceso")) for m in malos(res)), (poly, malos(res))
+    r = run([[0, 0], [60, 0], [70, 24], [10, 24]], h=9, centerlines=[[[6, 12], [64, 12]]])
+    assert all(any(d["entry"] for d in u["doors"]) and not any(c["msg"].startswith(("Sin puerta", "Sin acceso"))
+                                                               for c in u["checks"]) for u in r["units"])
+    # - un plano sin hall no se da por bueno: «Sin puerta de entrada» (antes, el recorrido arrancaba en otra estancia y
+    #   decía que se llegaba a todas)
+    plan_rects = P._plan_rects
+
+    def sin_hall(*a, **k):
+        R_, E_, vac = plan_rects(*a, **k)
+        R_.pop("hall", None)
+        return R_, E_, vac
+    P._plan_rects = sin_hall
+    try:
+        res = P.layout_unit(rect(8.7, 10.15), 2, fondo(10.15))
+    finally:
+        P._plan_rects = plan_rects
+    assert "Sin puerta de entrada: el hall no entra junto al pasillo común" in malos(res) and res["score"] < 100
+    assert not [d for d in res["doors"] if d.get("entry")]
+    # - la esquina de x1 cortada: la cocina de la banda perdía la mesada y el lavadero quedaba bajo su mínimo o se perdía,
+    #   sin aviso: ahora, como en v2.41 (con el lavadero y la cocina equipados)
+    for poly, nb, D in (([(0, 0), (3, 0), (6, 3), (6, 10.5), (0, 10.5)], 1, 10.5), ([(0, 0), (3, 0), (6, 3), (6, 10), (0, 10)],
+                                                                                   2, 10.0)):
+        res = P.layout_unit(poly, nb, fondo(D))
+        assert {"lavarropas", "pileta_lavar"} <= con(res, "laundry") and {"heladera", "mesada"} <= con(res, cocina(res)["id"])
+        assert not [m for m in malos(res) if m.startswith(("Lavadero", "Cocina", "Hall / Cocina", "Sin acceso"))], malos(res)
+    # - con un muro oblicuo, la banda va solo si el plano no empeora: aquí, con ella, 33 (el dormitorio principal pierde la
+    #   cama doble y queda un rincón sin uso); sin ella, 50, como en v2.41
+    poly = G.ensure_ccw([(0, 0), (7, 0), (8, 11), (0, 11)])
+    P.configure(ST.DEFAULTS["vivienda"])
+    con_b, sin_b = [P._plano(poly, 2, fondo(11.0), ST.DEFAULTS["equipamiento"], False, None, None, con_banda=b)
+                    for b in (True, False)]
+    res = P.layout_unit(poly, 2, fondo(11.0))
+    assert con_b["_banda"] and con_b["score"] < sin_b["score"] == res["score"] and "_banda" not in res
+    assert not puerta(res, "kitchen", "laundry") and not puerta(res, "hall", "laundry") and puerta(res, "hallway", "laundry")
+    # - un costado oblicuo en x1: la suite que habilitaba la banda dejaba el baño en suite sin acceso (el muro se comía el
+    #   principal): la suite, solo si el principal y su baño quedan en la vivienda
+    for poly, nb, D in (([(0, 0), (7.5, 0), (5.5, 13), (0, 13)], 3, 13.0), ([(0, 0), (7.5, 0), (4.5, 16), (0, 16)], 2, 16.0)):
+        res = P.layout_unit(poly, nb, fondo(D))
+        assert "bed1" in caja(res) and not any(m.startswith("Sin acceso") for m in malos(res)), malos(res)
+    # - la cocina en la banda no parte el estar en un comedor que sin ella no había (en una vivienda de esquina, ese
+    #   comedor no cumplía el art. 14 ni su ventana): el estar sigue entero, como lo midió la banda; con fachada en x1,
+    #   el estar sigue en la esquina
+    for W in (13.0, 14.5):
+        res = P.layout_unit(rect(W, 10.0), 1, lambda p, q: fondo(10.0)(p, q) or (abs(p[0]) < 0.05 and abs(q[0]) < 0.05))
+        assert "dining" not in caja(res) and res["score"] >= 50 and not [m for m in malos(res) if m.startswith("Comedor")]
+        assert puerta(res, "kitchen", "laundry"), W
+    res = P.layout_unit(rect(13.0, 10.0), 1, lambda p, q: fondo(10.0)(p, q) or (abs(p[0] - 13) < 0.05 and abs(q[0] - 13) < 0.05))
+    assert res["segunda_fachada"] == "estar" and "dining" not in caja(res) and res["score"] >= 50
+    # - sin tira y con un muro oblicuo (una ochava junto al pasillo común, un costado inclinado), los planos tampoco
+    #   cambian: la mesada en una parte de su pared es solo de la cocina con la puerta del lavadero (antes, estas cocinas
+    #   cambiaban y el trapecio, con fachada en su lado oblicuo, bajaba de 100 a 33): huellas de v2.41
+    def oblicua(D, a, b):
+        L = ((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2) ** 0.5
+        sobre = lambda t: abs((t[0] - a[0]) * (b[1] - a[1]) - (t[1] - a[1]) * (b[0] - a[0])) / L < 0.05
+        return lambda p, q: fondo(D)(p, q) or (sobre(p) and sobre(q))
+    OBLICUAS = {
+        "d95a8e7e": ([(2, 0), (6, 0), (6, 9), (0, 9), (0, 2)], 1, fondo(9.0), {}),
+        "baa0fc5a": ([(0, 0.6), (0.6, 0), (9.5, 0), (9.5, 8.5), (0, 8.5)], 2, fondo(8.5), {}),
+        "13e0855e": ([(0.25, 0), (21.45, 0), (21.45, 5.5), (1.425, 5.5)], 3, oblicua(5.5, (0.25, 0), (1.425, 5.5)), {}),
+        "08602931": ([(0, 0), (7, 0), (8, 8.5), (0, 8.5)], 2, fondo(8.5), {}),
+        "a00862d0": ([(0, 0), (8, 0), (9, 1), (9, 8), (0, 8)], 2, fondo(8.0), {"accesible": True}),
+    }
+    for h, (poly, nb, fac, kw) in OBLICUAS.items():
+        EQ._memo.clear()
+        assert huella(P.layout_unit(poly, nb, fac, **kw)) == h, poly
+
+    # un barrido: ninguna cocina de más de 5 m², ningún sin uso sin su aviso, cocinas comunicadas; el lavadero de la banda
+    # crece hasta su máximo y solo lo pasa con lo poco que queda (menos de 0,90 m de largo o de 1 m²: no da para otra
+    # estancia), como el de la franja
+    lav = ST.DEFAULTS["vivienda"]["lavadero"]["max_area"]
+    for W in (5.0, 7.0, 9.0, 11.0, 13.0):
+        for D in (9.4, 10.0, 11.0, 12.5, 14.0):
+            for nb in (1, 2, 3):
+                res = P.layout_unit(rect(W, D), nb, fondo(D))
+                assert avisado(res) and all(x["area"] <= 5.0 + 1e-6 for x in res["rooms"] if x["kind"] == "kitchen"), \
+                    (W, D, nb)
+                assert _cocina_comunicada(res), (W, D, nb)
+                B = caja(res)
+                if puerta(res, "kitchen", "laundry") or puerta(res, "hall", "laundry"):      # el lavadero de la banda
+                    fl = B["laundry"][3] - B["laundry"][1]
+                    de_mas = B["laundry"][2] - B["laundry"][0] - lav / fl
+                    assert de_mas < 1e-6 or de_mas < P.MIN_W["storage"] + 0.1 or de_mas * fl < 1.0, (W, D, nb, B["laundry"])
+
+if __name__ == "__main__":
+    test_rincones(); print("OK58")
+
 def test_modo_claro_oscuro():
     """R4.10: el tema se elige con un botón (sol o luna) en la barra superior del modo Edificio y junto al título del
     Masterplan; en «Vista → Apariencia → Tema», Sistema (el del equipo), Claro u Oscuro. El tema va en `data-theme` de
@@ -2903,4 +3214,4 @@ def test_modo_claro_oscuro():
     assert 'id="btnTema"' in mp.split("<h2>", 1)[0] and 'id="tema"' not in mp
 
 if __name__ == "__main__":
-    test_modo_claro_oscuro(); print("OK58")
+    test_modo_claro_oscuro(); print("OK59")

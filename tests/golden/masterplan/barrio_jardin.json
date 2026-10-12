@@ -1,7 +1,7 @@
 {
  "ejemplo": "samples/masterplan/barrio_jardin.json",
  "nombre": "Barrio con plaza central (manzana verde)",
- "version_motor": "2.0",
+ "version_motor": "2.42",
  "metricas": {
   "manzanas": 9,
   "lotes": 73,

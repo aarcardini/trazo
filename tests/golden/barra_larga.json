@@ -1,7 +1,7 @@
 {
  "ejemplo": "samples/barra_larga.json",
  "nombre": "Barra larga 90x18",
- "version_motor": "2.32",
+ "version_motor": "2.42",
  "metricas": {
   "unidades": 14,
   "unidades_totales": 98,
