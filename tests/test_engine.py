@@ -4738,3 +4738,254 @@ console.log(JSON.stringify(salida));
 
 if __name__ == "__main__":
     test_medidas_en_vivo(); print("OK69")
+
+
+def test_atajos_y_cotas():
+    """R9.8: atajos de teclado y cotas en la planta (solo web; el motor no cambia).
+    Atajos (en la planta 2D; nunca con un campo de texto o una lista con el foco ni con Ctrl, Alt o Cmd): L, N, M, P y S
+    activan Línea, Núcleo, Medianera, Patio y SCP (la letra de la herramienta activa la cierra, como otro clic en su botón);
+    D muestra u oculta la capa «Cotas»; Supr o Retroceso quitan el núcleo, el patio o el tramo de pasillo elegido con lo
+    mismo que hacen sus fichas (pasan por `recordar`: se deshacen con ↶), y una vivienda o un tabique elegidos no se borran;
+    Shift apretado es el Orto mientras se mantiene (un estado aparte: la casilla, F8 y la preferencia no cambian; se suelta
+    al soltar la tecla o al perder el foco la ventana). Ctrl/Cmd+Z y Ctrl+Y (o Ctrl+Shift+Z) ya deshacían y rehacían. Los
+    `title` de los botones de la barra de dibujo llevan la letra y Vista lista los atajos.
+    Cotas: con la capa «Cotas» activa, dentro de la planta de viviendas (`cotasViviendas`, llamada desde `drawDims`): el
+    frente de cada vivienda (una cadena de cotas a cada lado de cada tramo de pasillo, dentro de él, junto al borde de las
+    viviendas), el ancho de cada tramo (una cota transversal en el medio de su franja) y el fondo de cada vivienda
+    (perpendicular al pasillo, dentro de ella, solo si se ve lo bastante grande). Van en un grupo propio que no captura
+    eventos, no pisan las etiquetas de las viviendas, las puertas ni otras cotas, y en la axonometría no se dibujan.
+    (El comportamiento se comprobó en navegador; esta prueba vigila la web con comprobaciones del código y, si hay node,
+    ejecuta las cotas de la página contra lo que el motor deja en los ejemplos.)"""
+    import math, re, shutil, subprocess, tempfile
+    base = os.path.join(os.path.dirname(__file__), "..")
+    html = open(os.path.join(base, "web", "index.html"), encoding="utf-8").read()
+    js = html.split("<script>", 1)[1].split("</script>", 1)[0]
+
+    def cuerpo(nombre):
+        ini = js.index("function %s(" % nombre)
+        fin = min(k for k in (js.find("\nfunction ", ini + 1), js.find("\nasync function ", ini + 1), js.find("\n/*", ini + 1),
+                              len(js)) if k >= 0)
+        return js[ini:fin]
+    # ---- atajos: el manejador de teclado que ya había (Esc, Enter, F7/F8/F9, flechas, Ctrl+Z) llama a atajoTecla
+    teclas = js.split("window.addEventListener('keydown'", 1)[1].split("\n/*", 1)[0]
+    assert "if(atajoTecla(e,t,texto)){ e.preventDefault(); return; }" in teclas
+    assert "e.ctrlKey||e.metaKey" in teclas and "k==='z'&&!e.shiftKey" in teclas and "k==='z'&&e.shiftKey" in teclas and "k==='y'" in teclas
+    assert teclas.index("deshacer()") < teclas.index("atajoTecla(") < teclas.index("if(FLECHAS[e.key]")   # Ctrl+Z, antes que las letras
+    assert "window.addEventListener('keyup',e=>{ if(e.key==='Shift') ortoShift(false); });" in teclas
+    assert "window.addEventListener('blur',()=>ortoShift(false));" in teclas                            # con la ventana sin foco, el keyup no llega
+    assert "HERR_TECLA={l:'line',n:'addcore',m:'medianera',p:'patio',s:'scp'}" in js
+    at = cuerpo("atajoTecla")
+    for t in ("texto||t.tagName==='SELECT'||e.ctrlKey||e.metaKey||e.altKey||e.isComposing) return false",   # ni en un campo ni con Ctrl/Alt/Cmd
+              "if(viewMode!=='plan') return false", "if(k==='Shift'){ if(!e.repeat) ortoShift(true); return false; }",
+              "l.length===1&&HERR_TECLA[l]", "setTool(tool===HERR_TECLA[l]||(l==='n'&&tool==='delcore')?tool:HERR_TECLA[l])",   # la misma letra cierra
+              "if(l==='d'){ if(!e.repeat){ alternar('showDims');", "k==='Delete'||k==='Backspace'", "return quitarElegido()"):
+        assert t in at, t
+    qe = cuerpo("quitarElegido")                    # lo mismo que hacen sus fichas, y con ninguna herramienta activa
+    assert "viewMode!=='plan'||tool||!result" in qe
+    assert qe.index("quitarNucleo()") < qe.index("quitarTramo()") < qe.index("quitarPatioElegido()") and "no se borra" in qe
+    assert not re.search(r"\b(centerlines|coresManual|patios|medianeras|ediciones|interiores|anchosPasillo)\b", qe)   # nada se borra por fuera de recordar
+    for f in ("quitarNucleo", "quitarTramo", "quitarPatioElegido"):                                    # esas funciones guardan antes el estado
+        assert "recordar(" in cuerpo(f), f
+    assert "dividirVivienda(" not in qe and "unirViviendas(" not in qe and "editar(" not in qe     # una vivienda o un tabique no se borran
+    os_ = cuerpo("ortoShift")                       # el Orto temporal: un estado aparte, la casilla y la preferencia no cambian
+    assert "ortoTemporal=v" in os_ and "localStorage" not in os_ and "alternar(" not in os_ and ".checked=" not in os_ and "preferencia(" not in os_
+    assert "($('orto').checked||ortoTemporal)&&prev" in cuerpo("ajustar") and "$('orto').checked||ortoTemporal" in cuerpo("puntoLinea")
+    assert js.count("$('orto').checked") == 2 and js.count("$('orto').checked||ortoTemporal") == 2   # ninguna otra parte lee solo la casilla
+    # los title de la barra de dibujo llevan la letra de su herramienta; el Orto, Shift; la barra de la herramienta, su letra
+    dibujo = html.split('<div class="dibujo"', 1)[1].split("</div>", 1)[0]
+    for letra, tool_ in (("L", "line"), ("N", "addcore"), ("M", "medianera"), ("P", "patio"), ("S", "scp")):
+        b = re.search(r'<button id="\w+" data-tool="%s"[^>]*title="([^"]*)"' % tool_, dibujo)
+        assert b and re.match(r"[^:(]+\(%s\)" % letra, b.group(1)), (tool_, b and b.group(1))
+        assert re.search(r"\b%s:'%s'" % (letra.lower(), tool_), js.split("const HERR_TECLA=", 1)[1].split("}", 1)[0]), letra
+    assert "Con Shift apretado, Orto solo mientras lo mantienes" in dibujo
+    assert "teclaDe(tool)" in cuerpo("herramientaBar") and "<kbd>'+teclaDe(tool)+'</kbd> salir" in cuerpo("herramientaBar")
+    vista = html.split('<div class="grupo" data-grupo="vista"', 1)[1].split("</section>", 1)[0]
+    atajos = vista.split("<h2>Atajos de teclado</h2>", 1)[1]
+    for t in ("<kbd>L</kbd>", "<kbd>N</kbd>", "<kbd>M</kbd>", "<kbd>P</kbd>", "<kbd>S</kbd>", "<kbd>D</kbd>", "<kbd>Supr</kbd>", "<kbd>Shift</kbd>",
+              "<kbd>Ctrl</kbd>", "<kbd>F8</kbd>", "<kbd>Esc</kbd>", "una vivienda no se borra"):
+        assert t in atajos, t
+    # ---- cotas: una función, llamada solo desde drawDims y después de su «si la capa está apagada»; la axonometría no la llama
+    assert js.count("cotasViviendas(g);") == 1 and "function cotasViviendas(g)" in js and "try{ cotasViviendas(g); }catch(e){ console.error(" in js
+    dd = cuerpo("drawDims")
+    assert dd.index("if(!showDims||!view||!footprint.length) return;") < dd.index("cotasViviendas(g);")
+    assert "cotasViviendas" not in cuerpo("drawAxo") and "drawDims" not in cuerpo("drawAxo")
+    cv = cuerpo("cotasViviendas")
+    assert "el('g',{id:'cotasViv','pointer-events':'none'})" in cv and "viewMode!=='plan'" in cv and "st.program!=='Residential'" in cv
+    assert "u.al_frente" in cv and cv.index("// 1) el frente") < cv.index("// 2) el ancho") < cv.index("// 3) el fondo")
+    assert "cajaLibre(" in cv and "tipo:'frente'" in cv and "tipo:'ancho'" in cv and "tipo:'fondo'" in cv
+    ct = cuerpo("cota")
+    assert "function cota(g,a,b,ea,eb,o)" in ct and "fill:TINTA(),stroke:HALO()" in ct and "if(ea&&eb)" in ct   # las cotas totales, igual que antes
+    assert "'pointer-events':'none'" in ct and js.count("fill:TINTA()") == 2                           # el estilo de las cotas, uno solo
+    assert 'title="Cotas (D):' in html and "COTA_TAM=10" in js
+
+    node = shutil.which("node")
+    if not node:
+        print("(sin node: se omiten «node --check» del programa de la página y las cotas contra el motor)")
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        ruta = os.path.join(tmp, "programa.js")
+        open(ruta, "w", encoding="utf-8").write(js)
+        c = subprocess.run([node, "--check", ruta], capture_output=True, text=True, encoding="utf-8")
+        assert c.returncode == 0, c.stderr
+
+        # ---- las cotas: se ejecuta el código de la página (sin pantalla) con lo que el motor deja en los ejemplos
+        previas = "\n".join(cuerpo(n) for n in ("cota", "anchoTxt", "cajaGirada", "cotaTxt", "visible", "cotaLugar", "cotasViviendas",
+                                               "tramoEn", "enPoly", "domAngle", "drawDims"))
+        for n in ("COTA_TAM", "medidaTxt", "cajaLibre"):                       # las constantes (alguna ya viene pegada a la función de arriba)
+            linea = re.search(r"^const %s.*$" % n, js, re.M).group(0)
+            if linea not in previas:
+                previas += "\n" + linea
+        arnes = """const fs = require('fs');
+const E = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+function nodo(t, a, txt) { return { t, a: a || {}, txt, hijos: [], appendChild(c) { this.hijos.push(c); return c; } }; }
+const el = (t, a, txt) => nodo(t, a, txt);
+let view = null, viewMode = 'plan', result = null, planStory = null, showDims = true, footprint = [], patios = [], W = 1062, H = 836;
+const lote = () => null, TINTA = () => '#344054', HALO = () => '#fff';
+console.error = (m, e) => { throw e || new Error(String(m)); };            // si las cotas fallan, drawDims las avisa con console.error: acá, que la prueba lo vea
+const X = p => view.ox + p[0] * view.s, Y = p => view.oy - p[1] * view.s;
+const $ = id => id === 'svg' ? { clientWidth: W, clientHeight: H } : { value: '0.3' };
+%s
+const llamadas = [];
+const cotaOriginal = cota; cota = function (g, a, b, ea, eb, o) { llamadas.push({ ext: !!(ea && eb), o }); return cotaOriginal(g, a, b, ea, eb, o); };
+const salida = E.casos.map(c => {
+  view = c.view; result = c.result; footprint = c.footprint || []; viewMode = c.viewMode || 'plan'; planStory = c.planStory == null ? null : c.planStory;
+  showDims = c.showDims !== false; W = c.W || 1062; H = c.H || 836; llamadas.length = 0;
+  if (c.f === 'cota') { const g = nodo('g'); cota(g, c.a, c.b, c.ea, c.eb, c.o); return g.hijos.map(h => ({ t: h.t, a: h.a, txt: h.txt })); }
+  if (c.f === 'txt') { const T = cotaTxt(c.a, c.b, c.o); return { y: T.y, my: T.my, mx: T.mx, r: T.r, caja: T.caja }; }
+  const raiz = nodo('g'); drawDims(raiz);
+  const grupo = raiz.hijos.find(h => h.a.id === 'cotasViv'), hijos = grupo ? grupo.hijos : [];
+  return { hay: !!grupo, pe: grupo ? grupo.a['pointer-events'] : null, todosNone: hijos.every(h => h.a['pointer-events'] === 'none'),
+           textos: hijos.filter(h => h.t === 'text').map(h => ({ tipo: h.a['data-cota'], texto: h.txt, x: +h.a.x, y: +h.a.y, tam: +h.a['font-size'], tr: h.a.transform })),
+           sinRef: llamadas.filter(l => !l.ext).length, totales: raiz.hijos.filter(h => h.t === 'text').map(h => h.txt) };
+});
+console.log(JSON.stringify(salida));
+""" % previas
+        open(os.path.join(tmp, "arnes.js"), "w", encoding="utf-8").write(arnes)
+
+        def en_node(casos):
+            open(os.path.join(tmp, "entrada.json"), "w", encoding="utf-8").write(json.dumps({"casos": casos}))
+            p = subprocess.run([node, os.path.join(tmp, "arnes.js"), os.path.join(tmp, "entrada.json")],
+                               capture_output=True, text=True, encoding="utf-8")
+            assert p.returncode == 0, p.stderr
+            return json.loads(p.stdout)
+        muestra = lambda n: json.load(open(os.path.join(base, "samples", n + ".json"), encoding="utf-8"))
+        VISTA = {"s": 16.0, "ox": 40.0, "oy": 590.0}                           # 16 px/m: la barra de 60 m entra en la planta de 1062 px
+        por = lambda s, t: sorted(x["texto"] for x in s["textos"] if x["tipo"] == t)
+        f2 = lambda v: "%.2f" % v
+        PX = lambda v, p: (v["ox"] + p[0] * v["s"], v["oy"] - p[1] * v["s"])
+
+        def caja_texto(x, v):                          # la caja en pantalla de un texto de cota (con el ancho que le da el arnés: 0,6 em por letra)
+            rr, mx, my = map(float, re.match(r"rotate\((-?[\d.]+) (-?[\d.]+) (-?[\d.]+)\)", x["tr"]).groups())
+            w, alto = 0.6 * x["tam"] * len(x["texto"]) / 2, 0.72 * x["tam"]
+            c, s = math.cos(math.radians(rr)), math.sin(math.radians(rr))
+            q = [(mx + u * c - t * s, my + u * s + t * c) for u, t in ((-w, x["y"] - my - alto), (w, x["y"] - my - alto), (w, x["y"] - my), (-w, x["y"] - my))]
+            return (min(p[0] for p in q), max(p[0] for p in q), min(p[1] for p in q), max(p[1] for p in q))
+        pisa = lambda a, b: a[0] < b[1] - 0.01 and b[0] < a[1] - 0.01 and a[2] < b[3] - 0.01 and b[2] < a[3] - 0.01
+
+        def limpias(sal, r, v, W=1062, H=836):         # ninguna cota pisa a otra, ni la etiqueta de una vivienda, ni el punto de su puerta; todas dentro de la pantalla
+            cs = [caja_texto(x, v) for x in sal["textos"]]
+            fijas = []
+            for u in r["units"]:
+                cx, cy = PX(v, [sum(p[0] for p in u["poly"]) / len(u["poly"]), sum(p[1] for p in u["poly"]) / len(u["poly"])])
+                w = 0.6 * 11 * len("%s · %g m²" % (u["id"], u["area"])) / 2                         # el número como lo escribe JavaScript (60, no 60.0)
+                fijas.append((cx - w, cx + w, cy - 8, cy + 2.5))
+                px, py = PX(v, u["door"])
+                fijas.append((px - 4, px + 4, py - 4, py + 4))
+            for i, a in enumerate(cs):
+                assert -0.01 <= a[0] and a[1] <= W + 0.01 and -0.01 <= a[2] and a[3] <= H + 0.01, (sal["textos"][i], a)
+                for b in cs[i + 1:]:
+                    assert not pisa(a, b), (sal["textos"][i], a, b)
+                for b in fijas:
+                    assert not pisa(a, b), (sal["textos"][i], a, b)
+
+        barra = muestra("barra")
+        rb = run(barra["footprint"], barra["height"])
+        fb = barra["footprint"]
+        ancho_viv = lambda r: sorted(f2(u["width"]) for u in r["units"] if not u.get("al_frente"))
+        casos = [{"result": rb, "footprint": fb, "view": VISTA},                                  # 0) la barra, con la capa
+                 {"result": rb, "footprint": fb, "view": VISTA, "showDims": False},               # 1) la capa apagada
+                 {"result": rb, "footprint": fb, "view": VISTA, "viewMode": "axo"},               # 2) la axonometría
+                 {"result": rb, "footprint": fb, "view": dict(VISTA, s=4.0, ox=300.0, oy=500.0)},   # 3) muy lejos
+                 {"result": rb, "footprint": fb, "view": {"s": 60.0, "ox": -1500.0, "oy": 560.0}},  # 4) cerca: solo se ve un pedazo
+                 {"f": "cota", "a": [0, 0], "b": [10, 0], "ea": [0, 1], "eb": [10, 1], "view": VISTA}]   # 5) una cota total, sin opciones
+        sal = en_node(casos)
+        b0 = sal[0]
+        assert b0["hay"] and b0["pe"] == "none" and b0["todosNone"], b0                           # un grupo propio que no captura eventos
+        assert por(b0, "frente") == ancho_viv(rb) and por(b0, "ancho") == ["2.00"] and por(b0, "fondo") == ["6.50"] * 8, \
+            (por(b0, "frente"), por(b0, "ancho"), por(b0, "fondo"))                               # frente de cada vivienda, ancho del pasillo y fondo de cada una
+        assert b0["sinRef"] == 8 + 1 + 8 and "60.00 m" in b0["totales"] and "16.00 m" in b0["totales"], b0["totales"]   # y las totales, como siempre
+        limpias(b0, rb, VISTA)
+        assert not sal[1]["hay"] and sal[1]["totales"] == [] and sal[1]["textos"] == [], sal[1]    # con la capa apagada, nada: ni las totales ni las nuevas
+        assert not sal[2]["hay"] and sal[2]["textos"] == []                                       # en la axonometría, tampoco
+        assert sal[3]["hay"] and sal[3]["textos"] == [], sal[3]["textos"]                         # a 4 px/m no caben: no se dibuja nada (se ven las totales)
+        assert "60.00 m" in sal[3]["totales"]
+        z = sal[4]                                                                                # a 60 px/m el texto va en la parte que se ve
+        assert por(z, "frente") and por(z, "ancho") and set(por(z, "frente")) <= set(ancho_viv(rb)), z["textos"]
+        limpias(z, rb, {"s": 60.0, "ox": -1500.0, "oy": 560.0})
+        cc = sal[5]                                                                               # cota total: igual que antes (5 líneas y el texto con « m», 11 px)
+        assert [h["t"] for h in cc] == ["line"] * 5 + ["text"] and cc[-1]["txt"] == "10.00 m" and cc[-1]["a"]["font-size"] == 11
+        assert "data-cota" not in cc[-1]["a"] and cc[-1]["a"]["y"] == 590.0 - 5 and abs(float(cc[-1]["a"]["x"]) - 120.0) < 1e-9, cc[-1]
+        # el texto va del lado pedido de su línea (horizontal y vertical)
+        tx = en_node([{"f": "txt", "a": [0, 0], "b": [10, 0], "o": {"texto": "9.99", "lado": [0, 1], "gap": 3}, "view": VISTA},
+                      {"f": "txt", "a": [0, 0], "b": [10, 0], "o": {"texto": "9.99", "lado": [0, -1], "gap": 3}, "view": VISTA},
+                      {"f": "txt", "a": [0, 0], "b": [0, 10], "o": {"texto": "9.99", "lado": [1, 0], "gap": 3}, "view": VISTA},
+                      {"f": "txt", "a": [0, 0], "b": [0, 10], "o": {"texto": "9.99", "lado": [-1, 0], "gap": 3}, "view": VISTA}])
+        assert tx[0]["caja"]["y0"] > tx[0]["my"] and tx[1]["caja"]["y1"] < tx[1]["my"], tx[:2]       # lado hacia abajo (pantalla): debajo de la línea; hacia arriba, encima
+        assert tx[2]["caja"]["x0"] > tx[2]["mx"] and tx[3]["caja"]["x1"] < tx[3]["mx"], tx[2:]       # en una línea vertical, a la derecha o a la izquierda
+
+        # 1) una L, patio central, una cruz, un quiebre a 45° y un predio entre medianeras: todo en pantalla, sin pisar nada
+        casos, rs = [], []
+        for n, v in (("L", {"s": 16.0, "ox": 60.0, "oy": 760.0}), ("patio_central", {"s": 16.0, "ox": 60.0, "oy": 600.0}),
+                     ("cruz_dos_lineas", {"s": 14.0, "ox": 120.0, "oy": 810.0}), ("quiebre_45", {"s": 13.0, "ox": 60.0, "oy": 560.0}),
+                     ("T_dos_lineas", {"s": 14.0, "ox": 100.0, "oy": 790.0}), ("L_ochava", {"s": 16.0, "ox": 60.0, "oy": 760.0})):
+            s = muestra(n)
+            kw = {k: s[k] for k in ("centerlines", "patios") if k in s}
+            if "patios" in s:
+                kw["patios_mode"] = "manual"
+            r = run(s["footprint"], s["height"], **kw)
+            rs.append((n, r, v))
+            casos.append({"result": r, "footprint": s["footprint"], "view": v})
+        for (n, r, v), sal in zip(rs, en_node(casos)):
+            assert sal["hay"] and sal["todosNone"], n
+            assert por(sal, "frente") == ancho_viv(r), (n, por(sal, "frente"), ancho_viv(r))      # el frente de todas las viviendas, también en los ejemplos con alas, cruces y patios
+            assert len(por(sal, "ancho")) == len(r["pasillos"]) and set(por(sal, "ancho")) <= {f2(p["ancho"]) for p in r["pasillos"]}, (n, por(sal, "ancho"))   # una por tramo
+            assert len(por(sal, "fondo")) >= len(r["units"]) // 2 and set(por(sal, "fondo")) <= {f2(u["depth"]) for u in r["units"]}, (n, por(sal, "fondo"))
+            limpias(sal, r, v)
+        # entre medianeras: el eje del pasillo cae sobre el núcleo; el ancho se mide en la franja de al lado
+        d = muestra("entre_medianeras")
+        rm = run(d["footprint"], d["height"], medianeras=d["medianeras"])
+        vm = {"s": 20.0, "ox": 300.0, "oy": 640.0}
+        sm = en_node([{"result": rm, "footprint": d["footprint"], "view": vm}])[0]
+        assert por(sm, "frente") == ["9.30", "9.30"] and por(sm, "ancho") == ["2.00"] and por(sm, "fondo") == ["9.03", "9.03"], sm["textos"]
+        limpias(sm, rm, vm)
+        # al frente (R3.7): la vivienda que entra por la punta del pasillo no lleva frente ni fondo
+        raf = run(d["footprint"], h=18, unit_mix=[{"name": "2 dorm", "area": 75, "percent": 100, "dorms": 2}],
+                  medianeras=[d["medianeras"][1]], cores_mode="manual", cores=[[5, 25]])
+        assert sum(1 for u in raf["units"] if u.get("al_frente")) == 1
+        saf = en_node([{"result": raf, "footprint": d["footprint"], "view": vm}])[0]
+        assert por(saf, "frente") == ancho_viv(raf) and len(por(saf, "frente")) == 1 and len(por(saf, "fondo")) == 1, saf["textos"]
+        limpias(saf, raf, vm)
+        # un tramo con ancho propio: la cota va a un lado de su etiqueta azul (la de drawOverlay), sin pisarla
+        rp = run(barra["footprint"], barra["height"], anchos_pasillo=[{"p": [30, 8], "ancho": 1.6}])
+        sp = en_node([{"result": rp, "footprint": fb, "view": VISTA}])[0]
+        assert rp["pasillos"][0]["propio"] and por(sp, "ancho") == ["1.60"], sp["textos"]
+        limpias(sp, rp, VISTA)
+        a = next(x for x in sp["textos"] if x["tipo"] == "ancho")
+        ex, ey = PX(VISTA, [(rp["pasillos"][0]["eje"][0][0] + rp["pasillos"][0]["eje"][1][0]) / 2, 8.0])
+        wl = 0.6 * 11 * 1.1 * len("1.60 m") / 2
+        assert not pisa(caja_texto(a, VISTA), (ex - wl, ex + wl, ey - 6, ey + 6)), (a, ex, ey)
+        # solo el pasillo (sin viviendas): el ancho de cada tramo sí, el frente y el fondo no
+        rc = generate({"footprint": fb, "height": barra["height"], "stage": "corridor", "params": {}})
+        sc = en_node([{"result": rc, "footprint": fb, "view": VISTA}])[0]
+        assert por(sc, "ancho") == ["2.00"] and por(sc, "frente") == [] and por(sc, "fondo") == []
+        # un nivel que no es de vivienda (la torre mixta: estacionamiento abajo) no lleva cotas de viviendas
+        tm = muestra("torre_mixta")
+        rt = run(tm["footprint"], tm["height"], stories=tm["stories"])
+        res = [s_["index"] for s_ in rt["stories"] if s_["program"] == "Residential"]
+        noy = [s_["index"] for s_ in rt["stories"] if s_["program"] != "Residential"]
+        assert res and noy
+        st_ = en_node([{"result": rt, "footprint": tm["footprint"], "view": {"s": 12.0, "ox": 40.0, "oy": 400.0}, "planStory": i} for i in (noy[0], res[0])])
+        assert not st_[0]["hay"] and st_[1]["hay"] and por(st_[1], "frente"), st_
+
+if __name__ == "__main__":
+    test_atajos_y_cotas(); print("OK70")
