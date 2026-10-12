@@ -4490,3 +4490,251 @@ def test_puerta_en_la_punta():
 
 if __name__ == "__main__":
     test_puerta_en_la_punta(); print("OK68")
+
+
+def test_medidas_en_vivo():
+    """R4.13a: medidas en vivo (solo web; el motor no cambia). Mientras se dibuja o se arrastra, una etiqueta con la medida va
+    junto a lo que se mueve, con el mismo formato de las cotas (2 decimales): la línea muestra su largo y su ángulo en el SCP
+    (lo tipeado manda: R4.13b); el patio, ancho × fondo en los ejes del edificio; la medianera, el largo del borde que se marca;
+    el tabique entre viviendas, el frente de cada una (una etiqueta a cada lado, y los campos de la barra siguen al tabique,
+    salvo el que se está escribiendo o tiene el foco); el tabique interior, el ancho de la estancia de cada lado en la dirección
+    del arrastre (la que está junto a donde se lo tomó); la puerta, la distancia de sus bordes a las puntas de su tabique
+    («a | b»); el núcleo y el patio, cuánto se corrieron (ΔX, ΔY en los ejes del SCP) y el patio también la posición de su
+    esquina, como la ficha; y las flechas del teclado, la misma etiqueta hasta que el motor recalcula. Todas pasan por una sola
+    función (`etiquetaMedida`: encima de todo, sin capturar eventos, con los colores del tema, lejos del puntero y sin pisarse).
+    Los números son lo que el motor deja al soltar: el tabique entre viviendas, el interior y la puerta se frenan donde el motor
+    los frena (la mitad de `min_unit_width`, 0,60 m por estancia, 5 cm a cada lado de la puerta) y entonces la etiqueta sale en rojo.
+    (El comportamiento se comprobó en navegador; esta prueba vigila la web con comprobaciones del código y, si hay node, ejecuta
+    el código de la página contra lo que hace el motor al soltar.)"""
+    import math, re, shutil, subprocess, tempfile
+    base = os.path.join(os.path.dirname(__file__), "..")
+    html = open(os.path.join(base, "web", "index.html"), encoding="utf-8").read()
+    js = html.split("<script>", 1)[1].split("</script>", 1)[0]
+
+    def cuerpo(nombre):
+        ini = js.index("function %s(" % nombre)
+        fin = min(k for k in (js.find("\nfunction ", ini + 1), js.find("\nasync function ", ini + 1), js.find("\n/*", ini + 1),
+                              len(js)) if k >= 0)
+        return js[ini:fin]
+    # ---- la web: una sola función dibuja; las etiquetas no capturan eventos, siguen el tema y se alejan del puntero
+    for f in ("function etiquetaMedida(", "function normalPantalla(", "function etqLinea(", "function etqPatio(", "function etqMedianera(",
+              "function frentesCon(", "function etqTab(", "function tramoEn(", "function dPared(", "function etqPared(",
+              "function bordeDePuerta(", "function etqPuerta(", "const posTab=", "const deltaTxt=", "const arribaDe=", "const med2=",
+              "const PARED_MIN=0.6, PUERTA_MARGEN=0.05;", "const FRENO=0.005;"):
+        assert f in js, f
+    et = cuerpo("etiquetaMedida")
+    assert et.count("'pointer-events':'none'") >= 3 and "el('g',{class:'etq','pointer-events':'none'}" in et   # el grupo, los textos y el fondo
+    assert "TINTA()" in et and "HALO()" in et and "EVAC.fail" in et and "getComputedTextLength" in et   # colores del tema; el rojo es el de la evacuación
+    assert "opt.fijo" in et and "opt.ocupado" in et and "ptr" in et and "$('svg').clientWidth" in et   # lado fijo, sin pisarse, el puntero, dentro de la planta
+    assert re.search(r"const TINTA=\(\)=>esOscuro\(\)\?'#c7cfdb':'#344054', HALO=\(\)=>esOscuro\(\)\?'#12161c':'#fff'", js)
+    assert "toFixed(2)" in js.split("const med2=", 1)[1].split("\n", 1)[0]                           # el formato de las cotas
+    assert "'ΔX '" in js and "' · ΔY '" in js and "' × '" in js and "' | '" in js
+    assert "'X '+e0[0].toFixed(2)" not in js                                                           # la X, Y suelta del patio ahora va en la etiqueta
+    ov = cuerpo("drawOverlay")                           # quién llama: la línea, el patio, la medianera, el tabique, el interior, la puerta, el núcleo y el patio
+    for t in ("const et=[];", "if(curLine.length&&nx) et.push(...etqLinea(curLine[curLine.length-1],nx));",
+              "if(tool==='patio'&&curPatio.length&&np) et.push(...etqPatio(curPatio[0],np));",
+              "if(tool==='medianera'&&medHover!=null) et.push(...etqMedianera(medHover));"):
+        assert t in ov, t
+    tabq = ov.split("if(dragTab&&dragTab.moved", 1)[1].split("if(dragIn&&dragIn.moved", 1)[0]
+    assert "et.push(...etqTab(t,dragTab));" in tabq
+    inte = ov.split("if(dragIn&&dragIn.moved", 1)[1].split("const pc=", 1)[0]
+    assert "et.push(...(dragIn.tipo==='pared'?etqPared(dragIn):etqPuerta(dragIn)));" in inte
+    nuc = ov.split("const pc=dragCore&&dragCore.moved?dragCore:flechas&&flechas.tipo==='nucleo'?flechas:null;", 1)[1].split("const pv=", 1)[0]
+    assert "et.push([arribaDe(q),[deltaTxt(d)],{}]);" in nuc                       # el arrastre y las flechas comparten la vista previa
+    pat = ov.split("const pv=dragPatio&&dragPatio.moved?dragPatio:flechas&&flechas.tipo==='patio'?flechas:null", 1)[1].split("const line=", 1)[0]
+    assert "deltaTxt(pv.d)" in pat and "esquinaPatio(cajaPatio(q))" in pat and "'esquina X '" in pat
+    assert ov.rstrip().split("\n")[-1].lstrip().startswith("const oc=[]; et.forEach(a=>etiquetaMedida(go,a[0],a[1],Object.assign({ocupado:oc},a[2])));")   # al final, encima de todo
+    # la barra: los frentes del tabique siguen al arrastre (los mismos de las etiquetas), salvo un campo que se escribe o tiene el foco
+    mv = cuerpo("medidasVivas")
+    assert "frentesCon(s.t,dragTab&&dragTab.moved?dragTab.d:0)" in mv and "!c.dataset.sucio&&document.activeElement!==c" in mv
+    # el puntero está al día en cada arrastre (el mousemove que lo actualiza llega después del pointermove que dibuja)
+    for t in ("const w=toWorld(e), t=result.tabiques[dragTab.k]; ptr=w; dragTab.moved=true;",
+              "const w=toWorld(e), r=dirIn(dragIn); if(!r) return; ptr=w; dragIn.moved=true;",
+              "const w=toWorld(e), k=result.cores[dragCore.i]; ptr=w; dragCore.moved=true;",
+              "const w=toWorld(e), p=listaPatios()[dragPatio.i]; ptr=w; dragPatio.moved=true;"):
+        assert t in js, t
+    # las flechas: cada pulsación redibuja y la etiqueta se borra cuando el motor recalcula (una sola vez, a los 300 ms)
+    assert "clearTimeout(tFlechas); tFlechas=setTimeout(finFlechas,300); drawOverlay(); return true;" in cuerpo("moverConFlechas")
+    assert "if(flechas===f){ flechas=null; drawOverlay(); }" in js.split("async function finFlechas(", 1)[1].split("\nfunction ", 1)[0]
+    # frentesTab sigue dando lo mismo sin la posición (la barra y el frente tipeado lo usan así)
+    ft = cuerpo("frentesTab")
+    assert "function frentesTab(t,sx)" in ft and "x=sx==null?s:sx" in ft and "A.width+(x-s)" in ft and "B.width-(x-s)" in ft
+
+    node = shutil.which("node")
+    if not node:
+        print("(sin node: se omiten «node --check» del programa de la página y los números de las etiquetas contra el motor)")
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        # ---- el programa de la página (el primer <script> sin atributos) es JavaScript válido
+        ruta = os.path.join(tmp, "programa.js")
+        open(ruta, "w", encoding="utf-8").write(js)
+        c = subprocess.run([node, "--check", ruta], capture_output=True, text=True, encoding="utf-8")
+        assert c.returncode == 0, c.stderr
+
+        # ---- los números: se ejecuta el código de la página (sin pantalla) y se compara con lo que el motor deja al soltar
+        seccion = js[js.index("/* ---------- medidas en vivo (R4.13a)"):js.index("const svg=$('svg');")]
+        previas = "\n".join([cuerpo(n) for n in ("enPoly", "segIn", "dirIn", "frentesTab", "domAngle", "marcoPatio", "centroidOf")] +
+                            [re.search(r"^const %s=.*$" % n, js, re.M).group(0) for n in ("mitad", "aLocal", "aMundo")])
+        arnes = """const fs = require('fs');
+const E = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+const vals = { min_unit_width: E.min_unit_width, party_wall: E.party_wall };
+const $ = id => ({ value: vals[id] });
+let result = E.result, footprint = [], scp = { o: [0, 0], a: 0 }, tipeado = {};
+const X = p => p[0], Y = p => -p[1];                        // sin pantalla: x a la derecha, y hacia arriba
+const scpActual = () => scp, medidaNum = k => (k in tipeado ? tipeado[k] : NaN);
+%s
+%s
+const salida = E.casos.map(c => {
+  tipeado = c.tipeado || {}; if (c.scp_a !== undefined) scp = { o: [0, 0], a: c.scp_a }; if (c.footprint) footprint = c.footprint;
+  let r;
+  switch (c.f) {
+    case 'tab': r = etqTab(result.tabiques[c.k], { w: c.w, d: c.d }); break;
+    case 'pared': r = etqPared({ u: c.u, tipo: 'pared', k: c.k, w: c.w, d: c.d }); break;
+    case 'puerta': r = etqPuerta({ u: c.u, tipo: 'puerta', k: c.k, d: c.d }); break;
+    case 'linea': r = etqLinea(c.prev, c.q); break;
+    case 'patio': r = etqPatio(c.p0, c.p1); break;
+    case 'medianera': r = etqMedianera(c.i); break;
+    case 'delta': return deltaTxt(c.d);
+    case 'tramo': return tramoEn(c.poly, c.o, c.r, c.t0);
+    case 'borde': return bordeDePuerta(c.u, c.d);
+  }
+  return r.map(e => ({ texto: e[1].join(' / '), mal: !!e[2].mal, lado: e[2].lado }));
+});
+console.log(JSON.stringify(salida));
+""" % (previas, seccion)
+        open(os.path.join(tmp, "arnes.js"), "w", encoding="utf-8").write(arnes)
+
+        def en_node(res, casos, min_w=5.0, pw=0.3):
+            open(os.path.join(tmp, "entrada.json"), "w", encoding="utf-8").write(
+                json.dumps({"result": res, "casos": casos, "min_unit_width": min_w, "party_wall": pw}))
+            p = subprocess.run([node, os.path.join(tmp, "arnes.js"), os.path.join(tmp, "entrada.json")],
+                               capture_output=True, text=True, encoding="utf-8")
+            assert p.returncode == 0, p.stderr
+            return json.loads(p.stdout)
+        num = lambda t: float(re.findall(r"-?\d+\.\d\d", t)[0])
+        dot = lambda p, v: p[0] * v[0] + p[1] * v[1]
+        mitad = lambda s: [round((s[0][0] + s[1][0]) / 2, 3), round((s[0][1] + s[1][1]) / 2, 3)]   # como mitad() de la página
+        hacia = lambda m, v, d: [round(m[0] + v[0] * d, 3), round(m[1] + v[1] * d, 3)]              # como el punto con que se suelta
+        unidad = lambda r, i: next(u for u in r["units"] if u["id"] == i)
+        ancho = lambda poly, v: max(dot(p, v) for p in poly) - min(dot(p, v) for p in poly)
+        muestra = lambda n: json.load(open(os.path.join(base, "samples", n + ".json"), encoding="utf-8"))
+        TOL = 0.0052                                     # la etiqueta redondea al centímetro la medida que el motor deja
+        FRENO = 0.005                                    # y no avisa un freno menor que eso
+
+        def en_poli(p, poly):                            # punto dentro de un polígono convexo (las estancias)
+            c = [(poly[(i + 1) % len(poly)][0] - poly[i][0]) * (p[1] - poly[i][1]) - (poly[(i + 1) % len(poly)][1] - poly[i][1]) * (p[0] - poly[i][0])
+                 for i in range(len(poly))]
+            return all(v >= -1e-9 for v in c) or all(v <= 1e-9 for v in c)
+
+        # 1) tabique entre viviendas: el frente de cada vecina con el tabique donde lo recibe el motor; en rojo si lo frena
+        frenos = []
+        for nombre, ds in (("barra", (-5.0, -1.3, 0.7, 3.396, 40.0, -40.0)), ("quiebre_45", (0.7, -1.3, 30.0))):
+            s = muestra(nombre)
+            r0 = run(s["footprint"], s["height"])
+            if nombre == "barra":
+                k = next(i for i, t in enumerate(r0["tabiques"]) if (t["a"], t["b"]) == ("U03", "U04"))
+            else:
+                k = next(i for i, t in enumerate(r0["tabiques"]) if abs(t["dir"][0]) > 0.1 and abs(t["dir"][1]) > 0.1)   # oblicuo
+            t = r0["tabiques"][k]
+            for d, e in zip(ds, en_node(r0, [{"f": "tab", "k": k, "d": d, "w": mitad(t["seg"])} for d in ds])):
+                a = hacia(mitad(t["seg"]), t["dir"], d)
+                r1 = run(s["footprint"], s["height"], unit_edits=[{"op": "tabique", "p": mitad(t["seg"]), "a": a}])
+                esperado = [ancho(unidad(r1, t["a"])["poly"], t["dir"]), ancho(unidad(r1, t["b"])["poly"], t["dir"])]
+                t1 = next(x for x in r1["tabiques"] if (x["a"], x["b"]) == (t["a"], t["b"]))
+                corrido = dot(mitad(t1["seg"]), t["dir"]) - dot(mitad(t["seg"]), t["dir"])      # cuánto lo corrió el motor de verdad
+                assert len(e) == 2 and e[0]["texto"].startswith(t["a"] + " · ") and e[1]["texto"].startswith(t["b"] + " · "), e
+                assert abs(num(e[0]["texto"]) - esperado[0]) <= TOL and abs(num(e[1]["texto"]) - esperado[1]) <= TOL, (nombre, d, e, esperado)
+                assert e[0]["mal"] == e[1]["mal"] == (abs(corrido - d) >= FRENO), (nombre, d, corrido, e)   # rojo solo donde el motor frena
+                assert abs(e[0]["lado"][0] + e[1]["lado"][0]) < 1e-9 and abs(e[0]["lado"][1] + e[1]["lado"][1]) < 1e-9 and e[0]["lado"] != e[1]["lado"]   # una a cada lado
+                frenos.append(e[0]["mal"])
+        assert frenos == [False, False, False, False, True, True, False, False, True], frenos
+
+        # 2) tabique interior de U03 (el más largo): el ancho de la estancia de cada lado, y lo que el motor deja
+        s = muestra("barra")
+        r0 = run(s["footprint"], s["height"])
+        u3 = unidad(r0, "U03")
+        kp = max(range(len(u3["paredes"])), key=lambda i: math.dist(*u3["paredes"][i]["seg"]))
+        sg, rr = u3["paredes"][kp]["seg"], u3["paredes"][kp]["dir"]
+        graba = [sg[0][0] + (sg[1][0] - sg[0][0]) * 0.8, sg[0][1] + (sg[1][1] - sg[0][1]) * 0.8]   # donde se lo toma: a 4/5 de su largo
+        lados = [next(rm["id"] for rm in u3["rooms"] if en_poli([graba[0] + rr[0] * k * 0.05, graba[1] + rr[1] * k * 0.05], rm["poly"]))
+                 for k in (-1, 1)]                       # la estancia de -r y la de +r junto a ese punto
+        ancho_de = lambda u, i: ancho(next(rm for rm in u["rooms"] if rm["id"] == i)["poly"], rr)
+        ds = (0.4, -0.4, 1.0, -1.0, 6.0, -6.0, 0.004)
+        frenado = []
+        for d, e in zip(ds, en_node(r0, [{"f": "pared", "u": "U03", "k": kp, "w": graba, "d": d} for d in ds])):
+            m = mitad(sg)
+            u1 = unidad(run(s["footprint"], s["height"], room_edits=[{"op": "pared", "p": m, "a": hacia(m, rr, d)}]), "U03")
+            esperado = [ancho_de(u1, i) for i in lados]
+            corrido = ancho_de(u1, lados[0]) - ancho_de(u3, lados[0])                              # lo que creció la de -r: cuánto se corrió el tabique de verdad
+            assert len(e) == 2, (d, e)
+            assert abs(num(e[0]["texto"]) - esperado[0]) <= TOL and abs(num(e[1]["texto"]) - esperado[1]) <= TOL, (d, e, esperado)
+            assert e[0]["mal"] == e[1]["mal"] == (abs(corrido - d) >= FRENO), (d, corrido, e)
+            assert abs(e[0]["lado"][0] + e[1]["lado"][0]) < 1e-9 and abs(e[0]["lado"][1] + e[1]["lado"][1]) < 1e-9
+            frenado.append(e[0]["mal"])
+        assert frenado[:2] == [False, False] and frenado[4] and frenado[5] and not frenado[6], frenado   # lo corto, sin freno; lo largo, frenado (rojo)
+
+        # 3) puerta: la de un dormitorio (entre dos estancias) y la de entrada (el borde del hall): distancia a las puntas del tabique
+        for elige in (lambda d: d["a"] != "exterior", lambda d: d.get("entry")):
+            kd = next(i for i, d in enumerate(u3["doors"]) if elige(d))
+            pu = u3["doors"][kd]
+            Lp = math.dist(pu["p"], pu["q"])
+            r_ = [(pu["q"][0] - pu["p"][0]) / Lp, (pu["q"][1] - pu["p"][1]) / Lp]
+            ds = (-0.3, 0.2, 0.5, 3.0, -3.0)
+            for d, e in zip(ds, en_node(r0, [{"f": "puerta", "u": "U03", "k": kd, "d": d} for d in ds])):
+                m = mitad([pu["p"], pu["q"]])
+                u1 = unidad(run(s["footprint"], s["height"], room_edits=[{"op": "puerta", "p": m, "a": hacia(m, r_, d), "entre": [pu["a"], pu["b"]]}]), "U03")
+                d1 = next(x for x in u1["doors"] if {x["a"], x["b"]} == {pu["a"], pu["b"]})
+                ext = [(min(dot(p, r_) for p in rm["poly"]), max(dot(p, r_) for p in rm["poly"]))
+                       for rm in u1["rooms"] if rm["id"] in (pu["a"], pu["b"])]                # el borde que comparten: lo que tienen en común
+                lo, hi = max(x[0] for x in ext), min(x[1] for x in ext)
+                esperado = (dot(d1["p"], r_) - lo, hi - dot(d1["q"], r_))
+                corrido = dot(d1["p"], r_) - dot(pu["p"], r_)
+                assert len(e) == 1 and re.fullmatch(r"-?\d+\.\d\d \| -?\d+\.\d\d m", e[0]["texto"]), e
+                a_, b_ = [float(x) for x in re.findall(r"-?\d+\.\d\d", e[0]["texto"])]
+                assert abs(a_ - esperado[0]) <= TOL and abs(b_ - esperado[1]) <= TOL, (pu["b"], d, e, esperado)
+                assert e[0]["mal"] == (abs(corrido - d) >= FRENO), (pu["b"], d, corrido, e)
+                assert (d != 3.0 and d != -3.0) or e[0]["mal"]                                 # lo largo, frenado
+
+        # el borde que comparten dos estancias es lo que tienen en común, aunque una sea más larga que la otra (en los dos órdenes);
+        # la puerta de entrada (un lado es «exterior», que no es una estancia) usa solo el borde del hall
+        A_ = {"id": "A", "poly": [[0, 0], [6, 0], [6, 2], [0, 2]]}
+        B_ = {"id": "B", "poly": [[2, 2], [4, 2], [4, 5], [2, 5]]}
+        bd = en_node(r0, [{"f": "borde", "u": {"rooms": [A_, B_]}, "d": {"a": a, "b": b, "p": [2.5, 2], "q": [3.3, 2]}}
+                          for a, b in (("A", "B"), ("B", "A"), ("exterior", "B"))])
+        assert [[round(x, 3) for x in v] for v in bd] == [[-0.5, 1.5]] * 3, bd
+
+        # 4) línea, patio, medianera y núcleo: el largo y el ángulo en el SCP (lo tipeado manda), ancho × fondo en los ejes del
+        # edificio, el largo del borde y ΔX, ΔY en los ejes del SCP
+        th = math.radians(30)
+        rot = lambda p: [round(p[0] * math.cos(th) - p[1] * math.sin(th), 3), round(p[0] * math.sin(th) + p[1] * math.cos(th), 3)]
+        barra = [[0, 0], [60, 0], [60, 16], [0, 16]]
+        P = rot([8, 8])
+        Q = [round(P[0] + 7 * math.cos(th + math.radians(40)), 3), round(P[1] + 7 * math.sin(th + math.radians(40)), 3)]   # 7 m a 40° del SCP girado 30°
+        casos = [{"f": "linea", "prev": [10, 5], "q": [22, 5], "scp_a": 0.0},
+                 {"f": "linea", "prev": P, "q": Q, "scp_a": th},
+                 {"f": "linea", "prev": P, "q": Q, "tipeado": {"largo": 3.2}},
+                 {"f": "linea", "prev": P, "q": Q, "tipeado": {"angulo": -45}},
+                 {"f": "linea", "prev": P, "q": Q, "tipeado": {"largo": 3.2, "angulo": 30}},
+                 {"f": "linea", "prev": [10, 5], "q": [10, 5], "scp_a": 0.0},
+                 {"f": "patio", "p0": [20, 5], "p1": [32, 11], "footprint": barra},
+                 {"f": "patio", "p0": rot([20, 5]), "p1": rot([32, 11]), "footprint": [rot(p) for p in barra]},
+                 {"f": "medianera", "i": 0, "footprint": barra}, {"f": "medianera", "i": 1}, {"f": "medianera", "i": 3},
+                 {"f": "delta", "d": [1.0, 0.0], "scp_a": 0.0}, {"f": "delta", "d": [0.0, -1.0]},
+                 {"f": "delta", "d": [math.cos(th) * 2, math.sin(th) * 2], "scp_a": th}, {"f": "delta", "d": [-math.sin(th) * 0.5, math.cos(th) * 0.5]},
+                 {"f": "delta", "d": [0.001, -0.002], "scp_a": 0.0}]
+        sal = en_node(r0, casos)
+        textos = [(x[0]["texto"] if x else None) if isinstance(x, list) else x for x in sal]
+        assert textos[:6] == ["12.00 m · 0°", "7.00 m · 40°", "3.20 m · 40°", "7.00 m · 315°", "3.20 m · 30°", None], textos   # sin largo no hay etiqueta
+        assert textos[6:8] == ["12.00 × 6.00 m", "12.00 × 6.00 m"], textos                       # en el edificio girado, los mismos ejes del edificio
+        assert textos[8:11] == ["60.00 m", "16.00 m", "16.00 m"] and sal[8][0]["lado"] == [0, 1] and sal[10][0]["lado"] == [-1, 0]   # hacia afuera de la planta
+        assert textos[11:] == ["ΔX +1.00 · ΔY 0.00 m", "ΔX 0.00 · ΔY -1.00 m", "ΔX +2.00 · ΔY 0.00 m", "ΔX 0.00 · ΔY +0.50 m", "ΔX 0.00 · ΔY 0.00 m"], textos   # sin «-0.00»
+        # el tramo de una recta dentro de un polígono que contiene a un punto (también si el polígono es cóncavo)
+        L_ = [[0, 0], [6, 0], [6, 2], [2, 2], [2, 6], [0, 6]]
+        tr = en_node(r0, [{"f": "tramo", "poly": [[0, 0], [4, 0], [4, 2], [0, 2]], "o": [1, 1], "r": [1, 0], "t0": 0.5},
+                          {"f": "tramo", "poly": [[0, 0], [4, 0], [4, 2], [0, 2]], "o": [1, 1], "r": [1, 0], "t0": 9},
+                          {"f": "tramo", "poly": L_, "o": [1, 1], "r": [0, 1], "t0": 1.0},
+                          {"f": "tramo", "poly": L_, "o": [4, 1], "r": [0, 1], "t0": 0.5}])
+        assert tr[0] == [-1, 3] and tr[1] is None and tr[2] == [-1, 5] and tr[3] == [-1, 1], tr
+
+if __name__ == "__main__":
+    test_medidas_en_vivo(); print("OK69")
