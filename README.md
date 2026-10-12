@@ -151,7 +151,7 @@ Si algo falla en Rhino, ejecuta el script y elige **Diagnostico**. Si no se resu
 ## Novedades v2.40
 - **Grilla y snap (R4.7):** la planta tiene una grilla que se adapta al zoom: la más fina de 10 m, 5 m, 1 m, 0,50 m, 0,10 m y 0,05 m cuyas líneas quedan separadas al menos 12 píxeles. Las líneas marcadas quedan siempre cada 50 m, 5 m o 0,50 m. La barra de dibujo dice qué paso se ve («GRILLA 1 m»), y el zoom llega hasta que 0,05 m se ven bien.
   - **Snap:** todo lo que dibujas o arrastras se pega al paso que se ve: los vértices de las líneas de pasillo, las esquinas de los patios, los núcleos (su centro), los tabiques entre viviendas, los tabiques interiores y las puertas. A menos de 10 píxeles de un vértice de la masa, el punto va al vértice.
-  - **SCP:** la grilla y el Orto siguen al edificio, alineados con su fachada principal y con el origen en la esquina de la masa. Con el botón **SCP**, un clic en un borde de la masa los alinea con ese borde (el extremo más cercano al clic es el origen, como «SCP objeto» de AutoCAD); en la barra que aparece, «Edificio» vuelve al de la masa y «Mundo» a los ejes x, y del plano. El SCP se guarda en el proyecto.
+  - **SCP:** la grilla y el Orto siguen al edificio, alineados con su fachada principal y con el origen en la esquina del rectángulo que contiene la masa (en una masa con ochava, ese punto queda fuera de ella). Con el botón **SCP**, un clic en un borde de la masa los alinea con ese borde (el extremo más cercano al clic es el origen, como «SCP objeto» de AutoCAD); en la barra que aparece, «Edificio» vuelve al de la masa y «Mundo» a los ejes x, y del plano. El SCP se guarda en el proyecto.
   - **Teclas:** F7 grilla, F8 Orto y F9 snap, como en AutoCAD (en Mac, fn+F7…); con **Alt** apretada, el punto queda libre (sin grilla ni vértices). Trazo recuerda en el navegador si las dejaste prendidas o apagadas.
   - Las medianeras se siguen marcando por borde entero: el snap les llega con su edición en la web (resto de R11.6). Los patios se siguen alineando con la fachada principal de la masa: un patio rodeado de edificio y girado respecto de ella el motor no lo usa.
 
@@ -180,7 +180,7 @@ Si algo falla en Rhino, ejecuta el script y elige **Diagnostico**. Si no se resu
 - **Interfaz por grupos (R4.6, la opción B, «Riel», que elegiste en la maqueta):**
   - **Riel de la izquierda:** Proyecto, Masa, Circulación, Viviendas, Normativa y Vista. Cada uno abre su panel al lado, de a uno, con su botón de generar al pie. La planta usa el resto de la pantalla y Trazo recuerda qué grupo estaba abierto.
   - **Sobre la planta:** 2D o 3D, el nivel y el menú **Capas**.
-  - **Abajo, una barra de dibujo como la de AutoCAD:** Línea, Núcleo, Medianera, Patio, **SCP**, **Grilla (F7)**, **Orto (F8)** y **Snap (F9)**. La herramienta activa muestra qué hacer y sus botones (Terminar, Borrar última, Quitar núcleo…), y Esc la cierra.
+  - **Abajo, una barra de dibujo como la de AutoCAD:** Línea, Núcleo, Medianera, Patio y **Orto (F8)**. La herramienta activa muestra qué hacer y sus botones (Terminar, Borrar última, Quitar núcleo…), y Esc la cierra.
   - **Arriba:** lo que está abierto, su etapa, y deshacer y rehacer.
   - **A la derecha:** el resumen (unidades, NSA, eficiencia, calidad de planos, núcleos, ascensores), los avisos y la ficha. **Ver todo** suma programas, métricas y unidades.
   - «Muro medianero» pasa a llamarse **«Muro entre viviendas»**, para no confundirlo con las medianeras del predio.
