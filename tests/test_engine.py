@@ -3388,3 +3388,226 @@ def test_quitar_pasillo():
 
 if __name__ == "__main__":
     test_quitar_pasillo(); print("OK60")
+
+
+def test_medidas_tipeadas():
+    """R4.13b: medidas exactas tipeadas (solo web; el motor no cambia). Mientras se dibuja, lo tipeado manda y el puntero
+    solo elige la dirección (y la medida que no se tipeó): con la línea (un vértice puesto) la barra trae «Largo» y
+    «Ángulo» (el ángulo, en el SCP: 0° es su eje x, antihorario); con el patio (su primera esquina), «Ancho» y «Fondo»
+    (en los ejes del edificio, los mismos del patio); con un tabique elegido (clic o arrastre), el frente de sus dos
+    viviendas. Los campos aceptan coma o punto; Enter pone el vértice, cierra el patio o mueve el tabique (con la línea y
+    los campos vacíos, termina la línea como siempre); un clic en la planta con medidas escritas es un Enter; un número,
+    con la barra a la vista, va al primer campo; Esc cierra la herramienta. Lo tipeado no se redondea a la grilla. El
+    frente va por `editar` (se deshace y recalcula) y no entra si una de las dos viviendas queda por debajo del mínimo del
+    motor (la mitad de `min_unit_width`): el motor lo recorta en silencio, por eso la web lo avisa antes.
+    (El comportamiento se comprobó en navegador; esta prueba vigila la web con comprobaciones del código y el motor con el
+    mismo recorrido que hace la web, que se repite acá en Python.)"""
+    import math, re
+    from engine import layout
+    base = os.path.join(os.path.dirname(__file__), "..")
+    html = open(os.path.join(base, "web", "index.html"), encoding="utf-8").read()
+    js = html.split("<script>", 1)[1].split("</script>", 1)[0]
+
+    def cuerpo(nombre):
+        ini = js.index("function %s(" % nombre)
+        fin = min(k for k in (js.find("\nfunction ", ini + 1), js.find("\nasync function ", ini + 1), js.find("\n/*", ini + 1),
+                              len(js)) if k >= 0)
+        return js[ini:fin]
+    # ---- la web: los campos, Enter, el clic, los números, Esc
+    for f in ("function numTipeado(", "function puntoLinea(", "function puntoPatio(", "function marcoPatio(",
+              "function ponerVertice(", "function tabiqueSel(", "function frentesTab(", "async function frenteTipeado(",
+              "function medidasVivas(", "function medidaModo(", "function medidaInput(", "function medidaTecla(",
+              "function medidaEnter(", "function avisoMedida("):
+        assert f in js, f
+    num = cuerpo("numTipeado")                           # coma o punto: la misma expresión que usa la página
+    assert ".replace(',','.')" in num
+    er = re.compile(re.search(r"return (/.+?/)\.test\(s\)", num).group(1)[1:-1])
+    pagina = lambda s: float(s.strip().replace(",", ".", 1)) if er.match(s.strip().replace(",", ".", 1)) else None
+    assert [pagina(s) for s in ("12", "3,20", "3.20", " 0,5 ", "-45", ".5", "12.")] == [12.0, 3.2, 3.2, 0.5, -45.0, 0.5, 12.0]
+    assert [pagina(s) for s in ("", "abc", "1,2,3", "3,2m", "1e3", "--1", "-")] == [None] * 7
+    modo = cuerpo("medidaModo")                          # la barra trae campos con un vértice, la primera esquina o un tabique
+    assert "curLine.length?'linea':''" in modo and "curPatio.length===1?'patio':''" in modo and "tabiqueSel()" in modo
+    barra = cuerpo("herramientaBar")
+    for t in ("c('Largo','largo'", "c('Ángulo','angulo'", "c('Ancho','ancho'", "c('Fondo','fondo'", 'inputmode="decimal"',
+              'data-medida="${k}"', 'oninput="medidaInput(this)"', 'onkeydown="medidaTecla(event)"',
+              "ts.t.b===selUnit?[ts.t.b,ts.t.a]:[ts.t.a,ts.t.b]", "if(!auto) herrTxt=", "esc(herrTxt)"):
+        assert t in barra, t                             # la elegida va primero; rearmada por un cambio de campos, conserva el texto
+    tecla = cuerpo("medidaTecla")                        # Enter no llega al Enter que termina la línea
+    assert "e.key!=='Enter'" in tecla and "e.stopPropagation()" in tecla and "medidaEnter(e.target)" in tecla
+    ent = cuerpo("medidaEnter")
+    assert ent.index("return finishLine()") < ent.index("ponerVertice(puntoLinea(")      # vacíos: termina; con medidas: pone el vértice
+    assert "finishPatio()" in ent and "frenteTipeado(id,v)" in ent
+    assert "if(medidaTexto('largo')||medidaTexto('angulo')) return medidaEnter();" in js     # un clic con medidas escritas (línea y patio) es un Enter
+    assert "if(curPatio.length&&(medidaTexto('ancho')||medidaTexto('fondo'))) return medidaEnter();" in js
+    teclas = js.split("window.addEventListener('keydown'", 1)[1].split("\n/*", 1)[0]
+    assert "/^[0-9.,]$/.test(e.key)" in teclas and "document.querySelector('#herr [data-medida]')" in teclas and ".focus()" in teclas
+    assert "if(e.key==='Enter'&&tool==='line') finishLine();" in teclas                  # fuera de los campos, Enter sigue igual
+    assert "if(!tool&&selTab){ selTab=null;" in teclas and "if(tool) setTool(tool);" in teclas   # Esc: suelta el tabique o cierra la herramienta
+    pl = cuerpo("puntoLinea")
+    assert pl.count("ajustar(w,prev,e)") == 1 and "ajustarDesp(prev," in pl              # sin medidas, el puntero; solo el ángulo: el largo, a la grilla
+    assert pl.index("if(tA) u=[Math.cos(") < pl.index("$('orto').checked")               # el ángulo tipeado manda sobre el Orto
+    assert "scpActual()" in pl and "aLocal(" in pl and "aMundo(" in pl and "let d=L;" in pl   # el ángulo en el SCP; el largo tipeado no se redondea
+    assert "marcoPatio(" in cuerpo("puntoPatio") and "r[0]<a[0]?-A:A" in cuerpo("puntoPatio")   # el puntero elige el lado
+    assert "const {L,W}=marcoPatio(p0,p1)" in cuerpo("rectAlign")                        # el patio tipeado y el dibujado, en los mismos ejes
+    ov = cuerpo("drawOverlay")                           # la vista previa y la cruz usan el punto que va a quedar
+    for t in ("puntoLinea(ptr,{altKey:ptrAlt})", "puntoPatio(ptr,{altKey:ptrAlt})", "rectAlign(curPatio[0],np)",
+              "medidasVivas(nx,np)", "if(medidaModo()!==medModo) herramientaBar(true);"):
+        assert t in ov, t
+    assert "ptr=w;" in js.split("svg.addEventListener('mousemove',e=>", 1)[1].split("\n", 1)[0]
+    ft = cuerpo("frenteTipeado")                         # el frente: por editar (deshacer y recalcular) y dentro de lo que el motor admite
+    assert "editar({op:'tabique',p:mitad(t.seg)" in ft and "ediciones.push(" not in ft and "recordar(" in cuerpo("editar")
+    assert "mn=0.5*(+$('min_unit_width').value)" in ft and "v<mn-1e-9||v>tot-mn+1e-9" in ft
+    assert ft.index("avisoMedida('El frente de '") < ft.index("await editar(")           # primero se avisa, después se mueve
+    assert 'pw, wmin = params["party_wall"], 0.5 * params["min_unit_width"]' in \
+        open(os.path.join(base, "engine", "units.py"), encoding="utf-8").read()                    # el mismo mínimo que usa el motor
+    assert "selTab={a:t0.a,b:t0.b,u:selUnit}" in js.split("const tt=e.target.closest&&e.target.closest('[data-tab]');", 1)[1].split("\n", 1)[0]
+    assert 'id="min_unit_width" value="5"' in html and 'id="party_wall" value="0.3"' in html   # los valores con que la web mide
+    assert layout.DEFAULT_PARAMS["min_unit_width"] == 5.0 and layout.DEFAULT_PARAMS["party_wall"] == 0.30
+
+    # ---- lo que hace la web, en Python
+    def a_local(p, S):                                   # S = (x, y, ángulo): el SCP
+        c, s = math.cos(S[2]), math.sin(S[2])
+        return ((p[0] - S[0]) * c + (p[1] - S[1]) * s, -(p[0] - S[0]) * s + (p[1] - S[1]) * c)
+
+    def a_mundo(q, S):
+        c, s = math.cos(S[2]), math.sin(S[2])
+        return (S[0] + q[0] * c - q[1] * s, S[1] + q[0] * s + q[1] * c)
+
+    def punto_linea(prev, w, S, largo=None, angulo=None, orto=True):   # como puntoLinea con medidas (sin ellas, el del puntero)
+        P, q = a_local(prev, S), a_local(w, S)
+        dx, dy = q[0] - P[0], q[1] - P[1]
+        if angulo is not None:
+            u = (math.cos(math.radians(angulo)), math.sin(math.radians(angulo)))
+        elif orto:
+            u = ((-1.0 if dx < 0 else 1.0), 0.0) if abs(dx) >= abs(dy) else (0.0, (-1.0 if dy < 0 else 1.0))
+        else:
+            n = math.hypot(dx, dy)
+            u = (dx / n, dy / n) if n > 1e-9 else (1.0, 0.0)
+        d = largo
+        if not largo:                                    # solo el ángulo: el largo lo da el puntero (su proyección)
+            d = dx * u[0] + dy * u[1]
+            if d < 0.001:
+                return None
+        r = a_mundo((P[0] + u[0] * d, P[1] + u[1] * d), S)
+        return [round(r[0], 3), round(r[1], 3)]
+    dist = lambda a, b: math.hypot(b[0] - a[0], b[1] - a[1])
+    grados = lambda a, b: math.degrees(math.atan2(b[1] - a[1], b[0] - a[0]))
+    barra = [[0, 0], [60, 0], [60, 16], [0, 16]]
+    S0 = (0.0, 0.0, 0.0)
+
+    # 1) línea: el puntero elige la dirección (el eje del SCP con el Orto) y lo tipeado manda; el motor dibuja ese largo
+    prev = [30.0, 8.0]
+    for puntero, largo, esperado in (([45, 8.4], 12, [42.0, 8.0]), ([20, 7.8], 12, [18.0, 8.0]),
+                                     ([30.3, 14], 7, [30.0, 15.0]), ([29.7, 2], 7, [30.0, 1.0])):
+        assert punto_linea(prev, puntero, S0, largo=largo) == esperado, (puntero, largo)
+    q = punto_linea(prev, [45, 8.4], S0, largo=12)
+    assert abs(run(barra, centerlines=[[prev, q]])["pasillos"][0]["largo"] - 12.0) < 0.01     # «Hecho cuando»: el tramo mide 12,00 m
+    assert punto_linea([30.37, 8.11], [45, 8.4], S0, largo=3.2) == [33.57, 8.11]              # sin redondear a la grilla
+    sin_orto = punto_linea([10, 5], [18, 11], S0, largo=10, orto=False)                       # sin Orto: hacia el puntero
+    assert abs(dist([10, 5], sin_orto) - 10) < 1e-3 and abs(grados([10, 5], sin_orto) - 36.87) < 0.01
+    # un SCP girado 30° (edificio girado): 12 m, 90° y 0° siguen sus ejes
+    th = math.radians(30)
+    rot = lambda p: [p[0] * math.cos(th) - p[1] * math.sin(th), p[0] * math.sin(th) + p[1] * math.cos(th)]
+    S30 = (0.0, 0.0, th)
+    a = [round(c, 3) for c in rot([10, 8])]
+    q = punto_linea(a, rot([30, 8.4]), S30, largo=12)
+    assert abs(dist(a, q) - 12) < 0.001 and abs(grados(a, q) - 30) < 0.01, (a, q)
+    assert abs(run([rot(p) for p in barra], centerlines=[[a, q]])["pasillos"][0]["largo"] - 12.0) < 0.01
+    q2 = punto_linea(q, rot([30, 8]), S30, largo=6, angulo=90)                                # 90° del SCP = 120° del mundo
+    assert abs(dist(q, q2) - 6) < 0.001 and abs(grados(q, q2) - 120) < 0.01
+    q3 = punto_linea(q2, rot([30, 8]), S30, largo=3, angulo=-45)                              # un ángulo manda sobre el Orto, también negativo
+    assert abs(dist(q2, q3) - 3) < 0.001 and abs(grados(q2, q3) + 15) < 0.01
+    # solo el ángulo: la dirección queda fija y el largo lo da el puntero (su proyección); detrás, no hay punto
+    q = punto_linea([30.0, 8.0], [40.0, 12.0], S0, angulo=30)
+    assert abs(dist([30, 8], q) - (10 * math.cos(th) + 4 * math.sin(th))) < 0.002 and abs(grados([30, 8], q) - 30) < 0.01
+    assert punto_linea([30.0, 8.0], [20.0, 4.0], S0, angulo=30) is None
+
+    # 2) patio: Ancho × Fondo en los ejes del edificio; el puntero elige hacia qué lado va cada una
+    def punto_patio(p0, w, th, ancho=None, fondo=None, m=None):         # como puntoPatio (m: la esquina del puntero ya ajustada)
+        c, s = math.cos(th), math.sin(th)
+        L = lambda p: (p[0] * c + p[1] * s, -p[0] * s + p[1] * c)
+        W = lambda p: (p[0] * c - p[1] * s, p[0] * s + p[1] * c)
+        a_, r_, b_ = L(p0), L(w), L(m or w)
+        x = a_[0] + (-ancho if r_[0] < a_[0] else ancho) if ancho else b_[0]
+        y = a_[1] + (-fondo if r_[1] < a_[1] else fondo) if fondo else b_[1]
+        q_ = W((x, y))
+        return [round(q_[0], 3), round(q_[1], 3)]
+
+    def rect(p0, p1, th):                                # como rectAlign
+        c, s = math.cos(th), math.sin(th)
+        L = lambda p: (p[0] * c + p[1] * s, -p[0] * s + p[1] * c)
+        W = lambda p: [p[0] * c - p[1] * s, p[0] * s + p[1] * c]
+        a_, b_ = L(p0), L(p1)
+        return [W(a_), W((b_[0], a_[1])), W(b_), W((a_[0], b_[1]))]
+    area = lambda poly: abs(sum(poly[i][0] * poly[(i + 1) % 4][1] - poly[(i + 1) % 4][0] * poly[i][1] for i in range(4))) / 2
+    lados = lambda poly: sorted((round(dist(poly[i], poly[(i + 1) % 4]), 2) for i in range(4)))
+    for th_, tr in ((0.0, lambda p: list(p)), (th, rot)):
+        p0 = [round(c, 3) for c in tr([20, 5])]
+        for puntero, signo in (([30, 12], (1, 1)), ([12, 1], (-1, -1)), ([30, 1], (1, -1))):
+            q = punto_patio(p0, tr(puntero), th_, ancho=6, fondo=4)
+            poli = [[round(c, 3) for c in p] for p in rect(p0, q, th_)]
+            assert lados(poli) == [4.0, 4.0, 6.0, 6.0] and abs(area(poli) - 24) < 0.02, (th_, puntero, poli)
+            c, s = math.cos(th_), math.sin(th_)
+            dx = (q[0] - p0[0]) * c + (q[1] - p0[1]) * s
+            dy = -(q[0] - p0[0]) * s + (q[1] - p0[1]) * c
+            assert (round(dx, 2), round(dy, 2)) == (6.0 * signo[0], 4.0 * signo[1]), (th_, puntero, dx, dy)
+        solo = punto_patio(p0, tr([30, 12]), th_, ancho=3.5, m=tr([30, 10]))                # solo el ancho: el fondo, del puntero
+        poli = rect(p0, solo, th_)
+        assert lados([[round(c, 3) for c in p] for p in poli]) == [3.5, 3.5, 5.0, 5.0]
+    poli = [[round(c, 3) for c in p] for p in rect([20, 5], punto_patio([20, 5], [30, 12], 0.0, ancho=6, fondo=4), 0.0)]
+    e = run(barra, patios_mode="manual", patios=[poli])
+    assert len(e["patios"]) == 1 and e["metrics"]["patio_area"] == 24.0                      # el motor recibe el patio de 6 × 4
+
+    # 3) tabique: el frente de una vivienda, exacto; la otra toma el resto (por la geometría, como frentesTab)
+    def frentes_tab(r, t, pw=0.3):
+        d = t["dir"]
+        dot = lambda p: p[0] * d[0] + p[1] * d[1]
+        s = (dot(t["seg"][0]) + dot(t["seg"][1])) / 2.0
+        A = next(u for u in r["units"] if u["id"] == t["a"])
+        B = next(u for u in r["units"] if u["id"] == t["b"])
+        wA, wB = s - pw / 2 - min(dot(p) for p in A["poly"]), max(dot(p) for p in B["poly"]) - s - pw / 2
+        return (wA if abs(wA - A["width"]) <= 0.006 else A["width"]), (wB if abs(wB - B["width"]) <= 0.006 else B["width"])
+
+    def pedir_frente(r, t, id_, v, forzar=False, pw=0.3, min_w=5.0):  # como frenteTipeado: el cambio de unit_edits (None si no entra)
+        wA, wB = frentes_tab(r, t, pw)
+        tot, mn, esA = wA + wB, 0.5 * min_w, id_ == t["a"]
+        if not forzar and (v < mn - 1e-9 or v > tot - mn + 1e-9):
+            return None
+        d = (v - wA) if esA else (wB - v)
+        m = [(t["seg"][0][0] + t["seg"][1][0]) / 2.0, (t["seg"][0][1] + t["seg"][1][1]) / 2.0]
+        return {"op": "tabique", "p": [round(c, 3) for c in m],
+                "a": [round(m[0] + t["dir"][0] * d, 3), round(m[1] + t["dir"][1] * d, 3)]}
+    ancho_de = lambda r, i: next(u["width"] for u in r["units"] if u["id"] == i)
+    muestra = lambda n: json.load(open(os.path.join(base, "samples", n + ".json"), encoding="utf-8"))
+    visto = set()
+    for nombre, k in (("barra", 1), ("quiebre_45", -1), ("L", 0)):      # ejes del tabique: +x, oblicuo y -x
+        s = muestra(nombre)
+        r0 = run(s["footprint"], h=s["height"])
+        t = r0["tabiques"][k]
+        visto.add(tuple(round(c, 2) for c in t["dir"]))
+        wA, wB = frentes_tab(r0, t)
+        tot, mn = wA + wB, 2.5
+        assert abs(wA - ancho_de(r0, t["a"])) < 0.006 and abs(wB - ancho_de(r0, t["b"])) < 0.006   # la geometría y el reparto coinciden
+        for id_, v in ((t["a"], round(mn + 0.37 * (tot - 2 * mn), 2)), (t["b"], round(mn + 0.71 * (tot - 2 * mn), 2))):
+            r1 = run(s["footprint"], h=s["height"], unit_edits=[pedir_frente(r0, t, id_, v)])
+            otra = t["b"] if id_ == t["a"] else t["a"]
+            assert abs(ancho_de(r1, id_) - v) <= 0.005 + 1e-9, (nombre, id_, v, ancho_de(r1, id_))   # exacto, al centímetro
+            assert abs(ancho_de(r1, otra) - (tot - v)) <= 0.011, (nombre, otra, tot - v, ancho_de(r1, otra))   # la otra, el resto
+            t1 = next(x for x in r1["tabiques"] if x["a"] == t["a"] and x["b"] == t["b"])
+            f1 = frentes_tab(r1, t1)
+            assert abs(f1[0 if id_ == t["a"] else 1] - v) < 0.002, (nombre, id_, v, f1)           # y por la geometría, al milímetro
+        # lo que no entra: menos del mínimo del motor o más que las dos juntas (la web avisa y no cambia nada)
+        assert pedir_frente(r0, t, t["a"], mn - 0.1) is None and pedir_frente(r0, t, t["a"], tot - mn + 0.1) is None
+        assert pedir_frente(r0, t, t["a"], mn) is not None and pedir_frente(r0, t, t["a"], tot - mn) is not None
+        if nombre == "barra":                            # el motor lo recortaría en silencio al mínimo: por eso la web avisa antes
+            r2 = run(s["footprint"], h=s["height"], unit_edits=[pedir_frente(r0, t, t["a"], 1.0, forzar=True)])
+            assert abs(ancho_de(r2, t["a"]) - mn) < 0.011, ancho_de(r2, t["a"])
+    assert (1.0, 0.0) in visto and any(abs(abs(d[0]) - 0.71) < 0.01 for d in visto) and (-1.0, 0.0) in visto, visto
+    # medir con otro muro entre viviendas: la web usa el de su control (y la geometría coincide con el reparto)
+    s = muestra("barra")
+    r0 = run(s["footprint"], h=s["height"], party_wall=0.2)
+    t = r0["tabiques"][1]
+    assert abs(frentes_tab(r0, t, pw=0.2)[0] - ancho_de(r0, t["a"])) < 0.006
+
+if __name__ == "__main__":
+    test_medidas_tipeadas(); print("OK61")
