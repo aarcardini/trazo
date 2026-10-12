@@ -156,8 +156,9 @@ Si algo falla en Rhino, ejecuta el script y elige **Diagnostico**. Si no se resu
 - **Art. 35 de la norma nacional:** cada tramo se compara con lo que pide la norma: 1,20 m hasta 3 viviendas, 1,40 de 4 a 10, 1,60 con 11 o más, y 2,00 m si el tramo recto pasa de 15 m. Si no llega, el tramo se dibuja con borde rojo punteado y un aviso lo dice, por ejemplo «Pasillo P2 de 1.40 m: el art. 35 de la norma nacional pide 2.00 m en un tramo recto de más de 15 m (este mide 32.6 m)…». Los valores se cambian en «Normativa → Núcleo». Con 2,00 m, ningún ejemplo tiene avisos.
 - **Corrección:** entre medianeras con núcleos manuales, los pasillos que llegan a las viviendas medían siempre 2,00 m aunque cambiaras el ancho general.
 - **Si cambias la planta o las líneas** y un ancho se queda sin tramo, el aviso lo dice y Circulación ofrece «Quitar los que no tienen tramo», que borra solo esos.
-- Una recta dibujada con un vértice intermedio cuenta como un solo tramo recto para la norma. En edificios sin viviendas (oficinas, comercio, cocheras) el art. 35 no se aplica.
-- **Corrección:** con una vivienda elegida, «Generar pasillo y núcleos» dejaba la planta sin dibujar.
+- Para la norma, un tramo recto es el pasillo que sigue derecho aunque esté dibujado en partes: con un vértice intermedio (aunque esté corrido unos centímetros), una línea cortada en un cruce o una T dibujada como una L más el brazo que falta. En edificios sin viviendas (oficinas, comercio, cocheras) el art. 35 no se aplica. En la etapa «Pasillo y núcleos» el mínimo es 1,20 m «por ahora»: se precisa al repartir las viviendas.
+- **Corrección:** en plantas en L, U o Z de alas angostas (o con el pasillo más ancho), el núcleo de una punta podía quedar con la escalera o el ducto encima del pasillo del ala que llega; ahora va al otro lado del pasillo. Ningún ejemplo cambia.
+- **Correcciones de la web:** con una vivienda elegida, «Generar pasillo y núcleos» dejaba la planta sin dibujar; el clic derecho sobre un vértice de una línea de pasillo no lo borraba; una variante o un proyecto guardados cambiaban si después se editaban los anchos o las líneas.
 - Sin anchos propios, los ejemplos dan exactamente la misma planta que antes.
 
 ## Novedades v2.38

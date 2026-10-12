@@ -261,7 +261,7 @@ const UNIT_L=[0.58,0.72,0.46,0.82,0.38,0.88];
 const roomColor=(kind,prog)=>tone(progColor(prog||'Residential'),ROOM_L[kind]??0.7);
 const COL=new Proxy({},{get:(t,k)=>roomColor(k)});
 const KLABEL={bedroom:'Dormitorio',living:'Estar',dining:'Comedor',kitchen:'Cocina',bath:'Baño',hall:'Hall',hallway:'Pasillo',laundry:'Lavadero',storage:'Depósito',study:'Estudio',vestidor:'Vestidor'};
-let anchosPasillo=[], selPas=null, selPasP=null, selPasK=null;   // R10.8: anchos propios de algunos tramos [{p|seg, ancho}]; tramo elegido (índice en result.pasillos), su punto y su pedido, para volver a elegirlo al recalcular
+let anchosPasillo=[], anchosRes=null, selPas=null, selPasP=null, selPasK=null;   // R10.8: anchos propios de algunos tramos [{p|seg, ancho}]; tramo elegido (índice en result.pasillos), su punto y su pedido, para volver a elegirlo al recalcular
 let selUnit=null, selCore=null, selSpec=null, showGraph=true, showDims=true, showEvac=true, showEquip=true, showTip=true;
 const EVAC={ok:'#1a9d5b',saco:'#e8890c',fail:'#d63b3b'};   // puerta de cada vivienda: cumple, fondo de saco largo, recorrido largo
 
@@ -275,10 +275,10 @@ function renderStories(){ if(!stories){ $('storyTable').innerHTML='<div class="w
 let STD=null, STD_DEF=null, medianeras=[], medHover=null;
 function params(){ const g=id=>+$(id).value; const manual=$('cores_mode').value==='manual';
  return {core_auto:$('core_auto').checked,ascensores:$('ascensores').value,standards:STD,medianeras:medianeras.length?medianeras:null,floor_height:g('floor_height'),outer_wall:g('outer_wall'),loading:$('loading').value,corridor_width:g('corridor_width'),anchos_pasillo:anchosPasillo.length?anchosPasillo:null,core_width:g('core_width'),core_depth:g('core_depth'),core_count:g('core_count'),auto_cores:$('auto_cores').checked,core_side:$('core_side').value,egress_single:g('egress_single'),egress_multi:g('egress_multi'),min_unit_width:g('min_unit_width'),party_wall:g('party_wall'),max_unit_depth:g('max_unit_depth'),unit_mix:mix,centerlines:centerlines.length?centerlines:null,cores_mode:manual?'manual':'auto',cores:manual?coresManual:null,unit_edits:ediciones.length?ediciones:null,room_edits:interiores.length?interiores:null,patios_mode:$('patios_mode').value,patios:$('patios_mode').value==='manual'?patios:null,stories:stories}; }
-async function run(stage,opt){ opt=opt||{}; if(!footprint.length){ $('tag').textContent='Trazo está en blanco: envía una masa desde Rhino o elige un ejemplo'; return; } lastStage=stage; $('tag').textContent='Calculando…';
+async function run(stage,opt){ opt=opt||{}; if(!footprint.length){ $('tag').textContent='Trazo está en blanco: envía una masa desde Rhino o elige un ejemplo'; return; } lastStage=stage; $('tag').textContent='Calculando…'; const enviados=JSON.stringify(anchosPasillo);
  let j; try{ const r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({footprint,height:+$('height').value,stage,params:params()})}); j=await r.json(); }
  catch(e){ j={error:'no hay conexión con el servidor de Trazo: arráncalo (py server.py en Windows, python3 server.py en Mac) y recarga la página'}; }
- if(j.error){ $('tag').textContent='Error: '+j.error; $('warns').innerHTML='<div class="w">⚠ Error: '+j.error+'. Si se repite, copia este mensaje y pégalo en la sesión de Claude Code.</div>'; return;} result=j;
+ if(j.error){ $('tag').textContent='Error: '+j.error; $('warns').innerHTML='<div class="w">⚠ Error: '+j.error+'. Si se repite, copia este mensaje y pégalo en la sesión de Claude Code.</div>'; return;} result=j; anchosRes=enviados;   // R10.8: con qué anchos se calculó (sinTramo)
  if(selSpec!=null){ const k=(j.cores||[]).findIndex(c=>c.spec===selSpec); selCore=k>=0?k:null; selSpec=null; } else if(selCore!=null&&!(j.cores||[])[selCore]) selCore=null;
  if(selPasP){ selPas=tramoDe(j.pasillos||[],selPasP,selPasK); selPasP=null; selPasK=null; } else if(selPas!=null&&!(j.pasillos||[])[selPas]) selPas=null;
  anchosInfo();
@@ -404,7 +404,7 @@ function drawOverlay(){ const go=$('go'); go.innerHTML=''; if(!view) return; dra
  const line=(a,b,dash)=>go.appendChild(el('line',{x1:X(a),y1:Y(a),x2:X(b),y2:Y(b),stroke:'#2f6fed','stroke-width':2,'stroke-dasharray':dash||'6 3','pointer-events':'none'}));   // el clic pasa al tramo de pasillo de abajo
  centerlines.forEach((pl,li)=>{ for(let i=0;i<pl.length-1;i++) line(pl[i],pl[i+1]);
   pl.forEach((p,vi)=>{ const c=el('circle',{cx:X(p),cy:Y(p),r:6,fill:'#fff',stroke:'#2f6fed','stroke-width':2,style:'cursor:grab'});
-   c.addEventListener('pointerdown',e=>{ if(tool) return; e.stopPropagation(); drag={li,vi,moved:false}; $('svg').setPointerCapture(e.pointerId); });
+   c.addEventListener('pointerdown',e=>{ if(tool||e.button!==0||e.ctrlKey) return; e.stopPropagation(); drag={li,vi,moved:false}; $('svg').setPointerCapture(e.pointerId); });   // el clic derecho (o Ctrl+clic en Mac) no arrastra: lo borra
    c.addEventListener('contextmenu',e=>{ e.preventDefault(); recordar('borrar vértice'); if(pl.length>2) pl.splice(vi,1); else centerlines.splice(li,1); lineInfo(); drawOverlay(); if(lastStage) runCirc(); });
    go.appendChild(c); }); });
  if(curLine.length){ for(let i=0;i<curLine.length-1;i++) line(curLine[i],curLine[i+1]);
@@ -527,10 +527,11 @@ function quitarNucleo(){ recordar('quitar núcleo'); const i=specNucleo(); cores
 /* ---------- tramo de pasillo elegido: su propio ancho y el art. 35 (R10.8) ---------- */
 function pasilloPanel(){ const c=$('ctx'), ps=result.pasillos[selPas], gen=+$('corridor_width').value, viv=ps.viviendas;
  const N=(STD&&STD.nucleo)||{}, a35=N.pasillo_comun||[1.2,1.4,1.6], a35v=N.pasillo_viviendas||[3,10];   // las medidas de Normativa
+ const aplica=ps.minimo!=null, prov=aplica&&viv==null&&ps.ok!==false&&ps.ancho<Math.max(...a35)-1e-6;   // sin niveles de vivienda no se aplica; sin viviendas contadas, el mínimo es provisional
  c.innerHTML=`<b>Pasillo ${ps.id} · ${ps.ancho.toFixed(2)} m${ps.propio?' (propio)':''}</b><div class="hint">Tramo recto de ${ps.largo.toFixed(1)} m${viv!=null?' · sirve a '+viv+' vivienda'+(viv===1?'':'s')+' por planta':''}</div>
-  <div class="${ps.ok===false?'w':'hint'}">${ps.ok===false?'⚠':'✓'} Norma nacional, art. 35: ${ps.minimo!=null?ps.minimo.toFixed(2)+' m como mínimo':'—'} (${a35[0].toFixed(2)} m hasta ${a35v[0]} viviendas, ${a35[1].toFixed(2)} de ${a35v[0]+1} a ${a35v[1]}, ${a35[2].toFixed(2)} con ${a35v[1]+1} o más; ${(+N.pasillo_ancho_largo||2).toFixed(2)} m si el tramo recto pasa de ${N.pasillo_largo||15} m, salvo con el 60 % de sus paredes vidriado o abierto)</div>
+  ${!aplica?'<div class="hint">Norma nacional, art. 35: no se aplica (ningún nivel es de vivienda)</div>':`<div class="${ps.ok===false?'w':'hint'}">${ps.ok===false?'⚠':prov?'…':'✓'} Norma nacional, art. 35: ${ps.minimo.toFixed(2)} m como mínimo${prov?' por ahora (según las viviendas que sirva puede pedir más: se cuentan al repartirlas)':''} (${a35[0].toFixed(2)} m hasta ${a35v[0]} viviendas, ${a35[1].toFixed(2)} de ${a35v[0]+1} a ${a35v[1]}, ${a35[2].toFixed(2)} con ${a35v[1]+1} o más; ${(+N.pasillo_ancho_largo||2).toFixed(2)} m si el tramo recto pasa de ${N.pasillo_largo||15} m, salvo con el 60 % de sus paredes vidriado o abierto)</div>`}
   ${ps.editable?`<label>Ancho de este tramo (m) <input type="number" id="pasAncho" step="0.05" min="0.8" max="8" value="${ps.ancho}"></label>
-  <div class="hint">Los demás tramos siguen con el ancho general (${gen.toFixed(2)} m, en Circulación). Las viviendas de este tramo ganan o pierden el fondo que cambia el pasillo.</div>
+  <div class="hint">Los demás tramos siguen con el ancho general (${gen.toFixed(2)} m, en Circulación).${aplica?' Las viviendas de este tramo ganan o pierden el fondo que cambia el pasillo.':''}</div>
   <button class="s" onclick="aplicarAncho()">Aplicar</button>${ps.propio?` <button class="s" onclick="aplicarAncho(true)">Como los demás (${gen.toFixed(2)} m)</button>`:''}`
   :'<div class="hint">Entre medianeras, este pasillo es la franja del núcleo: su ancho lo da el núcleo.</div>'}
   <button class="s" onclick="selPas=null;draw();unitPanel()">Cerrar</button>`;
@@ -550,10 +551,11 @@ function aplicarAncho(general){ const ps=result&&result.pasillos&&result.pasillo
  else if(k!=null) anchosPasillo[k]=Object.assign({},anchosPasillo[k],{ancho:Math.round(w*100)/100});   // conserva su punto (o el segmento de Rhino)
  else { anchosPasillo.push({p:m,ancho:Math.round(w*100)/100}); k=anchosPasillo.length-1; }
  selPasP=m; selPasK=k; anchosInfo(); runCirc(); }
-function anchosInfo(){ const sin=((result&&result.anchos_sin_tramo)||[]).filter(i=>i<anchosPasillo.length), n=result&&result.pasillos?result.pasillos.filter(p=>p.propio).length:anchosPasillo.length;
+function sinTramo(){ return result&&result.anchos_sin_tramo&&anchosRes===JSON.stringify(anchosPasillo)?result.anchos_sin_tramo:[]; }   // índices de anchosPasillo, si el resultado es de estos anchos
+function anchosInfo(){ const sin=sinTramo(), n=result&&result.pasillos?result.pasillos.filter(p=>p.propio).length:anchosPasillo.length;
  $('anchosInfo').innerHTML=anchosPasillo.length?`${n} tramo(s) con ancho propio · <button class="s" style="padding:0 6px" onclick="quitarAnchos()">Quitar</button>`+(sin.length?` · <button class="s" style="padding:0 6px" onclick="quitarSinTramo()">Quitar los que no tienen tramo (${sin.length})</button>`:''):'Clic en un tramo de pasillo de la planta para darle su propio ancho.'; }
 function quitarAnchos(){ recordar('quitar anchos de pasillo'); anchosPasillo=[]; anchosInfo(); if(lastStage) runCirc(); }
-function quitarSinTramo(){ const sin=new Set((result&&result.anchos_sin_tramo)||[]); if(!sin.size) return; recordar('quitar anchos sin tramo'); anchosPasillo=anchosPasillo.filter((a,i)=>!sin.has(i)); selPas=null; anchosInfo(); if(lastStage) runCirc(); else unitPanel(); }
+function quitarSinTramo(){ const sin=new Set(sinTramo()); if(!sin.size) return; recordar('quitar anchos sin tramo'); anchosPasillo=anchosPasillo.filter((a,i)=>!sin.has(i)); selPas=null; anchosInfo(); if(lastStage) runCirc(); else unitPanel(); }
 function distSeg(p,a,b){ const dx=b[0]-a[0], dy=b[1]-a[1], L2=dx*dx+dy*dy, t=L2?Math.max(0,Math.min(1,((p[0]-a[0])*dx+(p[1]-a[1])*dy)/L2)):0; return Math.hypot(p[0]-a[0]-t*dx,p[1]-a[1]-t*dy); }
 
 /* ---------- patios ---------- */
@@ -910,7 +912,7 @@ function medidasCambiadas(){ if(!STD||!STD_DEF) return null; const d={};   // so
 function archivoProyecto(){ const p=proyecto(); if(variantes.length) p.variantes=variantes; return p; }   // el archivo lleva también las variantes (R4.5)
 function proyecto(){ const p={trazo:'proyecto',formato:1,version_motor:VER,guardado:new Date().toISOString(),name:nombre||'Proyecto',footprint,height:+$('height').value,stage:lastStage||'massing',params:Object.assign(params(),{standards:medidasCambiadas()})}; if(terreno) p.terreno=terreno; return p; }
 async function guardarProyecto(){ if(!footprint.length){ alert('Trazo está en blanco: no hay nada que guardar. Elige un ejemplo o envía una masa desde Rhino.'); return; }
- const archivo=n=>n.replace(/[\\/:*?"<>|]+/g,'-').trim()+'.trazo.json', listo=(p,n)=>{ abierto={p,archivo:n}; selLabel('__proyecto','Proyecto: '+p.name); $('tag').textContent='Proyecto guardado: '+n; };
+ const archivo=n=>n.replace(/[\\/:*?"<>|]+/g,'-').trim()+'.trazo.json', listo=(p,n)=>{ abierto={p:JSON.parse(JSON.stringify(p)),archivo:n}; selLabel('__proyecto','Proyecto: '+p.name); $('tag').textContent='Proyecto guardado: '+n; };
  if(window.showSaveFilePicker){ try{   // Chrome y Edge: se elige carpeta y nombre (por ejemplo, junto al archivo de Rhino)
    const h=await showSaveFilePicker({suggestedName:archivo(nombre||'Proyecto'),types:[{description:'Proyecto de Trazo',accept:{'application/json':['.json']}}]});
    nombre=h.name.replace(/(\.trazo)?\.json$/i,''); const p=archivoProyecto(), w=await h.createWritable(); await w.write(JSON.stringify(p,null,1)); await w.close(); return listo(p,h.name); }
@@ -941,7 +943,7 @@ function resumen(r){ const m=(r&&r.metrics)||{}, mx=m.mix||{}, us=(r&&r.units)||
  return {unidades:mx.count??null,total:m.units_total??null,nsa:m.nsa_total??null,eficiencia:m.efficiency_total??null,match:mx.match_score??null,circulacion:m.circulation_pct??null,sin_usar:m.unused_area??null,nucleos:m.core_count??null,evac:us?us.filter(u=>u.egress_status&&u.egress_status!=='ok').length:null,planos:m.plan_score??null}; }
 function guardarVariante(){ if(!result||!footprint.length){ alert('Trazo: genera primero una solución (por ejemplo, «Generar planos») para guardarla como variante.'); return; }
  const letra=n=>n<26?String.fromCharCode(65+n):String(n+1); let k=variantes.length; while(variantes.some(v=>v.nombre==='Variante '+letra(k))) k++;
- variantes.push({nombre:'Variante '+letra(k),guardada:new Date().toISOString(),proyecto:proyecto(),metricas:resumen(result)}); verVariantes(true); $('tag').textContent='Guardada: Variante '+letra(k); }
+ variantes.push({nombre:'Variante '+letra(k),guardada:new Date().toISOString(),proyecto:JSON.parse(JSON.stringify(proyecto())),metricas:resumen(result)}); verVariantes(true); $('tag').textContent='Guardada: Variante '+letra(k); }   // proyecto: una copia, lo que cambie después no la toca
 const esc=t=>String(t).replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');
 function verVariantes(ver){ const p=$('varPanel'); $('btnVar').textContent='Comparar ('+variantes.length+')'; if(ver===false||(ver==null&&p.style.display==='block')){ p.style.display='none'; return; }
  const filas=variantes.map((v,i)=>({v,i,m:v.metricas})).concat(result?[{m:resumen(result),actual:true}]:[]), mejor={};
