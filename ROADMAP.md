@@ -15,6 +15,8 @@ Lo decide el usuario; al terminar cada paso se actualiza esta lista.
 4. **Varias plantas** (se dividen antes de empezar y requieren R6.1): R6.3 varios programas en un mismo nivel (hall de acceso, comercio, oficinas y viviendas) → R6.4 retiros por nivel (piso de gálibo y retiro de medianera desde un nivel).
 5. **Después:** patios según la altura (R11.2), edición de medianeras parciales en la web (resto de R11.6), R5.1 → R5.2 → R5.4.
 
+Modelo de Claude sugerido por tarea, para cuidar el consumo (se elige con `/model` antes de pedir la tarea): **Sonnet 5.5** para lo que es solo web o un algoritmo aislado y bien especificado (R4.10, R4.11, R4.12, R10.10, R1.5, R5.14a y la parte web de R4.13); **Haiku 5.5** para comparar y documentar valores (R10.11); **Opus 5.5 o Fable 5.1** para lo que toca `plans.py`, `units.py` o `equipamiento.py` (R10.9, R5.12, R5.13, la parte del motor de R4.13, R5.8 y R5.14) y para el plan y el motor de R6.3 y R6.4 (su web y su 3D, con Sonnet). Revisión adversarial con varios agentes: ninguna en los S (alcanzan las pruebas); una sola ronda, con Sonnet, en los M del motor; en los L, plan aprobado antes de programar.
+
 Normativa: desde v2.27 los mínimos siguen la Normativa Nacional de Edificación (higiene de la vivienda, 2016), que rige en todos los departamentos (confirmado por el usuario).
 
 ---
