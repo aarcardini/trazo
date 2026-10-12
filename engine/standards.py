@@ -19,6 +19,10 @@ Fuentes principales (ver STANDARDS.md):
   transferencia de 0,80 m junto al inodoro y ducha a nivel (criterios habituales de accesibilidad: UNIT 200, ISO 21542).
 - Ventanas: vano de iluminación directa de al menos 1/10 de la superficie del local (Normativa Nacional, art. 11);
   alto de 1,20 m y anchos típicos de 1,50 (dormitorios) y 2,00 (estar): criterios de proyecto.
+- R10.8, Normativa Nacional: superficie mínima de la vivienda con muros, 32, 44, 56 y 68 m² con 1 a 4 dormitorios (art. 3;
+  monoambiente: 32 m², criterio del usuario, art. 2); cocina integrada al estar sin ventana de 3 a 5 m² con lado 1,40 y
+  el vano del estar de 1/10 de los dos locales, con 2 m² como mínimo (art. 27); retiro de 1 m como mínimo si el edificio
+  se separa de la divisoria (art. 53 e).
 Las medidas "típicas" son criterios de proyecto (no normativos) y pueden ajustarse.
 """
 import copy
@@ -31,6 +35,10 @@ DEFAULTS = {
         "dorm_secundario": {"min_area": 7.0, "min_side": 2.00, "typ_area": 9.0, "typ": [2.80, 3.20]},
         "estar_comedor": {"min_area": 10.0, "min_side": 2.60, "typ_area": 20.0, "typ": [3.60, 5.50]},
         "cocina": {"min_area": 4.0, "min_side": 1.60, "typ_area": 7.0, "typ": [2.40, 2.90]},
+        # R10.8 (norma nacional, art. 27): cocina integrada al estar sin ventana propia, de min_area a max_area con lado
+        # min_side; el vano del estar ilumina los dos locales (su 10 %) y no baja de vano_min (m²). Trazo la dibuja con
+        # max_area como máximo (criterio del usuario); más grande necesita su propia ventana (art. 24)
+        "cocina_integrada": {"min_area": 3.0, "min_side": 1.40, "max_area": 5.0, "vano_min": 2.0},
         # max_area (v2.33, criterio de proyecto): hasta dónde se agranda con la franja sin luz que sobra
         "bano": {"min_area": 3.0, "min_side": 1.20, "typ_area": 4.0, "typ": [1.70, 2.40], "max_area": 6.0},
         "bano_aux": {"min_area": 1.5, "min_side": 0.80, "typ_area": 2.6, "typ": [1.20, 2.20], "max_area": 4.0},
@@ -52,6 +60,10 @@ DEFAULTS = {
         "estar_por_dorms": [18.0, 18.0, 20.0, 24.0, 27.0],
         # rangos de superficie de la vivienda según dormitorios (ANV): [mín, máx]
         "rango_vivienda": [[25, 40], [35, 50], [50, 75], [65, 100], [80, 125]],
+        # R10.8 (norma nacional, art. 3): superficie mínima con muros (hasta la cara exterior de los muros exteriores y el
+        # eje de los divisorios) según dormitorios: monoambiente (criterio del usuario, art. 2), 1, 2, 3 y 4; con más, el
+        # último más el último salto por cada dormitorio (12 m²). El estudio cuenta como dormitorio (art. 6)
+        "superficie_min": [32, 32, 44, 56, 68],
     },
     "nucleo": {
         "escalera_ancho": 1.20,          # ancho de cada tramo (IT 19)
@@ -94,6 +106,8 @@ DEFAULTS = {
                                          # del muro divisorio para los espacios abiertos que iluminan, arts. 46, 48 y 52)
         "patio_min": 3.0,                # ancho mínimo de un patio para que las estancias que dan a él tengan luz (la norma
                                          # nacional lo pide según la altura, art. 44: ver ROADMAP R11.2)
+        "retiro_divisoria": 1.0,         # R10.8: un edificio que se separa de la divisoria queda a 1 m o más (norma
+                                         # nacional, art. 53 e): con un retiro de medianera mayor que 0 y menor, aviso
     },
     "masterplan": {
         "calzada": 9.0,                  # ancho de calzada de calle local (criterio de proyecto)
@@ -164,6 +178,8 @@ DEFAULTS = {
         "ancho_dormitorio": 1.50,        # ancho típico (criterio de proyecto); más ancha si la norma pide más
         "ancho_estar": 2.00,
         "mocheta": 0.20,                 # libre entre la ventana y una esquina o un tabique (criterio de proyecto)
+        "proporcion_max": 3.0,           # R10.8: profundidad del local de hasta 3 veces su lado menor (Normativa Nacional,
+                                         # art. 14; el estar con el comedor interior, desde la ventana y contra su ancho)
     },
 }
 

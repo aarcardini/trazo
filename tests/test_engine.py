@@ -1356,6 +1356,9 @@ def test_ventanas():
     S = ST.DEFAULTS["ventanas"]
     por = lambda res: {i: [w for w in res["ventanas"] if w["room"] == i] for i in {w["room"] for w in res["ventanas"]}}
     malos = lambda res: [c["msg"] for c in res["checks"] if not c["ok"]]
+    # R10.8 (norma nacional, art. 27): el vano del estar es el 10 % del estar y la cocina integrada, con 2 m² como mínimo
+    cocina = lambda R: sum(x["area"] for x in R.values() if x["kind"] == "kitchen")
+    CI = ST.DEFAULTS["vivienda"]["cocina_integrada"]
     # 9,50 × 8,00 con 2 dormitorios: una en cada dormitorio y otra en el estar, en el fondo; ninguna en baños o cocina
     res = P.layout_unit(rect(9.5, 8.0), 2)
     R, V = {r["id"]: r for r in res["rooms"]}, por(res)
@@ -1366,8 +1369,10 @@ def test_ventanas():
         x0, x1 = sorted((w["p"][0], w["q"][0]))
         assert abs((x0 + x1) / 2 - (b[0] + b[2]) / 2) < 1e-6 and x0 >= b[0] + S["mocheta"] - 1e-6 and x1 <= b[2] - S["mocheta"] + 1e-6
         tip = S["ancho_estar"] if i == "living" else S["ancho_dormitorio"]
-        assert abs(w["ancho"] - max(tip, S["iluminacion"] * R[i]["area"] / S["alto"])) < 0.01 and w["alto"] == S["alto"]
-        assert abs(w["minimo"] - S["iluminacion"] * R[i]["area"]) < 0.01 and w["area"] >= w["minimo"] - 0.01
+        minimo = max(S["iluminacion"] * (R[i]["area"] + cocina(R)), CI["vano_min"]) if i == "living" else \
+            S["iluminacion"] * R[i]["area"]
+        assert abs(w["ancho"] - max(tip, minimo / S["alto"])) < 0.01 and w["alto"] == S["alto"]
+        assert abs(w["minimo"] - minimo) < 0.01 and w["area"] >= w["minimo"] - 0.01
     assert not any("ventana" in m for m in malos(res))
     # un estar grande pide una ventana más ancha que la típica
     w, = por(P.layout_unit(rect(6.0, 7.0), 0))["living"]
@@ -1375,7 +1380,8 @@ def test_ventanas():
     # comedor interior: no lleva ventana; la del estar ilumina los dos
     res = P.layout_unit(rect(9.5, 12.0), 2)
     R, V = {r["id"]: r for r in res["rooms"]}, por(res)
-    assert "dining" in R and "dining" not in V and abs(V["living"][0]["minimo"] - S["iluminacion"] * (R["living"]["area"] + R["dining"]["area"])) < 0.01
+    assert "dining" in R and "dining" not in V and \
+        abs(V["living"][0]["minimo"] - S["iluminacion"] * (R["living"]["area"] + R["dining"]["area"] + cocina(R))) < 0.01
     # en una esquina: primero el fondo; si no alcanza, otra en la fachada lateral
     esquina = lambda p, q: (abs(p[1] - 12) < 0.05 and abs(q[1] - 12) < 0.05) or (abs(p[0]) < 0.05 and abs(q[0]) < 0.05)
     res = P.layout_unit(rect(9.5, 12.0), 2, is_facade=esquina, ventanas=dict(S, iluminacion=0.25))
@@ -2309,3 +2315,252 @@ def test_grilla_y_snap():
 
 if __name__ == "__main__":
     test_grilla_y_snap(); print("OK52")
+
+
+def test_desfase():
+    """R10.8: geometry.desfase corre cada borde de un polígono por su propia distancia (hacia afuera; negativa, hacia
+    adentro). Dos bordes seguidos paralelos con distancias distintas dejan un escalón; da lo mismo el sentido del
+    polígono (devuelve uno antihorario)."""
+    from engine import geometry as G
+    rect = [(0.0, 0.0), (10.0, 0.0), (10.0, 6.0), (0.0, 6.0)]
+    out = G.desfase(rect, [0.35, 0.15, 0.075, 0.15])          # abajo, derecha, arriba, izquierda
+    assert len(out) == 4 and abs(G.area(out) - (10 + 0.15 + 0.15) * (6 + 0.35 + 0.075)) < 1e-9, out
+    assert abs(G.area(G.desfase(rect, [0.0] * 4)) - 60.0) < 1e-9 and abs(G.area(G.desfase(rect, [-1.0] * 4)) - 32.0) < 1e-9
+    # el borde de abajo en dos tramos (de 0 a 4 y de 4 a 10) con 0,35 y 0,15: escalón en x = 4
+    p = [(0.0, 0.0), (4.0, 0.0), (10.0, 0.0), (10.0, 6.0), (0.0, 6.0)]
+    out = G.desfase(p, [0.35, 0.15, 0.1, 0.2, 0.3])
+    cerca = lambda q, x, y: abs(q[0] - x) < 1e-9 and abs(q[1] - y) < 1e-9
+    assert any(cerca(q, 4.0, -0.35) for q in out) and any(cerca(q, 4.0, -0.15) for q in out) and len(out) == 6, out
+    esperado = (10 + 0.3 + 0.1) * (6 + 0.15 + 0.2) + (4 + 0.3) * (0.35 - 0.15)
+    assert abs(G.area(out) - esperado) < 1e-9
+    # al revés (horario): el borde i es el n-2-i del original
+    assert abs(G.area(G.desfase(p[::-1], [0.2, 0.1, 0.15, 0.35, 0.3])) - esperado) < 1e-9
+
+if __name__ == "__main__":
+    test_desfase(); print("OK53")
+
+
+def test_superficie_con_muros():
+    """R10.8 (norma nacional, art. 3): cada vivienda trae «area_muros», su superficie con los muros: hasta la cara exterior
+    del muro exterior en la fachada y en la medianera (criterio del usuario: el muro entero), hasta el eje del muro con
+    la vecina, con el pasillo común y con el núcleo; un borde sin nada cerca, hasta el eje de un tabique. «area», la
+    superficie libre, no cambia. La web la muestra en la ficha, en la tabla de viviendas y al pasar el mouse."""
+    from engine import standards as ST
+    ow, pw, muro = 0.35, 0.30, ST.DEFAULTS["nucleo"]["muro"]
+    carga = lambda n: json.load(open(os.path.join(os.path.dirname(__file__), "..", "samples", n + ".json"), encoding="utf-8"))
+    caja = lambda u: (min(p[0] for p in u["poly"]), min(p[1] for p in u["poly"]), max(p[0] for p in u["poly"]),
+                      max(p[1] for p in u["poly"]))
+    # barra, U01: el núcleo a la izquierda, la vecina a la derecha, la fachada al fondo y el pasillo común al frente
+    s = carga("barra")
+    r = run(s["footprint"], h=s["height"])
+    u = next(u for u in r["units"] if u["id"] == "U01")
+    x0, y0, x1, y1 = caja(u)
+    esperado = (x1 - x0 + muro / 2 + pw / 2) * (y1 - y0 + ow + pw / 4)
+    assert abs(esperado - 82.78) < 0.05 and abs(u["area_muros"] - 82.78) < 0.1 and abs(u["area"] - 76.2) < 0.05, u["area_muros"]
+    # al frente (R3.7): la fachada, la medianera y el otro lindero con el muro entero; la punta del pasillo y la vecina, a
+    # un muro de distancia: hasta su eje
+    d = carga("entre_medianeras")
+    r = run(d["footprint"], h=18, unit_mix=[{"name": "2 dorm", "area": 75, "percent": 100, "dorms": 2}],
+            medianeras=[d["medianeras"][1]], cores_mode="manual", cores=[[5, 25]])
+    u = next(u for u in r["units"] if u.get("al_frente"))
+    x0, y0, x1, y1 = caja(u)
+    assert abs(u["area_muros"] - (x1 - x0 + 2 * ow) * (y1 - y0 + ow + pw / 2)) < 0.1, u["area_muros"]
+    # una ochava y un quiebre a 45°: entre un 3 y un 15 % más que la superficie libre
+    for n in ("L_ochava", "quiebre_45"):
+        s = carga(n)
+        r = run(s["footprint"], h=s["height"])
+        for u in r["units"]:
+            assert 1.03 * u["area"] <= u["area_muros"] <= 1.15 * u["area"], (n, u["id"], u["area"], u["area_muros"])
+    # en la etapa de viviendas (sin planos) también
+    r = generate({"footprint": [[0, 0], [60, 0], [60, 16], [0, 16]], "height": 15, "stage": "units", "params": {}})
+    assert r["units"] and all(u["area_muros"] > u["area"] for u in r["units"])
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    assert html.count("+u.area_muros+' m² con muros'") == 2 and "+u.area_muros+' con muros</small>'" in html
+
+if __name__ == "__main__":
+    test_superficie_con_muros(); print("OK54")
+
+
+def test_cocina_integrada():
+    """R10.8 (norma nacional, art. 27; criterio del usuario): la cocina integrada al estar sin ventana propia se dibuja con
+    5 m² como máximo, en todos los casos (monoambiente, vivienda profunda, también con el hall en x0, poco profunda y
+    «Hall / Cocina», donde cuenta solo su parte): pierde fondo hasta el que pide su mesada (en línea, 1,60 m; en L,
+    2,20 m; más angosta, la mesada contra la pared del costado, 2,70 m) y, si aún pasa, se angosta y lo que deja va al
+    hall. Sus mínimos son los de la cocina integrada (3 m², lado 1,40); una de más de 5 m² (por ejemplo, con un tabique
+    corrido a mano) se avisa. El vano del estar es el 10 % del estar y la cocina, con 2 m² como mínimo."""
+    import copy
+    from engine import plans as P, standards as ST
+    rect = lambda w, d: [(0.0, 0.0), (w, 0.0), (w, d), (0.0, d)]
+    CI = ST.DEFAULTS["vivienda"]["cocina_integrada"]
+    assert CI == {"min_area": 3.0, "min_side": 1.40, "max_area": 5.0, "vano_min": 2.0}
+    malos = lambda res: [c["msg"] for c in res["checks"] if not c["ok"]]
+    caja = lambda x: (min(p[0] for p in x["poly"]), min(p[1] for p in x["poly"]), max(p[0] for p in x["poly"]),
+                      max(p[1] for p in x["poly"]))
+    casos = [(rect(9.5, 8.0), 2, {}), (rect(9.5, 8.0), 2, {"entrada": (6.0, 9.5)}), (rect(6.0, 7.0), 0, {}),
+             (rect(6.0, 7.0), 0, {"entrada": (4.0, 6.0)}), (rect(13.3, 5.5), 2, {}), (rect(13.3, 5.5), 2, {"entrada": (9.0, 13.3)}),
+             (rect(8.7, 10.15), 2, {}), (rect(11.73, 6.5), 2, {})]
+    for poly, nb, kw in casos:
+        res = P.layout_unit(poly, nb, **kw)
+        k = next(x for x in res["rooms"] if x["kind"] == "kitchen")
+        assert 3.0 - 1e-6 <= k["area"] <= 5.0 + 1e-6, (poly, nb, kw, k["area"])
+        assert {"heladera", "mesada", "bacha_cocina", "cocina_horno"} <= {q["kind"] for q in res["equipamiento"] if q["room"] == "kitchen"}
+        assert not any("Cocina" in m for m in malos(res)), malos(res)
+    # vivienda profunda de 9,50 × 8,00: la cocina (en L) pierde fondo, desde 2,64 m, y el estar lo gana
+    res = P.layout_unit(rect(9.5, 8.0), 2)
+    R = {x["id"]: caja(x) for x in res["rooms"]}
+    assert abs(R["kitchen"][3] - R["living"][1]) < 1e-6 and 2.2 - 1e-6 <= R["kitchen"][3] < 2.64 and res["score"] == 100
+    # en línea (barra, U01): 1,60 m de fondo y 3,13 m de ancho; lo que deja va al hall
+    barra = run([[0, 0], [60, 0], [60, 16], [0, 16]])
+    u = next(u for u in barra["units"] if u["id"] == "U01")
+    k = next(x for x in u["rooms"] if x["kind"] == "kitchen")
+    hall = next(x for x in u["rooms"] if x["kind"] == "hall")
+    kb, hb = caja(k), caja(hall)
+    assert abs(kb[3] - kb[1] - 1.6) < 0.01 and abs(kb[2] - kb[0] - 5.0 / 1.6) < 0.01 and hb[2] - hb[0] > 1.4 + 0.5, (kb, hb)
+    # «Hall / Cocina» (poco frente para los dos): solo la parte de la cocina, sin el hall
+    res = P.layout_unit(rect(7.6, 8.0), 2)
+    hc = next(x for x in res["rooms"] if x["name"] == "Hall / Cocina")
+    b = caja(hc)
+    assert hc["area"] - P.HALL_W * (b[3] - b[1]) <= 5.0 + 1e-6 and not any("art. 27" in m for m in malos(res))
+    # forzada a mano: el tabique entre la cocina y el estar, 1 m más allá: más de 5 m², se avisa
+    k0 = caja(next(x for x in P.layout_unit(rect(9.5, 8.0), 2)["rooms"] if x["kind"] == "kitchen"))
+    ed = [(0, {"op": "pared", "p": (1.0, k0[3]), "a": (1.0, k0[3] + 1.0)})]
+    res = P.layout_unit(rect(9.5, 8.0), 2, ediciones=ed)
+    k = next(x for x in res["rooms"] if x["kind"] == "kitchen")
+    assert res["ediciones"] == [0] and k["area"] > 5.0 + 1e-6
+    assert "Cocina integrada sin ventana de %.1f m²: la norma nacional admite de 3 a 5 m² (art. 27); más grande, con " \
+           "ventana propia (art. 24)" % k["area"] in malos(res) and res["score"] < 100, malos(res)
+    # con otro máximo en «Normativa → Vivienda», la cocina lo sigue (y el aviso también)
+    V = copy.deepcopy(ST.DEFAULTS["vivienda"])
+    V["cocina_integrada"]["max_area"] = 4.5
+    res = P.layout_unit(rect(9.5, 8.0), 2, vivienda=V)
+    assert next(x for x in res["rooms"] if x["kind"] == "kitchen")["area"] <= 4.5 + 1e-6 and res["score"] == 100
+    V["cocina_integrada"]["max_area"] = 9.0                  # sin tope: como antes de v2.41 (2,10 × 2,64)
+    res = P.layout_unit(rect(9.5, 8.0), 2, vivienda=V)
+    assert abs(next(x for x in res["rooms"] if x["kind"] == "kitchen")["area"] - 2.1 * 2.64) < 0.01
+    # sus mínimos: los de la cocina integrada (art. 27), no los de una cocina con ventana (art. 21)
+    P.configure(ST.DEFAULTS["vivienda"])
+    assert P._std_for({"kind": "kitchen", "id": "kitchen"}, 2, {"kitchen": 4.0}) == CI
+    assert P._std_for({"kind": "kitchen", "id": "kitchen"}, 2) == ST.DEFAULTS["vivienda"]["cocina"]
+    # el vano del estar: el 10 % del estar y la cocina, con vano_min como mínimo
+    S = ST.DEFAULTS["ventanas"]
+    res = P.layout_unit(rect(9.5, 8.0), 2)
+    area = sum(x["area"] for x in res["rooms"] if x["kind"] in ("living", "kitchen"))
+    (w,) = [w for w in res["ventanas"] if w["room"] == "living"]
+    assert abs(w["minimo"] - max(CI["vano_min"], S["iluminacion"] * area)) < 0.01 and w["area"] >= w["minimo"] - 0.01
+    V = copy.deepcopy(ST.DEFAULTS["vivienda"])
+    V["cocina_integrada"]["vano_min"] = 3.5                  # más que el 10 %: la ventana del estar, de 2,92 m
+    (w,) = [w for w in P.layout_unit(rect(9.5, 8.0), 2, vivienda=V)["ventanas"] if w["room"] == "living"]
+    assert w["minimo"] == 3.5 and w["area"] >= 3.5 - 0.01, w
+    res = P.layout_unit(rect(9.5, 8.0), 2, ventanas=dict(S, iluminacion=0.5))
+    assert any(m.startswith("Estar-Comedor: ventana de") and m.endswith("(50 % de la superficie del estar y la cocina, 2 m² "
+                                                                         "como mínimo: norma nacional, art. 27)") for m in malos(res)), malos(res)
+    # en los ejemplos: ninguna cocina de más de 5 m² (de un «Hall / Cocina», su parte)
+    for n in ("L", "quiebre_45", "T_dos_lineas", "entre_medianeras_patio_central"):
+        s = json.load(open(os.path.join(os.path.dirname(__file__), "..", "samples", n + ".json"), encoding="utf-8"))
+        p = {k: s[k] for k in ("centerlines", "medianeras") if s.get(k)}
+        if s.get("cores"):
+            p.update(cores_mode="manual", cores=s["cores"])
+        if s.get("patios"):
+            p.update(patios_mode="manual", patios=s["patios"])
+        r = run(s["footprint"], h=s["height"], **p)
+        for u in r["units"]:
+            for x in u["rooms"]:
+                if x["kind"] == "kitchen":
+                    assert x["area"] <= 5.0 + 0.05, (n, u["id"], x["area"])
+            assert not any("art. 27" in c["msg"] for c in u["checks"]), (n, u["id"])
+
+if __name__ == "__main__":
+    test_cocina_integrada(); print("OK55")
+
+
+def test_superficie_minima():
+    """R10.8 (norma nacional, «Hecho cuando»): la vivienda con muros contra la superficie mínima del art. 3 (32, 44, 56 y
+    68 m² con 1 a 4 dormitorios; el estudio cuenta como dormitorio, art. 6; con más de 4, 12 m² más por cada uno): por
+    debajo es una falla (la calidad baja y ya no dice «medidas mínimas cumplidas»), si cumple, una línea informativa. Un
+    monoambiente no tiene dormitorio y baño independientes (art. 2): se acepta desde 32 m² con muros (criterio del
+    usuario). Lo calcula layout después de los planos, igual para todas sus variantes."""
+    from engine import plans as P, standards as ST
+    assert ST.DEFAULTS["vivienda"]["superficie_min"] == [32, 32, 44, 56, 68]
+    rect = lambda w, d: [(0.0, 0.0), (w, 0.0), (w, d), (0.0, d)]
+    malos = lambda u: [c["msg"] for c in u["checks"] if not c["ok"]]
+    info = lambda u: [c["msg"] for c in u["checks"] if c.get("info")]
+    res = P.superficie_vivienda(P.layout_unit(rect(9.5, 8.0), 1), 30.43)
+    assert malos(res) == ["Superficie con muros 30.4 m² < mínimo 32 m² para 1 dormitorio (norma nacional, art. 3)"]
+    assert res["score"] == 50 and P.TODO_BIEN not in [c["msg"] for c in res["checks"]]
+    res = P.superficie_vivienda(P.layout_unit(rect(9.5, 8.0), 2), 82.7)
+    assert res["score"] == 100 and "Superficie con muros 82.7 m² (mínimo 44 m² para 2 dormitorios, art. 3)" in info(res)
+    # el estudio cuenta (art. 6) y con más de 4 dormitorios, 12 m² más por cada uno
+    falsa = {"rooms": [{"kind": "study"}], "bedrooms": 4, "checks": [{"ok": True, "msg": P.TODO_BIEN}], "score": 100}
+    P.superficie_vivienda(falsa, 79.0)
+    assert malos(falsa) == ["Superficie con muros 79.0 m² < mínimo 80 m² para 5 dormitorios (contando el estudio, art. 6) "
+                            "(norma nacional, art. 3)"] and falsa["score"] == 0
+    # «Hecho cuando»: un dormitorio de 26,5 m² libres, 29,8 con muros
+    barra = [[0, 0], [40, 0], [40, 16], [0, 16]]
+    r = run(barra, unit_mix=[{"name": "1 dorm", "area": 26, "percent": 100, "dorms": 1}], min_unit_width=3.5)
+    for u in r["units"]:
+        assert u["area_muros"] < 32 and "Superficie con muros %.1f m² < mínimo 32 m² para 1 dormitorio (norma nacional, " \
+            "art. 3)" % u["area_muros"] in malos(u), (u["id"], malos(u))
+    # monoambiente de 28 m² (29 con muros): falla; de 35 m², se acepta
+    r = run(barra, unit_mix=[{"name": "Mono", "area": 28, "percent": 100, "dorms": 0}], min_unit_width=3.5)
+    for u in r["units"]:
+        assert u["area_muros"] < 32 and "Monoambiente de %.1f m² con muros: la norma nacional pide dormitorio y baño como " \
+            "locales independientes (art. 2); se acepta desde 32 m² (criterio del usuario)" % u["area_muros"] in malos(u)
+    r = run(barra, unit_mix=[{"name": "Mono", "area": 35, "percent": 100, "dorms": 0}], min_unit_width=3.5)
+    for u in r["units"]:
+        assert "Monoambiente de %.1f m² con muros: se acepta aunque el dormitorio no sea un local independiente (art. 2, " \
+            "criterio del usuario)" % u["area_muros"] in info(u) and not any("art. 2" in m for m in malos(u))
+    # en los ejemplos: solo la «3 dorm» de 44,8 m² de la cruz no llega
+    s = json.load(open(os.path.join(os.path.dirname(__file__), "..", "samples", "cruz_dos_lineas.json"), encoding="utf-8"))
+    r = run(s["footprint"], h=s["height"], centerlines=s["centerlines"])
+    bajo = [u["id"] for u in r["units"] if any("art. 3)" in m for m in malos(u))]
+    assert bajo == ["U14"], bajo
+
+if __name__ == "__main__":
+    test_superficie_minima(); print("OK56")
+
+
+def test_proporcion_y_divisoria():
+    """R10.8 (norma nacional): art. 14, la profundidad de dormitorios, estar, comedor y estudio de hasta 3 veces su lado
+    menor (si no se avisaron ya por su medida o por no tener fachada) y la del estar con el comedor interior, desde la
+    ventana, de hasta 3 veces su ancho. Art. 53 e: un edificio que se separa de la divisoria queda a 1 m como mínimo
+    (un retiro de medianera de más de 0 y menos de 1 m se avisa; de 1 a 3 m sigue el aviso de las ventanas)."""
+    import copy
+    from engine import plans as P, standards as ST
+    rect = [(0.0, 0.0), (9.5, 0.0), (9.5, 8.0), (0.0, 8.0)]
+    malos = lambda res: [c["msg"] for c in res["checks"] if not c["ok"]]
+    angosto = [(0, {"op": "pared", "p": (6.7, 5.75), "a": (8.1, 5.75)})]          # Dormitorio 2 de 1,40 × 4,50
+    res = P.layout_unit(rect, 2, ediciones=angosto)
+    assert res["ediciones"] == [0] and "Dormitorio 2: lado 1.40 m < mínimo 2.00 m" in malos(res)
+    assert not any("art. 14" in m for m in malos(res))                               # ya avisado por su lado
+    V = copy.deepcopy(ST.DEFAULTS["vivienda"])                                       # con un mínimo rebajado
+    V["dorm_secundario"].update(min_side=1.0, min_area=5.0)
+    res = P.layout_unit(rect, 2, vivienda=V, ediciones=angosto)
+    assert "Dormitorio 2: 4.50 m de profundidad, más de 3 veces su lado menor (1.40 m) (norma nacional, art. 14)" in \
+        malos(res) and res["score"] < 100, malos(res)
+    assert not any("art. 14" in m for m in malos(P.layout_unit(rect, 2, vivienda=V)))
+    # el estar con el comedor interior (la cruz, U02: 3,00 m de ancho y 11,25 m desde la ventana)
+    s = json.load(open(os.path.join(os.path.dirname(__file__), "..", "samples", "cruz_dos_lineas.json"), encoding="utf-8"))
+    r = run(s["footprint"], h=s["height"], centerlines=s["centerlines"])
+    u = next(u for u in r["units"] if u["id"] == "U02")
+    assert "Estar y comedor: 11.25 m de profundidad desde la ventana, más de 3 veces su ancho (3.00 m) (norma nacional, " \
+           "art. 14)" in malos(u), malos(u)
+    assert sum(1 for x in r["units"] for m in malos(x) if "art. 14" in m) == 1
+    assert ST.DEFAULTS["ventanas"]["proporcion_max"] == 3.0 and ST.DEFAULTS["predio"]["retiro_divisoria"] == 1.0
+    # art. 53 e
+    fp = [[0, 0], [30, 0], [30, 16], [0, 16]]
+    aviso = lambda r: [w for w in r["warnings"] if "art. 53 e" in w]
+    r = run(fp, medianeras=[{"a": [0, 16], "b": [0, 0], "retiro": 0.5}])
+    assert aviso(r) == ["Retiro de 0.5 m en medianera: si el edificio se separa de la divisoria, la norma nacional pide 1 m "
+                        "como mínimo (art. 53 e); pon 0 (adosado) o 1 m o más"], r["warnings"]
+    assert not any("sigue sin admitir ventanas" in w for w in r["warnings"])          # un solo aviso
+    for ret in (0, 1.0):
+        r = run(fp, medianeras=[{"a": [0, 16], "b": [0, 0], "retiro": ret}])
+        assert not aviso(r) and (ret == 0) == (not any("sigue sin admitir ventanas" in w for w in r["warnings"])), ret
+    # la web: rótulos de las medidas nuevas, la lista de superficies mínimas en «Normativa → Vivienda»
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    for t in ("cocina_integrada:'", "vano_min:'", "superficie_min:'", "retiro_divisoria:'", "proporcion_max:'",
+              "superficie_min:1}", "else if(g==='vivienda'&&k!=='superficie_min') continue;"):
+        assert t in html, t
+
+if __name__ == "__main__":
+    test_proporcion_y_divisoria(); print("OK57")

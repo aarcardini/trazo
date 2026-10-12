@@ -152,6 +152,36 @@ def inset(poly, dist):
     return out
 
 
+def desfase(poly, ds):
+    """R10.8: desfase de cada borde por su propia distancia: ds[i] mueve el borde i (poly[i] -> poly[i+1]) hacia afuera
+    (negativo, hacia adentro). Dos bordes seguidos paralelos con distancias distintas dejan un escalón (los dos puntos);
+    los demás se cortan en su mitra. Devuelve el polígono antihorario (polígonos simples no muy degenerados)."""
+    n = len(poly)
+    if area(poly) < 0:                             # antihorario: el borde i del polígono al revés es el n-2-i
+        poly, ds = poly[::-1], [ds[(n - 2 - i) % n] for i in range(n)]
+    lines = []
+    for i in range(n):
+        a, b = poly[i], poly[(i + 1) % n]
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        L = math.hypot(dx, dy) or 1.0
+        nx, ny = dy / L, -dx / L                   # normal hacia afuera (antihorario)
+        lines.append(((a[0] + nx * ds[i], a[1] + ny * ds[i]), (dx / L, dy / L), (nx, ny)))
+    out = []
+    for i in range(n):
+        p1, d1, n1 = lines[i - 1]
+        p2, d2, n2 = lines[i]
+        den = d1[0] * d2[1] - d1[1] * d2[0]
+        if abs(den) < 1e-9:                        # paralelos: el escalón (o un solo punto si la distancia es la misma)
+            v = poly[i]
+            out.append((v[0] + n1[0] * ds[i - 1], v[1] + n1[1] * ds[i - 1]))
+            if abs(ds[i] - ds[i - 1]) > 1e-9:
+                out.append((v[0] + n2[0] * ds[i], v[1] + n2[1] * ds[i]))
+            continue
+        t = ((p2[0] - p1[0]) * d2[1] - (p2[1] - p1[1]) * d2[0]) / den
+        out.append((p1[0] + t * d1[0], p1[1] + t * d1[1]))
+    return out
+
+
 def point_in_poly(pt, poly):
     x, y = pt
     inside = False

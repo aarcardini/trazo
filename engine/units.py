@@ -516,6 +516,64 @@ def metrics_mix(units, params):
             "by_type": {k: {"count": v["count"], "avg_area": round(v["area"] / v["count"], 1)} for k, v in by.items()}}
 
 
+# ---------------------------------------------------------------- superficie con muros (R10.8)
+def superficie_con_muros(polys, bordes, pasillos, nucleos, params, S=None, paso=0.25):
+    """R10.8 (norma nacional, art. 3: la superficie de la vivienda se mide con los muros exteriores hasta su cara exterior
+    y hasta el eje de los divisorios): cada tramo del contorno (de a unos `paso` m) se corre hacia afuera según lo que
+    tiene del otro lado. Fachada (el borde de la planta o de un patio interior) y medianera (criterio del usuario: el muro
+    entero): el muro exterior hasta su cara exterior, outer_wall. Otra vivienda: el eje del muro entre las dos,
+    party_wall / 2. El pasillo común (a medio muro de la vivienda): el eje de ese muro, party_wall / 4. Un núcleo (su muro
+    está dentro de su caja): el eje de ese muro, nucleo["muro"] / 2. Nada cerca (una zona sin luz, un rincón): un
+    tabique, party_wall / 2. polys: contornos de mundo de las viviendas; bordes[i]: los de la planta de la vivienda i
+    (exterior y patios interiores); pasillos y núcleos: sus polígonos de mundo. Devuelve las superficies, en orden."""
+    ow, pw = params["outer_wall"], params["party_wall"]
+    muro = (S or ST.merged(params.get("standards")))["nucleo"]["muro"]
+    otros = [(G.bbox(p), p, "vivienda", i) for i, p in enumerate(polys) if len(p) >= 3] + \
+        [(G.bbox(p), p, "pasillo", None) for p in pasillos if len(p) >= 3] + \
+        [(G.bbox(p), p, "nucleo", None) for p in nucleos if len(p) >= 3]
+    sondas = (0.05, pw / 2 + 0.05, pw + 0.05)
+    lejos = sondas[-1] + 1e-6
+    out = []
+    for i, pl in enumerate(polys):
+        poly = G.ensure_ccw(G.clean([tuple(p) for p in pl]))
+        if len(poly) < 3:
+            out.append(0.0)
+            continue
+        bx0, by0, bx1, by1 = G.bbox(poly)
+        cerca = [o for o in otros if o[3] != i and o[0][0] <= bx1 + lejos and o[0][2] >= bx0 - lejos and
+                 o[0][1] <= by1 + lejos and o[0][3] >= by0 - lejos]
+        lazos = [b for b in bordes[i] if b]
+        pts, ds = [], []
+        for k in range(len(poly)):
+            a, b = poly[k], poly[(k + 1) % len(poly)]
+            L = math.hypot(b[0] - a[0], b[1] - a[1])
+            nx, ny = (b[1] - a[1]) / L, -(b[0] - a[0]) / L         # hacia afuera
+            n = max(1, int(round(L / paso)))
+            prev = None
+            for j in range(n):
+                m = (a[0] + (b[0] - a[0]) * (j + 0.5) / n, a[1] + (b[1] - a[1]) * (j + 0.5) / n)
+                if any(_dist_to_boundary(m, lz) < 0.05 for lz in lazos):
+                    d = ow                                         # fachada o medianera
+                else:
+                    d = pw / 2                                     # otra vivienda, o nada: un tabique
+                    for t in sondas:
+                        q = (m[0] + nx * t, m[1] + ny * t)
+                        tipo = next((o[2] for o in cerca if o[0][0] <= q[0] <= o[0][2] and o[0][1] <= q[1] <= o[0][3]
+                                     and G.point_in_poly(q, o[1])), None)
+                        if tipo:
+                            if tipo == "nucleo":
+                                d = muro / 2
+                            elif tipo == "pasillo" and t < pw:     # a medio muro (en la punta, a un muro: su eje)
+                                d = pw / 4
+                            break
+                if prev is None or abs(prev - d) > 1e-9:
+                    pts.append((a[0] + (b[0] - a[0]) * j / n, a[1] + (b[1] - a[1]) * j / n))
+                    ds.append(d)
+                    prev = d
+        out.append(abs(G.area(G.desfase(pts, ds))))
+    return out
+
+
 # ---------------------------------------------------------------- planos de unidad
 def bedrooms_for(area):
     return P.bedrooms_for(area)

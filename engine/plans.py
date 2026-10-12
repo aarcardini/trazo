@@ -33,6 +33,8 @@ FR_MIN, FR_MAX = 1.8, 2.8     # fondo de la franja de servicios (configure lo to
 BED_MAX = 4.5         # fondo máximo de un dormitorio al fondo
 KITCH_LINE = 2.7      # mesada en línea con la heladera (configure lo toma de equipamiento)
 KITCH_L = 2.2         # fondo de una cocina en L: la mesada, su paso y la heladera en la otra pared (ídem)
+KITCH_MESADA = 2.0    # R10.8: largo de la mesada sin la heladera: bacha, mesada de trabajo y cocina (ídem)
+KITCH_FRENTE = 1.5    # R10.8: la mesada y su paso delante (ídem)
 V = ST.DEFAULTS["vivienda"]
 
 
@@ -51,7 +53,8 @@ def configure(vivienda, equip=None, accesible=False):
     """Ajusta las medidas de proyecto a partir de la tabla de estándares (standards.py / web). accesible: el baño
     principal toma el ancho del baño accesible."""
     global HALL, LIV_MIN, BED_MAIN, BED_W, BATH_W1, BATH_W2, HALL_W, KITCH_D, LAV_W, BATH2_D, V, DOOR, ENTRY, DOOR_ACC
-    global CAMA_PLACARD, CAMA_FONDO, BATH_MIN, BATH_MIN_D, BATH_FULL, FR_MIN, FR_MAX, KITCH_LINE, KITCH_L
+    global CAMA_PLACARD, CAMA_FONDO, BATH_MIN, BATH_MIN_D, BATH_FULL, FR_MIN, FR_MAX, KITCH_LINE, KITCH_L, KITCH_MESADA
+    global KITCH_FRENTE
     V = vivienda
     eq = equip or ST.DEFAULTS["equipamiento"]
     CAMA_PLACARD = _cama_placard(eq)
@@ -75,6 +78,8 @@ def configure(vivienda, equip=None, accesible=False):
     FR_MIN, FR_MAX = V["franja_servicios"]["min_side"], V["franja_servicios"]["max_side"]
     KITCH_LINE = eq["heladera"][0] + eq["bacha_cocina"] + eq["mesada_trabajo"] + eq["cocina_horno"]
     KITCH_L = eq["mesada_fondo"] + eq["paso_cocina"] + eq["heladera"][1]
+    KITCH_MESADA = eq["bacha_cocina"] + eq["mesada_trabajo"] + eq["cocina_horno"]
+    KITCH_FRENTE = eq["mesada_fondo"] + eq["paso_cocina"]
 MIN_SHARE = {"puerta": DOOR + 0.1, "abierto": 0.85}
 NAMES = {"hall": "Hall", "kitchen": "Cocina", "living": "Estar-Comedor", "dining": "Comedor", "hallway": "Pasillo",
          "bath": "Baño", "bedroom": "Dormitorio", "laundry": "Lavadero", "storage": "Depósito", "study": "Estudio",
@@ -267,12 +272,14 @@ def _tramos_fachada(poly, borde, is_facade, v1, paso=0.25):
     return out
 
 
-def _ventanas(rooms, borde, is_facade, v1, S):
+def _ventanas(rooms, borde, is_facade, v1, S, cocinas=0.0):
     """R5.5: una ventana por estancia habitable, centrada en su tramo de fachada (primero el del fondo, después el más
     largo), del ancho típico o del que pide el vano mínimo (S["iluminacion"] de su superficie), sin pasar de la mocheta;
     si no alcanza, otra en el tramo siguiente. R5.3: en una esquina, también una (típica) en la otra fachada. El comedor
-    sin fachada se ilumina por el estar: su superficie se suma a la del estar. Devuelve (ventanas en el marco de la
-    vivienda, comprobaciones con la estancia en "room")."""
+    sin fachada se ilumina por el estar: su superficie se suma a la del estar. R10.8 (norma nacional, art. 27): cocinas,
+    la superficie de las cocinas integradas sin ventana, también se suma a la del estar, y su vano no baja de
+    cocina_integrada["vano_min"]. Devuelve (ventanas en el marco de la vivienda, comprobaciones con la estancia en
+    "room")."""
     largo = lambda t: ((t[1][0] - t[0][0]) ** 2 + (t[1][1] - t[0][1]) ** 2) ** 0.5
     habit = [r for r in rooms if r["kind"] in ("bedroom", "living", "dining", "study")]
     tramos = {r["id"]: sorted(_tramos_fachada(r["poly"], borde, is_facade, v1),     # primero la fachada del fondo
@@ -282,8 +289,11 @@ def _ventanas(rooms, borde, is_facade, v1, S):
     for r in habit:
         if r in comedor:                               # el comedor interior se ilumina por el estar
             continue
-        area = r["area"] + (sum(c["area"] for c in comedor) if r["kind"] == "living" else 0.0)
+        estar = r["kind"] == "living"
+        area = r["area"] + (sum(c["area"] for c in comedor) + cocinas if estar else 0.0)
         req = S["iluminacion"] * area
+        if estar and cocinas:                          # R10.8: el vano del estar con la cocina integrada (art. 27)
+            req = max(req, _ci()["vano_min"])
         tip = S["ancho_estar"] if r["kind"] in ("living", "dining") else S["ancho_dormitorio"]
         hecho, n_, usadas = 0.0, 0, []
         for a, b, n in tramos[r["id"]]:
@@ -306,9 +316,13 @@ def _ventanas(rooms, borde, is_facade, v1, S):
             checks.append({"ok": False, "room": r["id"], "msg": "%s: no entra una ventana en su fachada (vano mínimo "
                                                                 "%.2f m²)" % (r["name"], req)})
         elif hecho < req - 1e-6:
+            de = [] if not estar else ["el estar"] + (["el comedor"] if comedor else []) + (["la cocina"] if cocinas else [])
+            de = " de " + ", ".join(de[:-1]) + " y " + de[-1] if len(de) > 1 else ""
             checks.append({"ok": False, "room": r["id"], "msg": "%s: ventana%s de %.2f m² < %.2f m² (%.0f %% de la "
                            "superficie%s)" % (r["name"], "s" if n_ > 1 else "", hecho, req, 100 * S["iluminacion"],
-                                              " del estar y el comedor" if r["kind"] == "living" and comedor else "")})
+                                              de.replace(" de el ", " del ", 1) + (
+                                                  ", %g m² como mínimo: norma nacional, art. 27" % _ci()["vano_min"]
+                                                  if estar and cocinas else ""))})
     return out, checks
 
 
@@ -395,13 +409,57 @@ def _anchos_dormitorios(Wn, nf, bedD):
     return widths
 
 
-def _plan_rects(x0, v0, x1, v1, nb, warnings, acc=None, lateral=False, hall_x0=False, vestidor=False):
+def _ci():
+    """R10.8: medidas de la cocina integrada al estar sin ventana propia (norma nacional, art. 27)."""
+    return V.get("cocina_integrada") or ST.DEFAULTS["vivienda"]["cocina_integrada"]
+
+
+def _fondo_cocina(w):
+    """R10.8: fondo con el que entra la mesada de una cocina de ancho w (a lo largo del pasillo común, su pared maciza):
+    en línea (heladera, bacha, mesada y cocina) con su paso delante, sin bajar del lado mínimo de una cocina; si no entra
+    en línea, en L (la heladera en la pared del costado, después del paso); más angosta que la mesada sin la heladera, la
+    mesada entera contra la pared del costado."""
+    if w >= KITCH_LINE - 1e-6:
+        return max(V["cocina"]["min_side"], KITCH_FRENTE)
+    if w >= KITCH_MESADA - 1e-6:
+        return KITCH_L
+    return KITCH_LINE
+
+
+def _cocina_integrada(w, kd, kd_min=0.0, real=None):
+    """R10.8 (norma nacional, art. 27; criterio del usuario: Trazo la dibuja así): (ancho, fondo) de la cocina integrada
+    sin ventana de ancho w y fondo kd, con cocina_integrada["max_area"] como máximo. Primero pierde fondo (lo gana el
+    estar), hasta el que pide su mesada (_fondo_cocina) y no menos de kd_min (el baño de la misma franja); si aún pasa,
+    se angosta, con el fondo que pida su nuevo ancho y sin pasar de kd (lo que deja va al hall). Si ni así entra (medidas
+    cambiadas), la más chica posible: la comprobación lo avisa. Una cocina que ya entra no cambia; real: su superficie
+    dentro de la vivienda (un muro oblicuo puede cortar el rectángulo)."""
+    tope = _ci()["max_area"]
+    if w <= 0 or (w * kd if real is None else real) <= tope + 1e-6:
+        return w, kd
+    f = min(kd, max(_fondo_cocina(w), kd_min, tope / w))
+    if w * f <= tope + 1e-6:
+        return w, f
+    linea = max(V["cocina"]["min_side"], KITCH_FRENTE)
+    mejor = (w * f > tope + 1e-6, -w, w, f)
+    for f_ in sorted({max(t, kd_min) for t in (linea, KITCH_L, KITCH_LINE)}):
+        if f_ > kd + 1e-6:
+            continue
+        lo = max(KITCH_FRENTE, _ci()["min_side"]) if f_ >= KITCH_LINE - 1e-6 else \
+            KITCH_MESADA if f_ >= KITCH_L - 1e-6 else KITCH_LINE            # el ancho con el que la mesada entra
+        if w < lo - 1e-6:
+            continue
+        w_ = min(w, max(lo, tope / f_))
+        mejor = min(mejor, (w_ * f_ > tope + 1e-6, -w_, w_, f_))
+    return mejor[2], mejor[3]
+
+
+def _plan_rects(x0, v0, x1, v1, nb, warnings, acc=None, lateral=False, hall_x0=False, vestidor=False, area_de=None):
     """Rectángulos de estancias, conexiones con puerta (las abiertas de la zona de día se deducen después) y lo que queda
     sin uso [(rect, aviso)]. acc: frente y fondo del baño de una vivienda accesible (None si no lo es). lateral (R5.3): el
     costado x1 es fachada y el frente no alcanza: el último dormitorio va a ese costado, entre el pasillo común y el
     pasillo interno. hall_x0 (R3.7): el hall, y con él la entrada, en el extremo x0 (el pasillo común solo llega ahí);
     la cocina queda entre el hall y la zona de noche. vestidor (R5.10): el dormitorio principal lleva vestidor (ver
-    _vestidor).
+    _vestidor). area_de(rect): superficie del rectángulo dentro de la vivienda (R10.8: la cocina, de 5 m² como máximo).
     v2.33 (criterio del usuario): el placard es el armario del dormitorio, no una estancia. La franja sin luz entre el
     pasillo interno y el pasillo común lleva baños, lavadero y un depósito de hasta 4 m², con el menor fondo con el que
     entran (lo demás va a los dormitorios). Si sobra franja: A, el dormitorio principal pasa al final del pasillo, en
@@ -416,20 +474,31 @@ def _plan_rects(x0, v0, x1, v1, nb, warnings, acc=None, lateral=False, hall_x0=F
         if rect[2] - rect[0] > 0.3 and rect[3] - rect[1] > 0.3:
             R[i] = (kind, rect, name or NAMES[kind])
 
+    def real(rect, menos=0.0):
+        """Superficie del rectángulo dentro de la vivienda (sin area_de, la del rectángulo), menos «menos»."""
+        return (area_de(rect) if area_de else (rect[2] - rect[0]) * (rect[3] - rect[1])) - menos
+
     if nb == 0:     # monoambiente
         kd = min(2.4, D * 0.4)
         bw = min(2.0, W * 0.35)
         hw = min(1.4, max(1.1, W * 0.2))
         if acc and W - acc[0] - hw >= 1.6:             # baño accesible, si la cocina sigue entrando
             bw, kd = acc[0], max(kd, min(acc[1], D - 3.5))
+        # R10.8: la cocina integrada, de 5 m² como máximo (art. 27): la franja de la entrada pierde fondo (sin que el
+        # baño baje de su mínimo; el accesible, no) y, si hace falta, la cocina se angosta y el hall se agranda
+        wk = W - bw - hw
+        k0 = x1 - bw - wk if hall_x0 else x0 + bw
+        wk, kd = _cocina_integrada(wk, kd, kd if acc and bw == acc[0] else
+                                   min(kd, max(BATH_MIN_D, V["bano"]["min_area"] / max(bw, 0.1))),
+                                   real((k0, v0, k0 + wk, v0 + kd)))
         if hall_x0:                                    # R3.7: la entrada en x0, el baño en el otro extremo
-            add("hall", "hall", (x0, v0, x0 + hw, v0 + kd))
-            add("kitchen", "kitchen", (x0 + hw, v0, x1 - bw, v0 + kd))
+            add("hall", "hall", (x0, v0, x1 - bw - wk, v0 + kd))
+            add("kitchen", "kitchen", (x1 - bw - wk, v0, x1 - bw, v0 + kd))
             add("bath1", "bath", (x1 - bw, v0, x1, v0 + kd))
         else:
             add("bath1", "bath", (x0, v0, x0 + bw, v0 + kd))
-            add("kitchen", "kitchen", (x0 + bw, v0, x1 - hw, v0 + kd))
-            add("hall", "hall", (x1 - hw, v0, x1, v0 + kd))
+            add("kitchen", "kitchen", (x0 + bw, v0, x0 + bw + wk, v0 + kd))
+            add("hall", "hall", (x0 + bw + wk, v0, x1, v0 + kd))
         add("living", "living", (x0, v0 + kd, x1, v1), "Estar-Dormitorio")
         E.append(("living", "bath1", "puerta"))
         if vestidor:
@@ -591,29 +660,45 @@ def _plan_rects(x0, v0, x1, v1, nb, warnings, acc=None, lateral=False, hall_x0=F
         _vestidor(R, E, warnings, suite, hv1)
 
     # ---- zona de día: hall junto a la zona de noche, cocina, comedor/estar a fachada
+    # R10.8: la cocina integrada al estar sin ventana, de 5 m² como máximo (norma nacional, art. 27): pierde fondo (lo gana
+    # el estar) hasta el que pide su mesada y, si aún pasa, se angosta y lo que deja va al hall
     if deep:
         if xs - x0 - hw >= 1.8:
-            hx = x0 if hall_x0 else xs - hw            # R3.7: el hall en x0 y la cocina hacia la zona de noche
-            add("kitchen", "kitchen", (x0 + hw, v0, xs, v0 + kd) if hall_x0 else (x0, v0, xs - hw, v0 + kd))
-            add("hall", "hall", (hx, v0, hx + hw, v0 + kd))
-        else:
+            wk = xs - x0 - hw
+            k0 = xs - wk if hall_x0 else x0
+            wk, kd = _cocina_integrada(wk, kd, 0.0, real((k0, v0, k0 + wk, v0 + kd)))
+            if hall_x0:                                # R3.7: el hall en x0 y la cocina hacia la zona de noche
+                add("kitchen", "kitchen", (xs - wk, v0, xs, v0 + kd))
+                add("hall", "hall", (x0, v0, xs - wk, v0 + kd))
+            else:
+                add("kitchen", "kitchen", (x0, v0, x0 + wk, v0 + kd))
+                add("hall", "hall", (x0 + wk, v0, xs, v0 + kd))
+        else:                                          # la cocina dentro del hall: cuenta solo su parte
+            kd = _cocina_integrada(xs - x0 - hw, kd, 0.0, real((x0, v0, xs, v0 + kd), hw * kd))[1]
             add("hall", "hall", (x0, v0, xs, v0 + kd), "Hall / Cocina")
     else:
         bw = BATH_W1
+        wk = xs - x0 - hw - bw                         # la franja de la entrada, con el fondo del baño (no menos de 1,80)
+        cocina = wk >= 1.8
+        if cocina:
+            k0 = xs - wk if hall_x0 else x0
+            wk, kd = _cocina_integrada(wk, kd, min(kd, 1.8), real((k0, v0, k0 + wk, v0 + kd)))
         if hall_x0:                                    # R3.7: hall en x0, baño a su lado y la cocina hasta la zona de
-            add("hall", "hall", (x0, v0, x0 + hw, v0 + kd))        # noche (se pasa por ella al pasillo interno)
-            if xs - x0 - hw - bw >= 1.8:
-                add("bath1", "bath", (x0 + hw, v0, x0 + hw + bw, v0 + kd), "Baño")
-                add("kitchen", "kitchen", (x0 + hw + bw, v0, xs, v0 + kd))
+            if cocina:                                 # noche (se pasa por ella al pasillo interno)
+                add("hall", "hall", (x0, v0, xs - wk - bw, v0 + kd))
+                add("bath1", "bath", (xs - wk - bw, v0, xs - wk, v0 + kd), "Baño")
+                add("kitchen", "kitchen", (xs - wk, v0, xs, v0 + kd))
             else:
+                add("hall", "hall", (x0, v0, x0 + hw, v0 + kd))
                 add("bath1", "bath", (x0 + hw, v0, xs, v0 + kd), "Baño")
         else:
-            if xs - x0 - hw - bw >= 1.8:
-                add("kitchen", "kitchen", (x0, v0, xs - hw - bw, v0 + kd))
-                add("bath1", "bath", (xs - hw - bw, v0, xs - hw, v0 + kd), "Baño")
+            if cocina:
+                add("kitchen", "kitchen", (x0, v0, x0 + wk, v0 + kd))
+                add("bath1", "bath", (x0 + wk, v0, x0 + wk + bw, v0 + kd), "Baño")
+                add("hall", "hall", (x0 + wk + bw, v0, xs, v0 + kd))
             else:
                 add("bath1", "bath", (x0, v0, xs - hw, v0 + kd), "Baño")
-            add("hall", "hall", (xs - hw, v0, xs, v0 + kd))
+                add("hall", "hall", (xs - hw, v0, xs, v0 + kd))
         E.append(("hall", "bath1", "puerta"))
     lv0 = v0 + kd
     sp = v1 - 5.0
@@ -748,6 +833,46 @@ def _main_con_luz(poly, main, annexes, is_facade, paso=0.25):
     return (lx0, v0, lx1, v1), annexes + [p for p in extra if p and abs(G.area(p)) > 1.0]
 
 
+TODO_BIEN = "Dormitorios y estar con fachada; medidas mínimas cumplidas"
+
+
+def _calidad(checks):
+    """Calidad del plano: el porcentaje de sus comprobaciones (sin las informativas) que se cumplen."""
+    real = [c for c in checks if not c.get("info")]
+    return round(100.0 * sum(1 for c in real if c["ok"]) / len(real)) if real else 100
+
+
+def superficie_vivienda(res, area_muros, vivienda=None):
+    """R10.8: la superficie de la vivienda con muros (ver units.superficie_con_muros) contra la mínima de la norma nacional
+    según sus dormitorios (art. 3: vivienda["superficie_min"]; más allá de la lista, el último salto por cada dormitorio);
+    el estudio dibujado cuenta como dormitorio (art. 6, presunción de destino). Un monoambiente no tiene el dormitorio y
+    el baño independientes (art. 2): se acepta desde el primer valor de la lista (criterio del usuario). Agrega a
+    res["checks"] una falla (y quita «medidas mínimas cumplidas») o una línea informativa y recalcula res["score"]. La
+    llama layout después de units.unit_rooms: vale igual para todas las variantes del plano."""
+    tabla = (vivienda or V).get("superficie_min") or ST.DEFAULTS["vivienda"]["superficie_min"]
+    estudios = sum(1 for r in res["rooms"] if r["kind"] == "study")
+    n = res["bedrooms"] + estudios
+    paso = tabla[-1] - tabla[-2] if len(tabla) > 1 else 0
+    minimo = tabla[n] if n < len(tabla) else tabla[-1] + paso * (n - len(tabla) + 1)
+    a = round(area_muros, 1)
+    falla = a < minimo - 1e-6
+    if n == 0:
+        msg = ("Monoambiente de %.1f m² con muros: la norma nacional pide dormitorio y baño como locales independientes "
+               "(art. 2); se acepta desde %g m² (criterio del usuario)" % (a, minimo)) if falla else \
+            ("Monoambiente de %.1f m² con muros: se acepta aunque el dormitorio no sea un local independiente (art. 2, "
+             "criterio del usuario)" % a)
+    else:
+        dorm = ("1 dormitorio" if n == 1 else "%d dormitorios" % n) + (" (contando el estudio, art. 6)" if estudios else "")
+        msg = ("Superficie con muros %.1f m² < mínimo %g m² para %s (norma nacional, art. 3)" % (a, minimo, dorm)) \
+            if falla else ("Superficie con muros %.1f m² (mínimo %g m² para %s, art. 3)" % (a, minimo, dorm))
+    if falla:
+        res["checks"] = [c for c in res["checks"] if c["msg"] != TODO_BIEN] + [{"ok": False, "msg": msg}]
+    else:
+        res["checks"].append({"ok": True, "info": True, "msg": msg})
+    res["score"] = _calidad(res["checks"])
+    return res
+
+
 def _faltan(rooms):
     """Programa mínimo (v2.30; norma nacional, arts. 17 y 21): toda vivienda tiene baño y cocina; la cocina dentro del
     hall («Hall / Cocina») cuenta. Lo que falta baja la calidad del plano."""
@@ -759,10 +884,14 @@ def _faltan(rooms):
     return out
 
 
-def _std_for(r, nb):
+def _std_for(r, nb, integradas=()):
+    """Medidas mínimas de la estancia r. integradas (R10.8): las cocinas integradas al estar sin ventana propia, que
+    toman las de la norma nacional para ellas (art. 27: de 3 a 5 m², lado 1,40) en lugar de las de una cocina (art. 21)."""
     k, i = r["kind"], r["id"]
     if k == "bedroom":
         return V["dorm_principal"] if (i == "bed1") else V["dorm_secundario"]
+    if k == "kitchen" and i in integradas:
+        return _ci()
     return {"living": V["estar_comedor"], "kitchen": V["cocina"], "laundry": V["lavadero"], "study": V["estudio"],
             "hallway": V["pasillo"], "hall": V["hall"], "vestidor": V["vestidor"],
             "bath": V["bano"] if i == "bath1" else V["bano_aux"]}.get(k)
@@ -843,8 +972,7 @@ def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None, accesible=F
     res = elegido if elegido is not None and not ediciones else plano(espejar, lateral, ediciones, hall_x0)
     if entrada is not None and not _entra(res, entrada):
         res["checks"].append({"ok": False, "msg": "La puerta de entrada no da al pasillo común"})
-        real = [c for c in res["checks"] if not c.get("info")]
-        res["score"] = round(100.0 * sum(1 for c in real if c["ok"]) / len(real))
+        res["score"] = _calidad(res["checks"])
     if vestidor and any(r["id"] == "vest" for r in res["rooms"]):
         # R5.10: el vestidor, solo si el plano no empeora (calidad y estancias); si no, sin él y con aviso
         sin = layout_unit(poly, nb, is_facade, vivienda, equip, accesible, ediciones, ventanas, entrada)
@@ -930,7 +1058,7 @@ def _distribuir(poly, nb, is_facade, equip, accesible, ediciones, ventanas, late
         (x0, v0, x1, v1), annexes = _main_con_luz(poly, (x0, v0, x1, v1), annexes, is_facade)
     warnings = []
     R, E, vacios = _plan_rects(x0, v0, x1, v1, nb, warnings, equip["bano_accesible"] if accesible else None, lateral,
-                               hall_x0, vestidor)
+                               hall_x0, vestidor, lambda r: G.strip_area(poly, r[0], r[2], r[1], r[3]))
     vacios = [(G.clip_rect(poly, r[0], r[2], r[1], r[3]), msg) for r, msg in vacios]
     hechas = [k for k, e in (ediciones or []) if e.get("op") == "pared" and e.get("a") and _mover_pared(R, e)]
     # conexiones abiertas de la zona de día: entre estancias de día que comparten borde
@@ -1006,7 +1134,15 @@ def _distribuir(poly, nb, is_facade, equip, accesible, ediciones, ventanas, late
             out += [t for t in tramos if not corto(t)]
         return out
     fachadas = {r["id"]: en_fachada(r["rect"]) for r in rooms if r["kind"] in ("bedroom", "living", "dining")}
-    vent, sin_luz = _ventanas(rooms, poly, is_facade, v1, ventanas or ST.DEFAULTS["ventanas"])   # R5.5
+    # R10.8: las cocinas integradas a la zona de día (abiertas a ella) sin ventana propia (Trazo todavía no les pone):
+    # norma nacional, art. 27. De un «Hall / Cocina» cuenta solo la parte de la cocina
+    abiertas = {x for a, b, t in E if t == "abierto" for x in (a, b)}
+    integradas = {r["id"]: r["area"] if r["kind"] == "kitchen" else
+                  max(0.0, r["area"] - HALL_W * (r["rect"][3] - r["rect"][1]))
+                  for r in rooms if (r["kind"] == "kitchen" or "Cocina" in r["name"]) and r["id"] in abiertas}
+    S_v = ventanas or ST.DEFAULTS["ventanas"]
+    vent, sin_luz = _ventanas(rooms, poly, is_facade, v1, S_v, sum(integradas.values()))   # R5.5
+    integradas = {i: a for i, a in integradas.items() if i not in {w["room"] for w in vent}}
     # conexiones y puertas
     doors, edges = [], []
     for a, b, typ in E:
@@ -1081,6 +1217,7 @@ def _distribuir(poly, nb, is_facade, equip, accesible, ediciones, ventanas, late
     checks.append({"ok": not unreached, "msg": "Todas las estancias se alcanzan desde la entrada" if not unreached
                    else "Sin acceso desde la entrada: " + ", ".join(unreached)})
     below, chicas, oscuras = [], set(), set()          # chicas: ya avisadas por su medida (no se suma lo que no entra)
+    prop = S_v.get("proporcion_max", ST.DEFAULTS["ventanas"]["proporcion_max"])     # R10.8: art. 14
     for r in rooms:
         if r["kind"] in ("bedroom", "living", "study"):
             rx0, rv0, rx1, rv1 = r["rect"]
@@ -1096,7 +1233,12 @@ def _distribuir(poly, nb, is_facade, equip, accesible, ediciones, ventanas, late
                 checks.append({"ok": False, "msg": "%s sin fachada (sin luz natural)" % r["name"]})
                 oscuras.add(r["id"])
         w = min(r["rect"][2] - r["rect"][0], r["rect"][3] - r["rect"][1])
-        sd = _std_for(r, nb)
+        sd = _std_for(r, nb, integradas)
+        if r["id"] in integradas and integradas[r["id"]] > _ci()["max_area"] + 1e-6:     # R10.8: art. 27
+            checks.append({"ok": False, "msg": "Cocina integrada sin ventana de %.1f m²%s: la norma nacional admite de %g a "
+                                               "%g m² (art. 27); más grande, con ventana propia (art. 24)" % (
+                                                   integradas[r["id"]], "" if r["kind"] == "kitchen" else " (en el hall)",
+                                                   _ci()["min_area"], _ci()["max_area"])})
         if sd:
             ms = sd.get("min_side")
             if ms and w + 1e-6 < ms:
@@ -1114,6 +1256,22 @@ def _distribuir(poly, nb, is_facade, equip, accesible, ediciones, ventanas, late
         elif w + 1e-6 < MIN_W.get(r["kind"], 0):
             checks.append({"ok": False, "msg": "%s: ancho %.2f m < mínimo %.2f m" % (r["name"], w, MIN_W[r["kind"]])})
             chicas.add(r["id"])
+        if r["kind"] in ("bedroom", "living", "dining", "study") and r["id"] not in chicas and r["id"] not in oscuras:
+            corto, largo = sorted((r["rect"][2] - r["rect"][0], r["rect"][3] - r["rect"][1]))
+            if largo > prop * corto + 1e-6:            # R10.8: art. 14 (si no se avisó ya por su medida o su fachada)
+                checks.append({"ok": False, "msg": "%s: %.2f m de profundidad, más de %g veces su lado menor (%.2f m) "
+                                                   "(norma nacional, art. 14)" % (r["name"], largo, prop, corto)})
+    con_v = {w["room"] for w in vent} | {c["room"] for c in sin_luz}
+    for d in [r for r in rooms if r["kind"] == "dining" and r["id"] not in con_v and r["id"] not in chicas]:
+        est = next((r for r in rooms if r["kind"] == "living" and r["id"] not in chicas and r["id"] not in oscuras and
+                    _shared(r["rect"], d["rect"])), None)
+        if est:                                        # R10.8: el comedor interior, con el estar que lo ilumina (art. 14)
+            prof = max(est["rect"][3], d["rect"][3]) - min(est["rect"][1], d["rect"][1])
+            ancho = min(est["rect"][2] - est["rect"][0], d["rect"][2] - d["rect"][0])
+            if prof > prop * ancho + 1e-6:
+                checks.append({"ok": False, "msg": "%s y comedor: %.2f m de profundidad desde la ventana, más de %g veces "
+                                                   "su ancho (%.2f m) (norma nacional, art. 14)" % (
+                                                       est["name"], prof, prop, ancho)})
     aberturas = {}                                     # bordes abiertos entre estancias de día: ahí no va un artefacto
     for e in edges:
         if e["type"] == "abierto" and e["ok"]:
@@ -1134,7 +1292,7 @@ def _distribuir(poly, nb, is_facade, equip, accesible, ediciones, ventanas, late
     checks += [{"ok": False, "msg": msg} for p, msg in vacios if msg and p and abs(G.area(p)) >= 0.3]
     checks += _faltan(rooms)
     if all(c["ok"] for c in checks):
-        checks.append({"ok": True, "msg": "Dormitorios y estar con fachada; medidas mínimas cumplidas"})
+        checks.append({"ok": True, "msg": TODO_BIEN})
     if below:
         checks.append({"ok": True, "info": True, "msg": "Por debajo de la medida típica: " + "; ".join(below)})
     rng = V["rango_vivienda"][min(nb, len(V["rango_vivienda"]) - 1)]
@@ -1145,8 +1303,7 @@ def _distribuir(poly, nb, is_facade, equip, accesible, ediciones, ventanas, late
     muros = [((c, lo), (c, hi)) if eje == 0 else ((lo, c), (hi, c))     # tabiques interiores (se arrastran en la web);
              for eje, c, lo, hi in paredes({r["id"]: (r["kind"], r["rect"], r["name"]) for r in rooms   # el borde de
                                             if not r["id"].startswith("annex")})]                     # un anexo no se mueve
-    real = [c for c in checks if not c.get("info")]
-    score = round(100.0 * sum(1 for c in real if c["ok"]) / len(real)) if real else 100
+    score = _calidad(checks)
     for r in rooms:
         del r["rect"]
     return {"rooms": rooms, "doors": doors, "graph": {"nodes": nodes, "edges": edges}, "equipamiento": equipo,
