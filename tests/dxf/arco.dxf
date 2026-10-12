@@ -1,0 +1,206 @@
+  0
+SECTION
+  2
+HEADER
+  9
+$ACADVER
+  1
+AC1027
+  9
+$INSBASE
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  9
+$MEASUREMENT
+ 70
+1
+  9
+$INSUNITS
+ 70
+6
+  0
+ENDSEC
+  0
+SECTION
+  2
+TABLES
+  0
+TABLE
+  2
+LAYER
+ 70
+4
+  0
+LAYER
+  5
+5A
+330
+2
+100
+AcDbSymbolTableRecord
+100
+AcDbLayerTableRecord
+  2
+0
+ 70
+0
+ 62
+7
+  6
+Continuous
+  0
+LAYER
+  5
+5B
+330
+2
+100
+AcDbSymbolTableRecord
+100
+AcDbLayerTableRecord
+  2
+Trazo_Terreno
+ 70
+0
+ 62
+7
+  6
+Continuous
+  0
+LAYER
+  5
+5C
+330
+2
+100
+AcDbSymbolTableRecord
+100
+AcDbLayerTableRecord
+  2
+Trazo_Patios
+ 70
+0
+ 62
+7
+  6
+Continuous
+  0
+LAYER
+  5
+5D
+330
+2
+100
+AcDbSymbolTableRecord
+100
+AcDbLayerTableRecord
+  2
+Trazo_Centerline
+ 70
+0
+ 62
+7
+  6
+Continuous
+  0
+ENDTAB
+  0
+ENDSEC
+  0
+SECTION
+  2
+ENTITIES
+  0
+LWPOLYLINE
+  5
+57
+330
+1F
+100
+AcDbEntity
+  8
+Trazo_Terreno
+100
+AcDbPolyline
+ 90
+5
+ 70
+1
+ 43
+0.0
+ 10
+0
+ 20
+0
+ 10
+20
+ 20
+0
+ 10
+20
+ 20
+7
+ 42
+0.41421356237309503
+ 10
+17
+ 20
+10
+ 10
+0
+ 20
+10
+  0
+CIRCLE
+  5
+58
+330
+1F
+100
+AcDbEntity
+  8
+Trazo_Patios
+100
+AcDbCircle
+ 10
+6.0
+ 20
+5.0
+ 30
+0.0
+ 40
+1.5
+  0
+ARC
+  5
+59
+330
+1F
+100
+AcDbEntity
+  8
+Trazo_Centerline
+100
+AcDbCircle
+ 10
+10.0
+ 20
+-20.0
+ 30
+0.0
+ 40
+25.0
+100
+AcDbArc
+ 50
+60.0
+ 51
+120.0
+  0
+ENDSEC
+  0
+EOF

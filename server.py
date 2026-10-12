@@ -22,6 +22,7 @@ import engine.evacuacion as _evacuacion
 import engine.units as _units
 import engine.patios as _patios
 import engine.dxf as _dxf
+import engine.dxf_lector as _dxf_lector
 
 
 def _stamp():
@@ -45,6 +46,7 @@ def engine():
         for m in (_massing, _circulation, _evacuacion, _units, _patios, _layout):   # en orden: cada uno usa los anteriores
             importlib.reload(m)
         importlib.reload(_dxf)
+        importlib.reload(_dxf_lector)
         _loaded[0] = st
     return _layout, _dxf
 
@@ -156,6 +158,28 @@ class H(BaseHTTPRequestHandler):
                 STATE["mass"] = body
                 STATE["mass_version"] += 1
             return self._send(200, {"ok": True, "version": STATE["mass_version"]})
+        if p == "/api/dxf":       # web «Abrir DXF…» (R1.5): el DXF de AutoCAD o Revit queda como masa, igual que si la mandara Rhino
+            engine()
+            texto = body.get("dxf") if isinstance(body, dict) else None
+            if not isinstance(texto, str) or not texto.strip():
+                return self._send(400, {"error": "Trazo: el DXF llegó vacío. Elige un archivo .dxf guardado desde "
+                                                 "AutoCAD o Revit."})
+            try:
+                masa = _dxf_lector.leer(texto, str(body.get("name") or ""))
+            except _dxf_lector.ErrorDxf as e:
+                return self._send(400, {"error": str(e), "warnings": e.warnings})
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                return self._send(500, {"error": "Trazo: no pude leer este DXF (%s: %s). Guárdalo de nuevo como DXF de "
+                                                 "texto (ASCII) o prueba con otra copia del archivo." %
+                                                 (type(e).__name__, e)})
+            masa["source"] = "dxf"
+            with LOCK:
+                STATE["mass"] = masa
+                STATE["mass_version"] += 1
+                version = STATE["mass_version"]
+            return self._send(200, dict(masa, ok=True, version=version))
         if p == "/api/masterplan":
             engine()
             try:

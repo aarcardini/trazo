@@ -1,0 +1,222 @@
+  0
+SECTION
+  2
+HEADER
+  9
+$ACADVER
+  1
+AC1027
+  9
+$INSBASE
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  9
+$MEASUREMENT
+ 70
+1
+  9
+$INSUNITS
+ 70
+6
+  0
+ENDSEC
+  0
+SECTION
+  2
+TABLES
+  0
+TABLE
+  2
+LAYER
+ 70
+3
+  0
+LAYER
+  5
+47
+330
+2
+100
+AcDbSymbolTableRecord
+100
+AcDbLayerTableRecord
+  2
+0
+ 70
+0
+ 62
+7
+  6
+Continuous
+  0
+LAYER
+  5
+48
+330
+2
+100
+AcDbSymbolTableRecord
+100
+AcDbLayerTableRecord
+  2
+LOTE
+ 70
+0
+ 62
+7
+  6
+Continuous
+  0
+LAYER
+  5
+49
+330
+2
+100
+AcDbSymbolTableRecord
+100
+AcDbLayerTableRecord
+  2
+EJES
+ 70
+0
+ 62
+7
+  6
+Continuous
+  0
+ENDTAB
+  0
+ENDSEC
+  0
+SECTION
+  2
+ENTITIES
+  0
+LINE
+  5
+42
+330
+1F
+100
+AcDbEntity
+  8
+LOTE
+100
+AcDbLine
+ 10
+12
+ 20
+25
+ 30
+0.0
+ 11
+0
+ 21
+25
+ 31
+0.0
+  0
+LINE
+  5
+43
+330
+1F
+100
+AcDbEntity
+  8
+LOTE
+100
+AcDbLine
+ 10
+0
+ 20
+0
+ 30
+0.0
+ 11
+12
+ 21
+0
+ 31
+0.0
+  0
+LINE
+  5
+44
+330
+1F
+100
+AcDbEntity
+  8
+LOTE
+100
+AcDbLine
+ 10
+0
+ 20
+0
+ 30
+0.0
+ 11
+0
+ 21
+25
+ 31
+0.0
+  0
+LINE
+  5
+45
+330
+1F
+100
+AcDbEntity
+  8
+LOTE
+100
+AcDbLine
+ 10
+12
+ 20
+0
+ 30
+0.0
+ 11
+12
+ 21
+25
+ 31
+0.0
+  0
+LINE
+  5
+46
+330
+1F
+100
+AcDbEntity
+  8
+EJES
+100
+AcDbLine
+ 10
+6
+ 20
+-5
+ 30
+0.0
+ 11
+6
+ 21
+30
+ 31
+0.0
+  0
+ENDSEC
+  0
+EOF
