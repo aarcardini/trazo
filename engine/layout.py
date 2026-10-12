@@ -231,11 +231,11 @@ def generate(data):
                           "ventanas": float(m.get("retiro") or 0) >= rmin} for m in meds]
     for m in res["medianeras"]:
         if 0 < m["retiro"] < rdiv - 1e-9:                   # R10.8: separado de la divisoria, 1 m o más (art. 53 e)
-            res["warnings"].append("Retiro de %.1f m en medianera: si el edificio se separa de la divisoria, la norma "
+            res["warnings"].append("Retiro de %g m en medianera: si el edificio se separa de la divisoria, la norma "
                                    "nacional pide %g m como mínimo (art. 53 e); pon 0 (adosado) o %g m o más" % (
                                        m["retiro"], rdiv, rdiv))
         elif 0 < m["retiro"] < rmin:
-            res["warnings"].append("Retiro de %.1f m en medianera: menor a %.1f m, sigue sin admitir ventanas" % (m["retiro"], rmin))
+            res["warnings"].append("Retiro de %g m en medianera: menor a %g m, sigue sin admitir ventanas" % (m["retiro"], rmin))
     # ---- núcleo real: escalera + ascensores según altura y unidades servidas
     S = ST.merged(params.get("standards"))
     cw = params["corridor_width"]

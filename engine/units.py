@@ -524,8 +524,11 @@ def superficie_con_muros(polys, bordes, pasillos, nucleos, params, S=None, paso=
     entero): el muro exterior hasta su cara exterior, outer_wall. Otra vivienda: el eje del muro entre las dos,
     party_wall / 2. El pasillo común (a medio muro de la vivienda): el eje de ese muro, party_wall / 4. Un núcleo (su muro
     está dentro de su caja): el eje de ese muro, nucleo["muro"] / 2. Nada cerca (una zona sin luz, un rincón): un
-    tabique, party_wall / 2. polys: contornos de mundo de las viviendas; bordes[i]: los de la planta de la vivienda i
-    (exterior y patios interiores); pasillos y núcleos: sus polígonos de mundo. Devuelve las superficies, en orden."""
+    tabique, party_wall / 2. Con la vecina o el pasillo se mide la separación real (la sonda en que aparecen: pegados,
+    a medio muro o a un muro) y se va hasta su mitad; con el núcleo, hasta la mitad de la separación más su muro. polys:
+    contornos de mundo de las viviendas; bordes[i]: los de la planta de la vivienda i (exterior y patios interiores);
+    pasillos y núcleos: sus polígonos de mundo. Devuelve las superficies, en orden. Los puntos del desfase van desde el
+    primer vértice de la vivienda (precisos con coordenadas UTM)."""
     ow, pw = params["outer_wall"], params["party_wall"]
     muro = (S or ST.merged(params.get("standards")))["nucleo"]["muro"]
     otros = [(G.bbox(p), p, "vivienda", i) for i, p in enumerate(polys) if len(p) >= 3] + \
@@ -535,7 +538,7 @@ def superficie_con_muros(polys, bordes, pasillos, nucleos, params, S=None, paso=
     lejos = sondas[-1] + 1e-6
     out = []
     for i, pl in enumerate(polys):
-        poly = G.ensure_ccw(G.clean([tuple(p) for p in pl]))
+        poly = G.ensure_ccw(G.clean_rel(pl))           # sin quiebres mínimos ni puntas de ancho cero (redondeo)
         if len(poly) < 3:
             out.append(0.0)
             continue
@@ -543,6 +546,7 @@ def superficie_con_muros(polys, bordes, pasillos, nucleos, params, S=None, paso=
         cerca = [o for o in otros if o[3] != i and o[0][0] <= bx1 + lejos and o[0][2] >= bx0 - lejos and
                  o[0][1] <= by1 + lejos and o[0][3] >= by0 - lejos]
         lazos = [b for b in bordes[i] if b]
+        ox, oy = poly[0]
         pts, ds = [], []
         for k in range(len(poly)):
             a, b = poly[k], poly[(k + 1) % len(poly)]
@@ -560,14 +564,12 @@ def superficie_con_muros(polys, bordes, pasillos, nucleos, params, S=None, paso=
                         q = (m[0] + nx * t, m[1] + ny * t)
                         tipo = next((o[2] for o in cerca if o[0][0] <= q[0] <= o[0][2] and o[0][1] <= q[1] <= o[0][3]
                                      and G.point_in_poly(q, o[1])), None)
-                        if tipo:
-                            if tipo == "nucleo":
-                                d = muro / 2
-                            elif tipo == "pasillo" and t < pw:     # a medio muro (en la punta, a un muro: su eje)
-                                d = pw / 4
+                        if tipo:                           # la separación: 0, medio muro o un muro
+                            hueco = round((t - sondas[0]) / (pw / 2)) * (pw / 2)
+                            d = (hueco + muro) / 2 if tipo == "nucleo" else hueco / 2
                             break
                 if prev is None or abs(prev - d) > 1e-9:
-                    pts.append((a[0] + (b[0] - a[0]) * j / n, a[1] + (b[1] - a[1]) * j / n))
+                    pts.append((a[0] - ox + (b[0] - a[0]) * j / n, a[1] - oy + (b[1] - a[1]) * j / n))
                     ds.append(d)
                     prev = d
         out.append(abs(G.area(G.desfase(pts, ds))))
