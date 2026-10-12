@@ -107,6 +107,7 @@ Desde entonces basta con escribir `trazo` en Rhino.
    - Si ya habías recibido un resultado, pregunta qué hacer: **Reemplazar** (borra el anterior, también lo que esté oculto o bloqueado, y dibuja el nuevo), **Agregar** (deja los dos) o **Cancelar**. No dibujes a mano en las capas `Trazo::Footprint` ni `Trazo::L00…`: Reemplazar las vacía.
    - Los patios recibidos se dibujan en cada nivel (`Trazo::L00::Patios`…); la capa `Trazo::Patios` es solo para enviar.
    - Alternativa sin script: botón **DXF (Rhino)** y luego `Import`.
+   - La tabla de viviendas (nivel, tipo, dormitorios, superficie, evacuación…) se baja desde la web, no desde Rhino: botón **Tabla CSV** en Proyecto → Exportar, para abrirla en Excel o LibreOffice.
 
 ## Desde AutoCAD o Revit
 Trazo lee un **DXF de texto**: en la web, **Proyecto → Abrir DXF…**, y la masa aparece como si la hubiera mandado Rhino (con medianeras, pasillos, núcleos y patios si el DXF los trae). No hace falta Rhino.
@@ -164,6 +165,14 @@ Si algo falla en Rhino, ejecuta el script y elige **Diagnostico**. Si no se resu
 - **Pasillo y núcleos**: eje (automático o dibujado), ancho de pasillo, núcleos (ancho, fondo incluyendo pasillo, cantidad), distancias de evacuación (salida única / múltiple) y núcleos extra automáticos.
 - **Mix**: tipos con m² objetivo y %, ancho mínimo, muro medianero; métricas Match Score, Fit y Unidades únicas.
 - **Planos**: distribución día/noche con pasillo interno, puertas y grafo de conexiones verificado.
+
+## Novedades v2.50
+- **Tabla de viviendas en CSV (R7.2):** en **Proyecto → Exportar**, el botón nuevo **Tabla CSV** baja un archivo `trazo_viviendas_<nombre de la masa>.csv` con una fila por vivienda **y por nivel residencial**: la planta tipo se repite en cada nivel, así que 8 viviendas en 5 niveles son 40 filas. La tabla se baja desde la web; Rhino no cambia.
+  - **Columnas:** Nivel, Vivienda, Tipo, Dormitorios, Superficie (m²), Con muros (m²), Frente (m), Fondo (m), Pasillo, Evacuación (m), Fondo de saco (m), Evacuación (cumple, fondo de saco o no cumple), Calidad del plano (0 a 100) y Observaciones (los avisos del plano de esa vivienda que no se cumplen, separados por « | »; vacío si cumple todo). Después de una línea en blanco vienen los totales: viviendas totales, niveles residenciales, superficie vendible (NSA) y eficiencia del edificio, los mismos del resumen de la web. Los niveles que no son de vivienda (estacionamiento, comercio, oficinas) no llevan filas.
+  - **Cómo abrirla en Excel o LibreOffice:** con doble clic, si tu planilla está configurada en español (Uruguay): el archivo usa «;» como separador, coma decimal y UTF-8 con BOM (las tildes salen bien), así que cada dato queda en su columna y las superficies se pueden sumar, filtrar y ordenar sin convertir nada. Si todo cae en una sola columna o los números quedan como texto, abre el archivo desde **Datos → Desde texto/CSV** (Excel) o **Archivo → Abrir** (LibreOffice) y elige «;» como separador y «,» como decimal.
+  - **Según la etapa:** con «Generar planos» sale todo; con solo «Generar mix», Dormitorios, Calidad del plano y Observaciones quedan vacíos (todavía no hay planos). Si el resultado no tiene viviendas (solo la masa o el pasillo), el botón avisa qué generar.
+  - **Cómo probarlo:** elige «Barra 60x16», genera los planos y pulsa **Tabla CSV** (Proyecto → Exportar): baja `trazo_viviendas_Barra_60x16.csv` con 40 filas y, al final, 40 viviendas, 5 niveles, NSA 3442,0 m² y eficiencia 71,7 %. La API es `GET /api/csv`; el motor no cambia: las métricas de los ejemplos son las mismas.
+  - **No se pudo probar con Excel ni LibreOffice reales** (sí con el lector de CSV de Python y descargando el archivo desde un navegador): si no abre como esperas, el formato (separador, decimal, codificación) es lo primero que hay que mirar.
 
 ## Novedades v2.49
 - **Patios editables (R4.12):** un patio, automático o manual, se elige, se mide, se arrastra y se mueve con el teclado, como un núcleo. Solo cambia la web: el motor es el mismo (ya recibía patios manuales). Rhino y el Masterplan, sin cambios.
