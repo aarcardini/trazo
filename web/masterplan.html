@@ -1,12 +1,17 @@
 <!doctype html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Trazo · Masterplan</title>
+<script id="temaInicial">/* R4.10: el tema elegido (el mismo que en el modo Edificio), antes de pintar; sin nada guardado o con «sistema», vale el del sistema */
+(function(){try{var t=localStorage.getItem('trazo.tema');if(t==='claro'||t==='oscuro')document.documentElement.dataset.theme=t==='oscuro'?'dark':'light'}catch(e){}})();</script>
 <style>
-:root{--bg:#f6f7f9;--pan:#fff;--ink:#1b2430;--mut:#667085;--line:#d9dee6;--acc:#2f6fed;--ok:#1a9d5b;--bad:#d63b3b}
-@media (prefers-color-scheme:dark){:root{--bg:#12161c;--pan:#1a2029;--ink:#e6eaf0;--mut:#98a2b3;--line:#2c3542;--acc:#6b9bff}}
+:root{--bg:#f6f7f9;--pan:#fff;--ink:#1b2430;--mut:#667085;--line:#d9dee6;--acc:#2f6fed;--ok:#1a9d5b;--bad:#d63b3b;color-scheme:light}
+:root[data-theme="dark"]{--bg:#12161c;--pan:#1a2029;--ink:#e6eaf0;--mut:#98a2b3;--line:#2c3542;--acc:#6b9bff;color-scheme:dark}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#12161c;--pan:#1a2029;--ink:#e6eaf0;--mut:#98a2b3;--line:#2c3542;--acc:#6b9bff;color-scheme:dark}}
 *{box-sizing:border-box}body{margin:0;font:14px system-ui,sans-serif;background:var(--bg);color:var(--ink);display:grid;grid-template-columns:330px 1fr 290px;height:100vh}
 aside{background:var(--pan);overflow:auto;padding:14px;border-right:1px solid var(--line)}aside.r{border-right:0;border-left:1px solid var(--line)}
 h1{font-size:16px;margin:0 0 4px}h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin:16px 0 6px}
+.tit{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin:0 0 4px}.tit h1{margin:0}
+#btnTema{display:inline-flex;align-items:center;flex:none;margin:0;padding:3px 8px}#btnTema svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
 label{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:4px 0}input,select{background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:4px 6px;font:inherit}
 input[type=number]{width:72px}button{background:var(--acc);color:#fff;border:0;border-radius:6px;padding:7px 10px;font:inherit;cursor:pointer;margin:2px 2px 2px 0}
 button.s{background:transparent;color:var(--ink);border:1px solid var(--line)}button.on{outline:2px solid var(--acc);background:var(--acc);color:#fff}
@@ -22,7 +27,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:3px 4px;b
 @media(max-width:900px){body{grid-template-columns:1fr;height:auto}main{height:60vh}}
 </style></head><body>
 <aside>
- <h1>Trazo · Masterplan <small id="ver" style="color:var(--mut);font-weight:400"></small></h1>
+ <div class="tit"><h1>Trazo · Masterplan <small id="ver" style="color:var(--mut);font-weight:400"></small></h1><button class="s" id="btnTema" onclick="aplicarTema(esOscuro()?'claro':'oscuro')" title="Cambiar entre el tema claro y el oscuro"></button></div>
  <div class="hint">Modo predio: calles, veredas, manzanas, lotes y construcciones. <a href="/">→ Modo Edificio</a></div>
  <h2>1 · Predio</h2>
  <label>Ejemplo <select id="sample"></select></label>
@@ -203,6 +208,18 @@ function lotPanel(){ const c=$('ctx'); const l=result&&result.lots.find(x=>x.id=
 async function openInBuilding(id){ const l=result.lots.find(x=>x.id===id); if(!l||!l.building) return; const b=l.building;
  const body={source:'masterplan',name:l.id+' · '+l.type+' · '+l.area+' m²',footprint:b.poly,height:b.altura,medianeras:(b.medianeras||[]).map(m=>({a:m[0],b:m[1],retiro:0})),stories:Array.from({length:b.pisos},()=>({program:'Residential',height:+$('altura_piso').value}))};
  await fetch('/api/mass',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); window.location='/?desde=masterplan'; }
+/* ---------- tema claro y oscuro (R4.10): data-theme en <html>; sin él, el del sistema. 'trazo.tema' lo comparte con el modo Edificio ---------- */
+const SOL='<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/></svg>';
+const LUNA='<svg viewBox="0 0 24 24"><path d="M20 16.1A9 9 0 1 1 10.7 3.1 8 8 0 0 0 20 16.1z"/></svg>';
+function esOscuro(){ const t=document.documentElement.dataset.theme; return t==='dark'||(t!=='light'&&matchMedia('(prefers-color-scheme: dark)').matches); }
+function temaElegido(){ const t=document.documentElement.dataset.theme; return t==='dark'?'oscuro':t==='light'?'claro':'sistema'; }
+function temaUI(){ const t=temaElegido(), osc=esOscuro();   // el botón muestra el tema de ahora y su título dice qué hace el clic
+ $('btnTema').innerHTML=osc?LUNA:SOL; $('btnTema').title='Tema '+(osc?'oscuro':'claro')+(t==='sistema'?', el del sistema':'')+' (clic: '+(osc?'claro':'oscuro')+')'; }
+function aplicarTema(t){ if(t!=='claro'&&t!=='oscuro') t='sistema'; const h=document.documentElement;
+ if(t==='sistema') h.removeAttribute('data-theme'); else h.dataset.theme=t==='oscuro'?'dark':'light';
+ try{ localStorage.setItem('trazo.tema',t); }catch(e){}
+ temaUI(); render(); }   // render: lo que dibuja el JS se dibuja de nuevo
+temaUI();
 /* ---------- inicio ---------- */
 async function loadSample(k){ const s=samples[k]; if(!s) return; predio=s.predio; frontage=s.frontage||null; uses={}; zoom=1; pan=[0,0]; selLot=null;
  if(s.masterplan&&s.masterplan.manzana){ $('mzW').value=s.masterplan.manzana[0]; $('mzL').value=s.masterplan.manzana[1]; }

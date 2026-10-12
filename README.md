@@ -82,8 +82,8 @@ Desde entonces basta con escribir `trazo` en Rhino.
    - Para abrir patios, dibuja curvas cerradas en la capa `Trazo::Patios`; llegan a la web en modo manual.
 3. En la web: Calcular masa → Generar pasillo y núcleos → Generar mix → Generar planos. Cada botón está al pie de su grupo, en el riel de la izquierda: **Masa** (Calcular masa), **Circulación** (Generar pasillo y núcleos) y **Viviendas** (Generar mix y Generar planos). Un clic en el grupo abre su panel y otro lo cierra (o Esc).
    - **La interfaz (v2.37):**
-     - **Arriba:** el nombre de lo que está abierto, su etapa, y deshacer y rehacer.
-     - **Riel de la izquierda:** Proyecto (nuevo, abrir, guardar, ejemplos, variantes, exportar), Masa, Circulación, Viviendas, Normativa (medidas) y Vista (colores y leyenda).
+     - **Arriba:** el nombre de lo que está abierto, su etapa, deshacer y rehacer, y el botón del sol o la luna que cambia entre el tema claro y el oscuro (v2.43).
+     - **Riel de la izquierda:** Proyecto (nuevo, abrir, guardar, ejemplos, variantes, exportar), Masa, Circulación, Viviendas, Normativa (medidas) y Vista (tema, colores y leyenda).
      - **Sobre la planta:** la vista 2D o 3D, el nivel y el menú **Capas** (conexiones, equipamiento, cotas, evacuación y datos al pasar el mouse).
      - **Abajo, la barra de dibujo:** **Línea**, **Núcleo**, **Medianera** y **Patio**, más **SCP**, **Grilla** (F7), **Orto** (F8) y **Snap** (F9; con Alt, el punto queda libre). Mientras una herramienta está activa, arriba de la barra aparecen qué hacer y sus botones (Terminar, Borrar última, Quitar núcleo…).
      - **A la derecha:** el resumen (unidades, NSA, eficiencia, calidad de planos, núcleos, ascensores), los avisos y la ficha de la vivienda o del núcleo que elijas. **Ver todo** suma los programas, todas las métricas y la tabla de unidades.
@@ -147,6 +147,11 @@ Si algo falla en Rhino, ejecuta el script y elige **Diagnostico**. Si no se resu
 - **Pasillo y núcleos**: eje (automático o dibujado), ancho de pasillo, núcleos (ancho, fondo incluyendo pasillo, cantidad), distancias de evacuación (salida única / múltiple) y núcleos extra automáticos.
 - **Mix**: tipos con m² objetivo y %, ancho mínimo, muro medianero; métricas Match Score, Fit y Unidades únicas.
 - **Planos**: distribución día/noche con pasillo interno, puertas y grafo de conexiones verificado.
+
+## Novedades v2.43
+- **Modo claro y oscuro con un botón (R4.10):** en la barra superior, junto a ↶ y ↷, el botón del sol o la luna cambia entre el tema claro y el oscuro; el mismo botón está junto al título del Masterplan. Cambia todo: paneles, grilla, planta y axonometría. Sobre el fondo oscuro, las cotas, la escala y los rótulos de patios y zonas sin luz de la planta (antes grises fijos: la escala y los rótulos casi no se leían) y las aristas de la axonometría pasan a claros; con el tema claro la planta no cambia. Al pasar el mouse por el botón dice el tema de ahora y qué hace el clic.
+  - **Se recuerda:** Trazo guarda tu elección en el navegador y la usa en el modo Edificio y en el Masterplan, sin parpadeo al abrir la página.
+  - **«Sistema»:** en «Vista → Apariencia → Tema» eliges «Sistema» (sigue el tema del equipo, como hasta ahora), «Claro» u «Oscuro»; el selector y el botón van juntos. En el Masterplan está solo el botón: para volver a «Sistema», usa el selector del modo Edificio.
 
 ## Novedades v2.42
 - **La tira sin luz de las viviendas muy profundas, para servicios (R5.11):** en una vivienda de más de 9,30 m de fondo, entre la franja de baños y el pasillo común quedaba una tira oscura sin uso (en «Edificio con patio central», 6,6 m² en las U04 y U05). Ahora esa tira es una banda de servicios:
