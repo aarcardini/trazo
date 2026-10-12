@@ -2206,7 +2206,7 @@ def test_pasillo_por_tramo_casos():
     peine = [[0, 0], [50, 0], [50, 14], [30, 14], [30, 20], [50, 20], [50, 34], [30, 34], [30, 40], [50, 40], [50, 54],
              [0, 54]]
     r = gen(peine, anchos_pasillo=[{"p": [25, 27], "ancho": 4.5}])
-    assert nucleo(r) == 0 and len(r["cores"]) == 10, (nucleo(r), len(r["cores"]))
+    assert nucleo(r) == 0 and len(r["cores"]) == 5, (nucleo(r), len(r["cores"]))   # v2.51: espina y tres dientes
     # sin anchos propios: en una L angosta el núcleo de la punta ya no queda sobre el pasillo del ala que llega
     # (corrección); y el muro del núcleo junto al pasillo no cuenta (la Z sigue como antes)
     r = gen([[0, 0], [50, 0], [50, 12], [12, 12], [12, 40], [0, 40]])
@@ -4369,3 +4369,49 @@ def test_tabla_csv():
 
 if __name__ == "__main__":
     test_tabla_csv(); print("OK66")
+
+
+def test_alas_unidas():
+    """Planta en C (15 × 30 con un patio manual a 0,5 m del lindero izquierdo, sin medianeras, núcleos automáticos):
+    el corte a lo largo dejaba tres tiras paralelas cuyos pasillos no se tocaban —cada uno con dos puntas libres y dos
+    núcleos: seis núcleos y seis ascensores, una sola vivienda—. Ahora build_pieces elige la descomposición que deja
+    los pasillos unidos entre sí: las dos alas en U con su pasillo y el tramo que las une junto al patio."""
+    from engine.circulation import _componentes, build_pieces
+    from engine.layout import merge_params
+    fp = [[0, 0], [15, 0], [15, 30], [0, 30]]
+    patio = [[0.5, 12.7], [8.1, 12.7], [8.1, 19.5], [0.5, 19.5]]
+    mix = [{"name": "2 dorm", "area": 75, "percent": 50, "dorms": 2}, {"name": "3 dorm", "area": 95, "percent": 50, "dorms": 3}]
+    p = dict(corridor_width=1, min_unit_width=5, core_width=4.5, core_depth=6.02, egress_single=18, egress_multi=30,
+             unit_mix=mix, cores_mode="auto", patios_mode="manual", patios=[patio], ascensores="1",
+             stories=[{"program": "Residential", "height": 3}] * 5)
+    r = run(fp, **p)
+    print(len(r["cores"]), r["metrics"]["core"], [ps["eje"] for ps in r["pasillos"]], r["warnings"])
+    ejes = [ps["eje"] for ps in r["pasillos"]]
+    assert len(ejes) == 3 and r["metrics"]["wings"] == 3
+    horizontales = [e for e in ejes if abs(e[0][1] - e[1][1]) < 1e-6]
+    verticales = [e for e in ejes if abs(e[0][0] - e[1][0]) < 1e-6]
+    assert len(horizontales) == 2 and len(verticales) == 1, ejes      # dos alas en U y el tramo que las une
+    assert 8.45 < verticales[0][0][0] < 14.65                         # el tramo que une, en la tira junto al patio
+    assert len(r["cores"]) <= 2 and r["metrics"]["core"]["elevators_total"] <= 2, r["metrics"]["core"]
+    assert len(r["units"]) >= 3, len(r["units"])       # con las medidas del usuario (dorm. principal más chico) entran 4
+    assert not any("sirve a 0" in w for w in r["warnings"]), r["warnings"]
+    # las piezas elegidas forman un solo grupo; el corte a lo largo (que decompose_wings puntúa mejor) deja tres
+    pl = r["blocks"][0]["plate"]
+    pb = merge_params(p)
+    pb["_huecos"] = r["blocks"][0]["plate_holes"]
+    assert _componentes(build_pieces(pl, pb)) == 1
+    from engine.massing import decompose_wings
+    cands = decompose_wings(pl, holes=pb["_huecos"], candidatos=True)
+    assert len(cands) == 2 and cands[0][0] > cands[1][0]
+    from engine.circulation import _piezas_de, _pedidos_ancho
+    largo = _piezas_de([(q, cands[0][1]) for q in cands[0][2]], pl, pb["_huecos"], _pedidos_ancho(pb), pb)
+    assert _componentes(largo) == 3
+    # con una medianera a la izquierda (la planta del usuario), el resultado sigue siendo el mismo de antes: la U
+    r2 = run(fp, medianeras=[{"a": [0, 30], "b": [0, 0], "retiro": 0}], **p)
+    assert len(r2["pasillos"]) == 3 and len(r2["cores"]) <= 2
+    # una L común no cambia: su corte de siempre ya deja los pasillos unidos
+    rl = run([[0, 0], [50, 0], [50, 14], [16, 14], [16, 40], [0, 40]])
+    assert rl["metrics"]["wings"] == 2 and all(len(ps["eje"]) == 2 for ps in rl["pasillos"])
+
+if __name__ == "__main__":
+    test_alas_unidas(); print("OK67")

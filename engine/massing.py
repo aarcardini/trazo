@@ -142,16 +142,18 @@ def _slabs(loc, vertical, holes=()):
     return rects
 
 
-def decompose_wings(plate, min_side=5.0, holes=None, blind=None):
+def decompose_wings(plate, min_side=5.0, holes=None, blind=None, candidatos=False):
     """Divide una planta ortogonal en rectángulos (alas). Devuelve (ángulo, [polígonos mundo]) o None.
     holes: patios interiores (la planta es un anillo); tienen que ser ortogonales en el mismo marco.
-    blind: en un anillo, las alas a lo largo de una medianera ciega puntúan menos (sus viviendas no tienen luz)."""
+    blind: en un anillo, las alas a lo largo de una medianera ciega puntúan menos (sus viviendas no tienen luz).
+    candidatos: devuelve las dos direcciones de corte que dejan alas, [(puntaje, ángulo, [polígonos])], de mejor a
+    peor (o [] si no hay ninguna): circulation.build_pieces se queda con la que deja los pasillos unidos entre sí."""
     th = _dominant_angle(plate)
     loc = G.ensure_ccw([G.rotate(p, -th) for p in plate])
     hl = [[G.rotate(p, -th) for p in h] for h in (holes or [])]
     if not _is_rectilinear(loc) or not all(_is_rectilinear(h) for h in hl):
-        return None
-    best = None
+        return [] if candidatos else None
+    opciones = []
     for vertical in (True, False):
         rects = _slabs(loc, vertical, hl)
         rects = [r for r in rects if min(G.bbox(r)[2] - G.bbox(r)[0], G.bbox(r)[3] - G.bbox(r)[1]) >= min_side]
@@ -160,11 +162,11 @@ def decompose_wings(plate, min_side=5.0, holes=None, blind=None):
         score = sum(max(G.bbox(r)[2] - G.bbox(r)[0], G.bbox(r)[3] - G.bbox(r)[1]) for r in rects) - 8.0 * len(rects)
         if hl and blind:
             score -= sum(_lado_ciego(r, th, blind) for r in rects)
-        if best is None or score > best[0]:
-            best = (score, rects)
-    if best is None:
-        return None
-    return th, [[G.rotate(p, th) for p in r] for r in best[1]]
+        opciones.append((score, th, [[G.rotate(p, th) for p in r] for r in rects]))
+    opciones.sort(key=lambda o: -o[0])                  # estable: a igual puntaje, primero el corte vertical
+    if candidatos:
+        return opciones
+    return (opciones[0][1], opciones[0][2]) if opciones else None
 
 
 def _dir90(a, b):
