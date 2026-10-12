@@ -5,6 +5,7 @@ from . import geometry as G
 from . import plans as P
 from . import standards as ST
 from .massing import _dist_to_boundary
+from .circulation import ancho_de
 
 
 # ---------------------------------------------------------------- mix de unidades
@@ -55,7 +56,7 @@ def _is_rect(poly, tol=0.02):
 def _segments(loc, circ, params):
     """Regiones laterales (local) entre núcleos, a cada lado del pasillo.
     El bolsillo que queda detrás de un núcleo se suma al tramo vecino para no desperdiciar planta."""
-    cw = params["corridor_width"]
+    cw = ancho_de(circ, params)                         # R10.8: el ancho del pasillo de este tramo
     pw = params["party_wall"]
     segs = []
     for side in (1, -1):
@@ -123,7 +124,7 @@ def _segments(loc, circ, params):
 
 def generate_unit_mix(circ, params, state=None):
     loc = circ["loc_plate"]
-    cw, pw = params["corridor_width"], params["party_wall"]
+    cw, pw = ancho_de(circ, params), params["party_wall"]
     mix = [m for m in params["unit_mix"] if m.get("percent", 0) > 0 and m.get("area", 0) > 0]
     tot = sum(m["percent"] for m in mix) or 1.0
     for m in mix:
@@ -282,7 +283,7 @@ def extremos_al_frente(pc, params):
     tabique hacia las viviendas, de todo el largo (marco de la pieza)."""
     if pc.get("between") or pc.get("puntas") or not pc.get("corridor_local"):
         return {}
-    cw, pw = params["corridor_width"], params["party_wall"]
+    cw, pw = ancho_de(pc, params), params["party_wall"]
     loc = pc["loc_plate"]
     planta = pc.get("_planta") or G.to_world(loc, pc["origin"], pc["angle"])
     huecos = params.get("_huecos") or []
@@ -304,8 +305,9 @@ def formar_frentes(units, pieces, params):
     """R3.7: en cada punta libre de un pasillo de borde (ver extremos_al_frente), la vivienda del extremo suma la franja
     del pasillo y llega a todo el ancho; el pasillo termina en su puerta, en la punta (pc["tramo"]). La vivienda
     guarda «frente»: {e, x (donde termina el pasillo), a, b (su largo a lo largo del pasillo)}."""
-    cw, pw = params["corridor_width"], params["party_wall"]
+    pw = params["party_wall"]
     for pc in pieces:
+        cw = ancho_de(pc, params)
         for e, (xe, banda) in extremos_al_frente(pc, params).items():
             fin = [u for u in units if u.get("_pc") is pc and u["side"] > 0 and
                    ((u["x1"] >= xe - 0.05) if e == 1 else (u["x0"] <= xe + 0.05))]
@@ -370,7 +372,7 @@ def _recortar(u, x0, x1, params):
         return False
     ys = [q[1] for q in poly]
     u.update({"x0": x0, "x1": x1, "poly_local": poly, "area": abs(G.area(poly)), "width": x1 - x0,
-              "depth": max(ys) - min(ys), "door_local": ((x0 + x1) / 2.0, (params["corridor_width"] / 2) * u["side"]),
+              "depth": max(ys) - min(ys), "door_local": ((x0 + x1) / 2.0, (ancho_de(u["_pc"], params) / 2) * u["side"]),
               "editada": True})
     return True
 
@@ -458,7 +460,6 @@ def sin_solapes(units, pieces, nucleos, params):
     solapes: esto cubre los casos que quedan (por ejemplo, tres líneas que se cruzan en un mismo punto)."""
     if not any(pc.get("user") for pc in pieces):
         return units, []
-    cw = params["corridor_width"]
     W = lambda pc, pl: G.to_world(pl, pc["origin"], pc["angle"])
     fijos = [W(pc, p) for pc in pieces for p in G.split_parts(pc["corridor_local"])] + \
         [list(e) for pc in pieces for e in pc["corridor_ext"]] + [list(c) for c in nucleos]
@@ -484,7 +485,8 @@ def sin_solapes(units, pieces, nucleos, params):
                 x0, _, x1, _ = G.bbox(loc)
                 ys = [p[1] for p in loc]
                 u.update({"poly_local": loc, "area": abs(G.area(loc)), "x0": x0, "x1": x1, "width": x1 - x0,
-                          "depth": max(ys) - min(ys), "door_local": ((x0 + x1) / 2.0, (cw / 2) * u["side"])})
+                          "depth": max(ys) - min(ys),
+                          "door_local": ((x0 + x1) / 2.0, (ancho_de(pc, params) / 2) * u["side"])})
                 w = mayor
         ya.append((G.bbox(w), w))
         out.append(u)
@@ -523,7 +525,7 @@ def unit_rooms(u, params, pc=None, plate=None, ediciones=None):
     """Distribuye una unidad (ver engine/plans.py) y devuelve el resultado en el marco local de la pieza. ediciones
     (R5.7): [(k, cambio con puntos de mundo)]; se aplican los que caen en esta vivienda (en "ediciones", las k)."""
     side = u["side"]
-    cw = params["corridor_width"]
+    cw = ancho_de(pc or u.get("_pc") or {}, params)    # R10.8: el ancho del pasillo de su tramo
     pw = params["party_wall"]
     y_in = cw / 2 + pw / 2
     fr = u.get("frente")

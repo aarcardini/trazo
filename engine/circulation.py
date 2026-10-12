@@ -7,6 +7,54 @@ from .massing import _dist_point_segment, _dist_to_boundary, decompose_wings, de
 
 BOLSILLO = 4.5     # fondo detrás de un núcleo por debajo del cual no cabe una unidad útil (el núcleo llega a la
 #   fachada) y largo de un tramo sin luz que todavía puede ser depósito de la vivienda vecina
+ANCHO_PEDIDO = (0.80, 8.0)     # R10.8: un ancho de pasillo pedido fuera de este rango se lleva al más cercano
+
+
+# ---------------------------------------------------------------- ancho del pasillo por tramo (R10.8)
+def ancho_de(pc, params):
+    """R10.8: ancho del pasillo común de la pieza pc: el que el usuario le dio a ese tramo (params["anchos_pasillo"])
+    o el general (params["corridor_width"])."""
+    return pc.get("ancho") or params["corridor_width"]
+
+
+def _pedidos_ancho(params):
+    """R10.8: anchos pedidos tramo por tramo, [(k, punto, segmento, ancho)]: k, su lugar en params["anchos_pasillo"];
+    cada pedido trae un punto del eje del tramo («p», la web) o un segmento de la polilínea («seg», Rhino)."""
+    out = []
+    for k, sp in enumerate(params.get("anchos_pasillo") or []):
+        try:
+            a = min(ANCHO_PEDIDO[1], max(ANCHO_PEDIDO[0], float(sp["ancho"])))
+            seg = [(float(sp["seg"][0][0]), float(sp["seg"][0][1])), (float(sp["seg"][1][0]), float(sp["seg"][1][1]))] \
+                if sp.get("seg") else None
+            p = (float(sp["p"][0]), float(sp["p"][1])) if seg is None else None
+        except (TypeError, ValueError, KeyError, IndexError, AttributeError):
+            continue
+        out.append((k, p, seg, a))
+    return out
+
+
+def _usado(params, k):
+    """Anota que el pedido de ancho k se aplicó (layout avisa de los que no)."""
+    if params.get("_anchos_usados") is not None:
+        params["_anchos_usados"].add(k)
+
+
+def _ancho_ala(poly, pedidos, params):
+    """R10.8, modo automático: (k, ancho) pedido para el pasillo del ala poly (un punto dentro del ala; si hay varios,
+    el último) o None."""
+    out = None
+    for k, p, seg, a in pedidos:
+        q = p if p is not None else ((seg[0][0] + seg[1][0]) / 2.0, (seg[0][1] + seg[1][1]) / 2.0)
+        if G.point_in_poly(q, poly):
+            out = (k, a)
+    if out:
+        _usado(params, out[0])
+    return out
+
+
+def _con_ancho(params, an):
+    """Los parámetros con el ancho del pasillo de un ala (an = (k, ancho) o None)."""
+    return dict(params, corridor_width=an[1]) if an else params
 
 
 # ---------------------------------------------------------------- pasillo y núcleos
@@ -52,10 +100,13 @@ def _frame_for_poly(poly, ang):
     return origin, ang, 0.0, x1 - x0
 
 
-def _make_piece(poly, origin, ang, xa, xb):
-    return {"poly": poly, "origin": origin, "angle": ang, "xa": xa, "xb": xb,
-            "loc_plate": G.to_local(poly, origin, ang), "cores": [], "junctions": [],
-            "extra_blocks": {1: [], -1: []}, "corridor_ext": [], "free": [True, True]}
+def _make_piece(poly, origin, ang, xa, xb, ancho=None):
+    pc = {"poly": poly, "origin": origin, "angle": ang, "xa": xa, "xb": xb,
+          "loc_plate": G.to_local(poly, origin, ang), "cores": [], "junctions": [],
+          "extra_blocks": {1: [], -1: []}, "corridor_ext": [], "free": [True, True]}
+    if ancho:                                           # R10.8: (k, ancho) pedido para este tramo
+        pc["ancho_k"], pc["ancho"] = ancho
+    return pc
 
 
 def _avg_unit_area(params):
@@ -159,16 +210,19 @@ def build_pieces(plate, params):
         alas = descomponer_alas(plate)
         if alas and len(alas) < 2:
             alas = None
+    pedidos = _pedidos_ancho(params)                    # R10.8: el ancho de cada ala, antes de elegir su marco
     if not dec and not alas:
-        o, a, xa, xb = pick_frame(plate, params)
-        pc = _make_piece(plate, o, a, xa, xb)
+        an = _ancho_ala(plate, pedidos, params)
+        pa = _con_ancho(params, an)
+        o, a, xa, xb = pick_frame(plate, pa)
+        pc = _make_piece(plate, o, a, xa, xb, an)
         loc = pc["loc_plate"]
         x0_, y0_, x1_, y1_ = G.bbox(loc)
-        if _choose_single(y1_ - y0_, params) or (params.get("_blind") and (
+        if _choose_single(y1_ - y0_, pa) or (params.get("_blind") and (
                 params["_blind"](G.to_world([((x0_ + x1_) / 2, y0_)], o, a)[0]) !=
                 params["_blind"](G.to_world([((x0_ + x1_) / 2, y1_)], o, a)[0]))):
-            o, a, xa, xb = _single_frame(plate, a, params, G.centroid(plate))
-            pc = _make_piece(plate, o, a, xa, xb)
+            o, a, xa, xb = _single_frame(plate, a, pa, G.centroid(plate))
+            pc = _make_piece(plate, o, a, xa, xb, an)
             pc["single"] = True
         return [pc]
     alas = [(p, dec[0]) for p in dec[1]] if dec else alas
@@ -177,37 +231,8 @@ def build_pieces(plate, params):
     pieces = []
     bl = params.get("_blind")
     for poly, th in alas:
-        x0, y0, x1, y1 = G.bbox([G.rotate(p, -th) for p in poly])
-        ang = th if (x1 - x0) >= (y1 - y0) else th + math.pi / 2
-        short = min(x1 - x0, y1 - y0)
-        puente = _bridge_axis(poly, polys, th, holes, params) if holes else None
-        if puente is not None:
-            ang = th if puente == 0 else th + math.pi / 2
-            short = (y1 - y0) if puente == 0 else (x1 - x0)
-        largo = ((x1 - x0) + (y1 - y0)) - short                 # a lo largo del pasillo
-        lb = [False, False]
-        if bl:
-            l0 = G.to_local(poly, (0.0, 0.0), ang)
-            a0, b0, a1, b1 = G.bbox(l0)
-            lb = [bl(G.to_world([((a0 + a1) / 2, b0)], (0.0, 0.0), ang)[0]),
-                  bl(G.to_world([((a0 + a1) / 2, b1)], (0.0, 0.0), ang)[0])]
-        if all(lb) and len(polys) == 1:
-            # predio entre medianeras: pasillo transversal en el medio, viviendas hacia los dos frentes
-            pc = _make_piece(poly, *_frame_for_poly(poly, ang + math.pi / 2))
-            pc["between"] = True
-            pieces.append(pc)
-            continue
-        if any(lb) and not all(lb):
-            pc = _make_piece(poly, *_single_frame(poly, ang, params, centre))
-            pc["single"] = True
-            pieces.append(pc)
-            continue
-        if _ring_single(short, largo, puente is not None, params) if holes else _choose_single(short, params):
-            pc = _make_piece(poly, *_single_frame(poly, ang, params, centre))
-            pc["single"] = True
-        else:
-            pc = _make_piece(poly, *_frame_for_poly(poly, ang))
-        pieces.append(pc)
+        an = _ancho_ala(poly, pedidos, params)
+        pieces.append(_pieza_ala(poly, th, polys, holes, bl, centre, an, _con_ancho(params, an)))
     if not dec:
         for pc in pieces:                               # el eje termina donde corta el borde del ala (inglete, cuerda)
             ivs = G.line_intervals(pc["loc_plate"], 0.0)
@@ -216,10 +241,48 @@ def build_pieces(plate, params):
     return pieces
 
 
+def _pieza_ala(poly, th, polys, holes, bl, centre, an, params):
+    """La pieza (tramo de pasillo) de un ala del modo automático: pasillo central, de borde o, entre medianeras,
+    transversal. params ya trae el ancho del pasillo de esa ala (R10.8: an = (k, ancho) pedido, o None)."""
+    x0, y0, x1, y1 = G.bbox([G.rotate(p, -th) for p in poly])
+    ang = th if (x1 - x0) >= (y1 - y0) else th + math.pi / 2
+    short = min(x1 - x0, y1 - y0)
+    puente = _bridge_axis(poly, polys, th, holes, params) if holes else None
+    if puente is not None:
+        ang = th if puente == 0 else th + math.pi / 2
+        short = (y1 - y0) if puente == 0 else (x1 - x0)
+    largo = ((x1 - x0) + (y1 - y0)) - short                 # a lo largo del pasillo
+    lb = [False, False]
+    if bl:
+        l0 = G.to_local(poly, (0.0, 0.0), ang)
+        a0, b0, a1, b1 = G.bbox(l0)
+        lb = [bl(G.to_world([((a0 + a1) / 2, b0)], (0.0, 0.0), ang)[0]),
+              bl(G.to_world([((a0 + a1) / 2, b1)], (0.0, 0.0), ang)[0])]
+    if all(lb) and len(polys) == 1:
+        # predio entre medianeras: pasillo transversal en el medio, viviendas hacia los dos frentes (la franja del
+        # medio es la del núcleo: el ancho pedido es el de los pasillos que llegan a las viviendas)
+        pc = _make_piece(poly, *_frame_for_poly(poly, ang + math.pi / 2))
+        pc["between"] = True
+        if an:
+            pc["ancho_k"], pc["ancho_trans"] = an
+        return pc
+    if any(lb) and not all(lb):
+        pc = _make_piece(poly, *_single_frame(poly, ang, params, centre), ancho=an)
+        pc["single"] = True
+        return pc
+    if _ring_single(short, largo, puente is not None, params) if holes else _choose_single(short, params):
+        pc = _make_piece(poly, *_single_frame(poly, ang, params, centre), ancho=an)
+        pc["single"] = True
+        return pc
+    return _make_piece(poly, *_frame_for_poly(poly, ang), ancho=an)
+
+
 def _link(pieces, i, e, nb, params):
-    """Une el extremo e (0=xa, 1=xb) de la pieza i con el pasillo de la pieza nb (conector + bloqueo)."""
-    cw, pw = params["corridor_width"], params["party_wall"]
+    """Une el extremo e (0=xa, 1=xb) de la pieza i con el pasillo de la pieza nb (conector + bloqueo). El conector es
+    del ancho del pasillo de i y llega hasta el borde lejano del pasillo de nb (R10.8: cada uno con su ancho)."""
+    pw = params["party_wall"]
     pc, q = pieces[i], pieces[nb]
+    cw, cq = ancho_de(pc, params), ancho_de(q, params)
     xe, sgn = (pc.get("eje", (pc["xa"], pc["xb"]))[e], -1 if e == 0 else 1)
     pc["free"][e] = False
     E = G.to_world([(xe, 0.0)], pc["origin"], pc["angle"])[0]
@@ -229,7 +292,7 @@ def _link(pieces, i, e, nb, params):
         pc["junctions"].append({"x": xe, "nb": nb, "nbx": P[0]})
         return
     t = max(0.0, -P[1] / d[1])
-    ext_len = t + cw / 2.0
+    ext_len = t + cq / 2.0
     if sgn < 0:
         box = [(xe - ext_len, -cw / 2), (xe, -cw / 2), (xe, cw / 2), (xe - ext_len, cw / 2)]
     else:
@@ -240,13 +303,14 @@ def _link(pieces, i, e, nb, params):
             pc["junctions"].append({"x": xe, "nb": nb, "nbx": P[0]})
             return
         qb_ = G.to_local(world_box, q["origin"], q["angle"])   # un conector oblicuo no pasa del otro borde del pasillo
-        qb_ = G.clip_rect(qb_, None, None, -cw / 2, None) if P[1] > 0 else G.clip_rect(qb_, None, None, None, cw / 2)
+        qb_ = G.clip_rect(qb_, None, None, -cq / 2, None) if P[1] > 0 else G.clip_rect(qb_, None, None, None, cq / 2)
         world_box = G.to_world(qb_, q["origin"], q["angle"]) if qb_ else world_box
     pc["corridor_ext"].append(world_box)
+    pc["prolonga"] = pc.get("prolonga", 0.0) + t         # R10.8: el tramo recto sigue por el conector (art. 35)
     qb = G.to_local(world_box, q["origin"], q["angle"])
     bx0, by0, bx1, by1 = G.bbox(qb)
     side = 1 if (by0 + by1) / 2 > 0 else -1
-    protrusion = max(by1 - cw / 2, -cw / 2 - by0, 0.0)
+    protrusion = max(by1 - cq / 2, -cq / 2 - by0, 0.0)
     if protrusion > 0.6:      # el conector invade la zona de unidades; si no, vive dentro del pasillo
         q["extra_blocks"][side].append((bx0 - pw / 2, bx1 + pw / 2))
         q.setdefault("conectores", []).append((side, bx0 - pw / 2, bx1 + pw / 2))
@@ -310,12 +374,13 @@ def _codos(pieces, plate, params):
     hasta el pasillo de la otra si su fondo sigue dando a una fachada (la esquina exterior del codo, o del anillo). Esa
     parte de la otra ala ya no lleva viviendas porque no tiene luz (_franjas_sin_luz); así la esquina pasa a ser parte
     de una vivienda con luz en lugar de quedar vacía."""
-    cw, pw, paso = params["corridor_width"], params["party_wall"], 0.25
+    pw, paso = params["party_wall"], 0.25
     bordes = [plate] + list(params.get("_huecos") or [])
     bl = params.get("_blind")
     for pc in pieces:
         if pc.get("between") or pc.get("side_region"):
             continue
+        cw = ancho_de(pc, params)
         _, y0b, _, y1b = G.bbox(pc["loc_plate"])
         loc_full = G.to_local(plate, pc["origin"], pc["angle"])
         huecos = [G.to_local(h, pc["origin"], pc["angle"]) for h in (params.get("_huecos") or [])]
@@ -326,7 +391,7 @@ def _codos(pieces, plate, params):
                 continue                                        # unión de otra ala sobre esta (anillo): no es extremo
             q = pieces[j["nb"]]
             E = G.to_world([(j["x"], 0.0)], pc["origin"], pc["angle"])[0]
-            largo = abs(G.to_local([E], q["origin"], q["angle"])[0][1]) - cw / 2 - pw / 2
+            largo = abs(G.to_local([E], q["origin"], q["angle"])[0][1]) - ancho_de(q, params) / 2 - pw / 2
             if largo < 1.0:
                 continue
             xs0, xs1 = (pc["xa"] - largo, pc["xa"]) if e == 0 else (pc["xb"], pc["xb"] + largo)
@@ -450,13 +515,59 @@ def _cruces(lineas, params):
     return out
 
 
+def _sobre(A, B, seg, tol=0.05):
+    """¿El segmento A-B va sobre el segmento seg (alineado con él a menos de tol y superpuesto)?"""
+    (sx, sy), (ex, ey) = seg
+    L = math.hypot(ex - sx, ey - sy)
+    if L < tol:
+        return False
+    ux, uy = (ex - sx) / L, (ey - sy) / L
+    off = lambda p: abs((p[0] - sx) * uy - (p[1] - sy) * ux)
+    t = lambda p: (p[0] - sx) * ux + (p[1] - sy) * uy
+    return off(A) <= tol and off(B) <= tol and min(max(t(A), t(B)), L) - max(min(t(A), t(B)), 0.0) > tol
+
+
+def _adentro(p, A, B):
+    """Cuánto entra la proyección de p en el segmento A-B: la distancia a su extremo más cercano (negativa si cae
+    afuera)."""
+    L = math.hypot(B[0] - A[0], B[1] - A[1])
+    if L < 1e-9:
+        return -1.0
+    t = ((p[0] - A[0]) * (B[0] - A[0]) + (p[1] - A[1]) * (B[1] - A[1])) / L
+    return min(t, L - t)
+
+
+def _anchos_segmentos(tramos, params, lineas=()):
+    """R10.8, polilíneas: {(tramo, segmento): (k, ancho)}. Un pedido con un punto va al segmento más cercano (a 1 m o
+    menos; si el punto cae en un empalme o un cruce, al segmento en cuyo medio está); uno con un segmento (Rhino), a
+    todos los que van sobre él (las dos mitades de una línea cortada en un cruce). lineas: las polilíneas dibujadas,
+    antes de los cruces: un segmento que el motor quitó (lo que sobra de un cruce, uno de 5 cm o menos) no se avisa."""
+    segs = [((t, i), pts[i], pts[i + 1]) for t, (_, pts) in enumerate(tramos) for i in range(len(pts) - 1)]
+    out = {}
+    for k, p, seg, a in _pedidos_ancho(params):
+        if p is not None:
+            ds = [(_dist_point_segment(p, A, B), key, A, B) for key, A, B in segs]
+            d0 = min((d for d, _, _, _ in ds), default=None)
+            hits = [min((c for c in ds if c[0] <= d0 + 1e-3), key=lambda c: (-_adentro(p, c[2], c[3]), c[1]))[1]] \
+                if d0 is not None and d0 <= 1.0 else []
+        else:
+            hits = [key for key, A, B in segs if _sobre(A, B, seg)]
+            if not hits and (math.hypot(seg[1][0] - seg[0][0], seg[1][1] - seg[0][1]) <= 0.05 or
+                             any(_sobre(A, B, seg) for pts in lineas for A, B in zip(pts, pts[1:]))):
+                _usado(params, k)      # un segmento dibujado que el motor quitó: no es un ancho perdido
+        for key in hits:
+            out[key] = (k, a)
+    for k, _ in out.values():
+        _usado(params, k)          # solo los que quedan: uno que otro pedido pisa en su tramo no se aplica
+    return out
+
+
 def build_user_pieces(plate, params):
     """Una pieza por tramo de cada polilínea dibujada. La planta se reparte entre tramos:
     en giros de ~90° con cortes ortogonales (el tramo anterior se queda con el codo interior),
     en otros ángulos con la bisectriz."""
-    cw, pw = params["corridor_width"], params["party_wall"]
+    pw = params["party_wall"]
     D = params["max_unit_depth"]
-    c = cw / 2 + pw / 2
     cls = params.get("centerlines") or ([params["centerline"]] if params.get("centerline") else [])
     lineas = []
     for pl in cls:
@@ -468,11 +579,17 @@ def build_user_pieces(plate, params):
         if len(pts) >= 2:
             lineas.append(pts)
     pieces, chains = [], []
-    for linea, pts in _cruces(lineas, params):
+    tramos = _cruces(lineas, params)
+    anchos = _anchos_segmentos(tramos, params, lineas)   # R10.8: el ancho pedido para cada tramo
+    for t_, (linea, pts) in enumerate(tramos):
         n = len(pts) - 1
         idxs = []
+        ws = [(anchos.get((t_, k)) or (None, params["corridor_width"]))[1] for k in range(n)]
         for k in range(n):
             a, b = pts[k], pts[k + 1]
+            cw = ws[k]                                   # el ancho de este tramo, del anterior y del siguiente
+            cw_ant, cw_sig = ws[k - 1] if k > 0 else cw, ws[k + 1] if k < n - 1 else cw
+            c_ant, c_sig = cw_ant / 2 + pw / 2, cw_sig / 2 + pw / 2     # medio pasillo y medio tabique
             ang = math.atan2(b[1] - a[1], b[0] - a[0])
             L = math.hypot(b[0] - a[0], b[1] - a[1])
             full = G.to_local(plate, a, ang)
@@ -487,7 +604,7 @@ def build_user_pieces(plate, params):
                 ux_, uy_ = v[0] / Lv, v[1] / Lv
                 if abs(ux_) < 0.15 and abs(uy_) > 0.95:        # giro ~90°
                     sB = 1 if uy_ > 0 else -1
-                    sr[sB] = G.clip_rect(sr[sB], None, L - c, None, None)
+                    sr[sB] = G.clip_rect(sr[sB], None, L - c_sig, None, None)
                     ortho_next = sB
                 else:
                     nx, ny = -1 - ux_, -uy_
@@ -503,25 +620,25 @@ def build_user_pieces(plate, params):
                 if abs(wx_) < 0.15 and abs(wy_) > 0.95 and prev_pc is not None:
                     inner = 1 if wy_ > 0 else -1
                     outer = -inner
-                    start_in = c
+                    start_in = c_ant
                     ts = prev_pc.get("turn_side")
                     # fondo típico del lado interior del tramo anterior (mediana a lo largo del tramo)
                     depths = []
                     Lp = prev_pc["xb"]
-                    if ts and Lp > 2 * c + 1:
+                    if ts and Lp > 2 * c_ant + 1:
                         for t in range(1, 8):
-                            xs_ = c + (Lp - 2 * c) * t / 8.0
-                            slab = G.clip_rect(prev_pc["full"], xs_ - 0.05, xs_ + 0.05, c, c + D) if ts > 0 else \
-                                G.clip_rect(prev_pc["full"], xs_ - 0.05, xs_ + 0.05, -(c + D), -c)
+                            xs_ = c_ant + (Lp - 2 * c_ant) * t / 8.0
+                            slab = G.clip_rect(prev_pc["full"], xs_ - 0.05, xs_ + 0.05, c_ant, c_ant + D) \
+                                if ts > 0 else G.clip_rect(prev_pc["full"], xs_ - 0.05, xs_ + 0.05, -(c_ant + D), -c_ant)
                             if slab:
                                 ys_ = [abs(p[1]) for p in slab]
                                 depths.append(max(ys_))
                     if depths:
                         depths.sort()
-                        start_in = max(c, depths[len(depths) // 2] + pw / 2)
+                        start_in = max(c_ant, depths[len(depths) // 2] + pw / 2)
                     zona = G.clip_rect(sr[inner], start_in - pw / 2, None, None, None) if sr[inner] else []
                     sr[inner] = G.clip_rect(sr[inner], start_in, None, None, None)
-                    sr[outer] = G.clip_rect(sr[outer], c, None, None, None)
+                    sr[outer] = G.clip_rect(sr[outer], c_ant, None, None, None)
                     prev_sr = prev_pc["side_region"].get(ts) if ts else None
                     if zona and prev_sr:
                         # donde la planta se ensancha en la esquina (la otra ala), la franja interior del tramo anterior
@@ -536,14 +653,15 @@ def build_user_pieces(plate, params):
                         for sd in (1, -1):
                             sr[sd] = G.clip_halfplane(sr[sd], nx, ny, 0.0) if sr[sd] else []
                         sr = {sd: (G.clean(r) if len(r) >= 3 else []) for sd, r in sr.items()}
-            pc = _make_piece(G.to_world(base, a, ang), a, ang, 0.0, L)
+            pc = _make_piece(G.to_world(base, a, ang), a, ang, 0.0, L, anchos.get((t_, k)))
             pc["loc_plate"] = base
             pc["full"] = full
             pc["side_region"] = sr
             pc["turn_side"] = ortho_next
             pc["user"] = True
-            xa_c = -cw / 2 if k > 0 else 0.0
-            xb_c = L + cw / 2 if k < n - 1 else L
+            pc["dibujo"] = (a, b)                        # R10.8: el segmento dibujado (tramos rectos del art. 35)
+            xa_c = -cw_ant / 2 if k > 0 else 0.0        # el pasillo cubre el codo: hasta el borde del anterior
+            xb_c = L + cw_sig / 2 if k < n - 1 else L    # y del siguiente
             pc["corridor_local"] = G.clip_rect(full, xa_c, xb_c, -cw / 2, cw / 2)
             pieces.append(pc)
             idxs.append(len(pieces) - 1)
@@ -572,7 +690,7 @@ def build_user_pieces(plate, params):
                 lx = G.to_local([E], q["origin"], q["angle"])[0][0]
                 if not (q["xa"] + 0.05 < lx < q["xb"] - 0.05):
                     dd += 0.01        # a igual distancia, el pasillo que pasa de largo (no el extremo de otro ramal)
-                if dd < cw + 2.5 and (best is None or dd < best[0]):
+                if dd < (ancho_de(pc, params) + ancho_de(q, params)) / 2 + 2.5 and (best is None or dd < best[0]):
                     best = (dd, j)
             if best:
                 _link(pieces, i, e, best[1], params)
@@ -586,8 +704,9 @@ def build_user_pieces(plate, params):
 def _stem_vs_trunk(pieces, i, e, j, params):
     """Empalme en T: el tronco (j) reserva el pasillo del ramal y la franja de unidades hasta D;
     el ramal (i) solo recibe unidades más allá de esa franja."""
-    cw, pw, D = params["corridor_width"], params["party_wall"], params["max_unit_depth"]
+    pw, D = params["party_wall"], params["max_unit_depth"]
     stem, trunk = pieces[i], pieces[j]
+    cw = ancho_de(trunk, params)                         # la franja del tronco, desde el borde de su pasillo
     xf = stem["xb"] if e == 0 else stem["xa"]
     F = G.to_world([(xf, 0.0)], stem["origin"], stem["angle"])[0]
     sb = 1 if G.to_local([F], trunk["origin"], trunk["angle"])[0][1] > 0 else -1
@@ -610,20 +729,21 @@ def _stem_vs_trunk(pieces, i, e, j, params):
 def _split_parallel(pieces, params):
     """Pasillos paralelos (de distintas líneas o tramos de una misma línea, como las ramas de una U): la planta entre
     ambos se reparte por la línea media."""
-    cw, pw, D = params["corridor_width"], params["party_wall"], params["max_unit_depth"]
+    pw, D = params["party_wall"], params["max_unit_depth"]
     for i, pc in enumerate(pieces):
         for j, q in enumerate(pieces):
             if i == j or not pc.get("side_region"):
                 continue
+            cp, cq = ancho_de(pc, params), ancho_de(q, params)
             if abs(math.sin(pc["angle"] - q["angle"])) > 0.03 or math.cos(pc["angle"] - q["angle"]) == 0:
                 continue
             A = G.to_local([q["origin"]], pc["origin"], pc["angle"])[0]
             Bq = G.to_local(G.to_world([(q["xb"], 0.0)], q["origin"], q["angle"]), pc["origin"], pc["angle"])[0]
             ov = min(pc["xb"], max(A[0], Bq[0])) - max(pc["xa"], min(A[0], Bq[0]))
             yo = (A[1] + Bq[1]) / 2.0
-            if ov < 1.0 or abs(yo) > 2 * (cw / 2 + pw + D) or abs(yo) < cw:
+            if ov < 1.0 or abs(yo) > (cp + cq) / 2 + 2 * (pw + D) or abs(yo) < (cp + cq) / 2:
                 continue
-            cut = yo / 2.0
+            cut = yo / 2.0 + (cp - cq) / 4.0 * (1 if yo > 0 else -1)     # la mitad entre los bordes de los dos pasillos
             _clip_sr(pc, (lambda r: G.clip_rect(r, None, None, None, cut - pw / 2)) if yo > 0 else
                      (lambda r: G.clip_rect(r, None, None, cut + pw / 2, None)))
 
@@ -640,8 +760,9 @@ def egress_at(pieces, i, x, depth=3):
 def _zonas_oscuras(pieces, params):
     """Las esquinas sin luz que quedaron vacías (sin viviendas, núcleo ni pasillo) se marcan en la planta («Sin luz
     natural») y cuentan aparte en las métricas: no es superficie desperdiciada, es la que no recibe luz."""
-    cw, pw = params["corridor_width"], params["party_wall"]
+    pw = params["party_wall"]
     for pc in pieces:
+        cw = ancho_de(pc, params)
         _, qy0, _, qy1 = G.bbox(pc["loc_plate"])
         for sd, a, b in pc.get("oscuros", []):
             if pc.get("single") and sd < 0:
@@ -665,14 +786,16 @@ def _zonas_oscuras(pieces, params):
                     pc.setdefault("codos", []).append(G.to_world(z, pc["origin"], pc["angle"]))
 
 
-def _nucleo_en_codo(pc, juntas, params):
+def _nucleo_en_codo(pc, juntas, params, pieces=None):
     """Lugar para un núcleo en un tramo sin luz junto a una unión (el codo interior de una L o una U), o None: al
     costado del conector del pasillo de la otra ala y fuera de la esquina que ya ocupan sus viviendas."""
-    half, cw, pw = params["core_width"] / 2.0, params["corridor_width"], params["party_wall"]
+    half, pw = params["core_width"] / 2.0, params["party_wall"]
+    cw = ancho_de(pc, params)
+    cj = lambda j: ancho_de(pieces[j["nb"]], params) if pieces is not None and j.get("nb") is not None else cw
     libre = lambda x: all(x + half <= o0 or x - half >= o1 for o0, o1 in
-                          pc.get("ocupados", []) + [(j["x"] - cw / 2 - pw / 2, j["x"] + cw / 2 + pw / 2)
+                          pc.get("ocupados", []) + [(j["x"] - cj(j) / 2 - pw / 2, j["x"] + cj(j) / 2 + pw / 2)
                                                      for j in pc["junctions"] if j.get("llega")])
-    d = params["core_depth"]
+    d = params["core_depth"] + (cw - params["corridor_width"])     # R10.8: el fondo del núcleo, con este pasillo
 
     def entra(x, sd):                                    # la caja entera del núcleo dentro de la planta
         y0, y1 = (-cw / 2, -cw / 2 + d) if sd > 0 else (cw / 2 - d, cw / 2)
@@ -683,7 +806,7 @@ def _nucleo_en_codo(pc, juntas, params):
         if pc.get("single") and sd < 0:
             continue                                     # pasillo de borde: de ese lado no hay franja de viviendas
         for j in juntas:
-            for x in (j["x"] + cw / 2 + pw / 2 + half, j["x"] - cw / 2 - pw / 2 - half):
+            for x in (j["x"] + cj(j) / 2 + pw / 2 + half, j["x"] - cj(j) / 2 - pw / 2 - half):
                 if a - 0.3 <= x - half and x + half <= b + 0.3 and libre(x) and entra(x, sd) and \
                         (mejor is None or abs(x - j["x"]) < mejor[2]):
                     mejor = (x, sd, abs(x - j["x"]))
@@ -695,7 +818,8 @@ def _punta(pc, e, x, side, params):
     para una vivienda (por ejemplo, una polilínea que termina antes de la fachada), el núcleo se apoya contra el borde:
     esa franja ya no queda suelta y la vivienda del otro lado del núcleo crece en su lugar. Solo si el núcleo llega a la
     fachada: si detrás le queda un bolsillo, la franja y el bolsillo ya forman una vivienda."""
-    cw, pw, d, half = params["corridor_width"], params["party_wall"], params["core_depth"], params["core_width"] / 2.0
+    pw, half, cw = params["party_wall"], params["core_width"] / 2.0, ancho_de(pc, params)
+    d = params["core_depth"] + (cw - params["corridor_width"])     # R10.8: el fondo del núcleo, con este pasillo
     y0, y1 = (-cw / 2, -cw / 2 + d) if side > 0 else (cw / 2 - d, cw / 2)
     banda = G.clip_rect(pc["loc_plate"], None, None, y0, y1)
     detras = G.clip_rect(pc["loc_plate"], x - half, x + half)
@@ -743,7 +867,8 @@ def medidas_nucleo(spec, params):
 def _add_core(pc, x, side, params, bolsillo=True):
     """Núcleo en x, del lado side. Si detrás queda una franja más chica que BOLSILLO, el núcleo llega hasta la fachada
     (salvo bolsillo=False: un fondo elegido para ese núcleo se respeta y la franja queda para la vivienda vecina)."""
-    cw, w, d = params["corridor_width"], params["core_width"], params["core_depth"]
+    cw, w = ancho_de(pc, params), params["core_width"]
+    d = params["core_depth"] + (cw - params["corridor_width"])     # R10.8: el fondo incluye el pasillo de esta pieza
     if side > 0:
         box = (x - w / 2, -cw / 2, x + w / 2, -cw / 2 + d)
     else:
@@ -763,7 +888,8 @@ def _add_core(pc, x, side, params, bolsillo=True):
 def _x_que_entra(pc, x, side, params):
     """Alas con inglete o con un extremo inclinado (R3.4): la x más cercana a x donde la caja entera del núcleo entra
     en el ala (si no, un núcleo recortado por el borde no tendría lugar para la escalera)."""
-    half, cw, d = params["core_width"] / 2.0, params["corridor_width"], params["core_depth"]
+    half, cw = params["core_width"] / 2.0, ancho_de(pc, params)
+    d = params["core_depth"] + (cw - params["corridor_width"])     # R10.8: el fondo del núcleo, con este pasillo
     y0, y1 = (-cw / 2, -cw / 2 + d) if side > 0 else (cw / 2 - d, cw / 2)
 
     def entra(xx):
@@ -789,11 +915,28 @@ def _sin_pisar(pieces, pc, x, side, params, sentido):
         if "eje" in pc:
             xx = _x_que_entra(pc, xx, side, params)
         _add_core(pc, xx, side, params)
-        pisa = _pisa_nucleo(pieces, pc, pc["cores"][-1])
+        pisa = _pisa_nucleo(pieces, pc, pc["cores"][-1]) or _pisa_conector(pc, pc["cores"][-1], params)
         pc["cores"].pop()
         if not pisa:
             return xx
     return None
+
+
+def _pisa_conector(pc, nuevo, params, solo_anchos=False):
+    """R10.8: ¿el núcleo nuevo de la pieza pc pone escalera, ascensor, ducto o sala de máquinas (más de 0,1 m²) sobre el
+    conector del pasillo de otra ala que llega de su mismo lado? solo_anchos: solo los más anchos que su pasillo."""
+    pw, b, cw = params["party_wall"], nuevo["box"], ancho_de(pc, params)
+    cerca = [(c0 + pw / 2, c1 - pw / 2) for s_, c0, c1 in pc.get("conectores", [])
+             if s_ == nuevo["side"] and b[0] < c1 - pw / 2 and c0 + pw / 2 < b[2] and
+             (not solo_anchos or c1 - c0 - pw > cw + 0.05)]
+    if not cerca:
+        return False
+    if params.get("_partes_nucleo") is None:
+        return True
+    ps = [p_["poly"] for p_ in params["_partes_nucleo"](b, nuevo["side"], cw)
+          if p_["kind"] in ("stair", "elevator", "duct", "service")]
+    return any(sum(abs(G.area(q)) for q in (G.clip_rect(p_, x0, x1, None, None) for p_ in ps) if q and len(q) >= 3) > 0.1
+               for x0, x1 in cerca)
 
 
 def _pisa_nucleo(pieces, pc, nuevo):
@@ -851,13 +994,14 @@ def _puntas_tras_cruce(pieces, params):
     allá del cruce hasta la fachada sin servir a ninguna puerta). Si la franja de viviendas de otra ala llega justo hasta
     ese tramo (de la fachada al pasillo que llega: los codos de R3.2), la franja lo cruza y el pasillo termina en la
     unión (q["tramo"]). Las viviendas del otro lado entran por lo que queda (q["puntas"], ver units.entradas)."""
-    cw, pw = params["corridor_width"], params["party_wall"]
-    lin = cw / 2 + pw / 2
+    pw = params["party_wall"]
     for q in pieces:
         if q.get("user") or q.get("between"):
             continue
-        anclas = [(j["x"] - cw / 2, j["x"] + cw / 2) for j in q["junctions"]] + \
-            [(c["box"][0], c["box"][2]) for c in q["cores"]]
+        cw = ancho_de(q, params)                         # R10.8: cada pasillo con su ancho
+        lin = cw / 2 + pw / 2
+        anclas = [(j["x"] - ancho_de(pieces[j["nb"]], params) / 2, j["x"] + ancho_de(pieces[j["nb"]], params) / 2)
+                  for j in q["junctions"]] + [(c["box"][0], c["box"][2]) for c in q["cores"]]
         if not anclas:
             continue
         for e in (0, 1):
@@ -872,10 +1016,11 @@ def _puntas_tras_cruce(pieces, params):
                     continue
                 sr = pc.get("side_region")
                 hecho = False
+                lin_p = ancho_de(pc, params) / 2 + pw / 2
                 for sd in ((1,) if pc.get("single") else (1, -1)):
                     reg = sr.get(sd) if sr else pc["loc_plate"]
-                    franja = (G.clip_rect(reg, None, None, lin, None) if sd > 0 else
-                              G.clip_rect(reg, None, None, None, -lin)) if reg else []
+                    franja = (G.clip_rect(reg, None, None, lin_p, None) if sd > 0 else
+                              G.clip_rect(reg, None, None, None, -lin_p)) if reg else []
                     if not franja:
                         continue
                     bx0, by0, bx1, by1 = G.bbox(G.to_local(G.to_world(franja, pc["origin"], pc["angle"]),
@@ -952,7 +1097,9 @@ def _generate_circulation(plate, params):
         loc = pc["loc_plate"]
         _, ly0, _, ly1 = G.bbox(loc)
         D = _between_depth(params)
-        cwc = params.get("_cw_base", 2.0)
+        # los pasillos que llegan a las viviendas: el ancho pedido para este tramo (R10.8) o el general (sin ensanchar
+        # para el núcleo; antes, con núcleos manuales, quedaba fijo en 2.0)
+        cwc = pc.get("ancho_trans") or params.get("_cw_base") or params["corridor_width"]
         pc["side_region"] = {1: loc, -1: loc}
         pc["dark"] = []
         pc["egress_extra"] = {1: 0.0, -1: 0.0}
@@ -980,7 +1127,8 @@ def _generate_circulation(plate, params):
     user = any(pc.get("user") for pc in pieces)
     for pc in pieces:
         if "corridor_local" not in pc:
-            pc["corridor_local"] = G.clip_rect(pc["loc_plate"], pc["xa"], pc["xb"], -cw / 2, cw / 2)
+            cp = ancho_de(pc, params)
+            pc["corridor_local"] = G.clip_rect(pc["loc_plate"], pc["xa"], pc["xb"], -cp / 2, cp / 2)
     if not user:
         _connect(pieces, plate, params)
     if not user:
@@ -1029,7 +1177,7 @@ def _generate_circulation(plate, params):
                 if ring and cerca:
                     continue        # punta corta de un pasillo que da la vuelta al patio: se sale hacia los dos lados
                 if cerca:           # punta corta junto a un codo: se sale por la unión; el núcleo va al codo sin luz
-                    codo = _nucleo_en_codo(pc, cerca, params)
+                    codo = _nucleo_en_codo(pc, cerca, params, pieces)
                     if codo is not None:
                         _add_core(pc, codo[0], codo[1], params)
                         if _pisa_nucleo(pieces, pc, pc["cores"][-1]):
@@ -1040,7 +1188,11 @@ def _generate_circulation(plate, params):
                     x = (pc["xa"] + pc["xb"]) / 2.0
                 lado = 1 if pc.get("single") else next_side()
                 _add_core(pc, _x_que_entra(pc, x, lado, params) if "eje" in pc else x, lado, params)
-                if _pisa_nucleo(pieces, pc, pc["cores"][-1]):
+                if not pc.get("single") and _pisa_conector(pc, pc["cores"][-1], params):
+                    pc["cores"].pop()       # R10.8: llega ahí el pasillo de la otra ala: del otro lado
+                    lado = -lado
+                    _add_core(pc, _x_que_entra(pc, x, lado, params) if "eje" in pc else x, lado, params)
+                if _pisa_nucleo(pieces, pc, pc["cores"][-1]) or _pisa_conector(pc, pc["cores"][-1], params):
                     pc["cores"].pop()       # pisa otro núcleo (dos puntas cercanas): se corre hacia adentro, si entra
                     x2 = _sin_pisar(pieces, pc, x, lado, params, 1 if e == 0 else -1)
                     if x2 is None:
@@ -1072,7 +1224,7 @@ def _generate_circulation(plate, params):
             break
         pc = pieces[i]
         x = min(max(x, pc["xa"] + half), pc["xb"] - half) if pc["xb"] - pc["xa"] >= 2 * half else (pc["xa"] + pc["xb"]) / 2
-        oscuro = _nucleo_en_codo(pc, [{"x": x}], dict(params, egress_single=BOLSILLO * 2))
+        oscuro = _nucleo_en_codo(pc, [{"x": x}], dict(params, egress_single=BOLSILLO * 2), pieces)
         if oscuro is not None:      # de preferencia en un tramo sin luz cercano: no le quita fachada a ninguna vivienda
             _add_core(pc, oscuro[0], oscuro[1], params)
             if not _pisa_nucleo(pieces, pc, pc["cores"][-1]):
@@ -1080,8 +1232,8 @@ def _generate_circulation(plate, params):
             pc["cores"].pop()
         lado = 1 if pc.get("single") else next_side()
         _add_core(pc, _x_que_entra(pc, x, lado, params) if "eje" in pc else x, lado, params)
-        if _pisa_nucleo(pieces, pc, pc["cores"][-1]):
-            pc["cores"].pop()       # pisa otro núcleo: del otro lado del pasillo o un poco más allá
+        if _pisa_nucleo(pieces, pc, pc["cores"][-1]) or _pisa_conector(pc, pc["cores"][-1], params, solo_anchos=True):
+            pc["cores"].pop()       # pisa otro núcleo (o el pasillo más ancho de otra ala): del otro lado o más allá
             x2 = None
             for ld in ((lado,) if pc.get("single") else (-lado, lado)):
                 for d in (1, -1):

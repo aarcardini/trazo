@@ -17,12 +17,12 @@ from .circulation import (pick_frame, core_positions, side_for, _frame_for_poly,
                           _choose_single, _ring_single, _single_frame, _bridge_axis, build_pieces, _link, _connect,
                           _franjas_sin_luz, _clip_sr, build_user_pieces, _stem_vs_trunk, _split_parallel, egress_at,
                           _add_core, _propagate_core_blocks, generate_circulation, is_between, _between_depth,
-                          _generate_circulation, nucleo_punto, medidas_nucleo)  # noqa: F401
+                          _generate_circulation, nucleo_punto, medidas_nucleo, ancho_de)  # noqa: F401
 from .units import (_bisect_x, _chain_union, _is_rect, _segments, generate_unit_mix, metrics_mix, bedrooms_for,
                     unit_rooms, sin_solapes, editar_unidades, vecinas, formar_frentes, entradas)  # noqa: F401
 from .patios import (auto_patios, _anillo, split_blocks, make_patio_dark, _block_of, _block_of_line)  # noqa: F401
 
-VERSION = "2.38"
+VERSION = "2.39"
 
 DEFAULT_PARAMS = {
     # Masa
@@ -35,6 +35,7 @@ DEFAULT_PARAMS = {
     "cores_mode": "auto",       # auto | manual
     "cores": None,              # núcleos manuales: [x, y] o {"p": [x, y], "frente", "fondo", "giro": 0|90} (mundo; se ajustan al pasillo)
     "corridor_width": 2.0,
+    "anchos_pasillo": None,     # R10.8: ancho propio de algunos tramos: [{"p": [x,y] | "seg": [[x,y],[x,y]], "ancho": m}]
     "core_width": 5.0,
     "core_depth": 7.0,          # incluye el pasillo (como en Finch)
     "core_count": 2,
@@ -102,6 +103,116 @@ def _ascensores_pedidos(cores, S, n_niveles, sube, units=None, n_res=1, por_nucl
     return n
 
 
+def _pasillo(pc, pb, bi, partes, W):
+    """R10.8: un tramo de pasillo en el resultado: su eje (donde la web lo elige y guarda el pedido), largo del tramo
+    recto (con el conector hasta el pasillo al que llega; entre medianeras, el más largo de los que llegan a las
+    viviendas), ancho, si es propio y qué partes de res["corridors"] son suyas."""
+    a, b = pc.get("eje", (pc["xa"], pc["xb"]))
+    if pc.get("tramo"):
+        a, b = max(a, pc["tramo"][0]), min(b, pc["tramo"][1])
+    editable = True
+    if pc.get("between"):                          # entre medianeras: el pedido es el de los pasillos que llegan a las
+        largo = max([pc["xb"] - pc["xa"]] + list(pc.get("egress_extra", {}).values()))     # viviendas; sin ellos, el
+        editable = bool(pc["corridor_ext"])                                                  # pasillo es la franja del
+        ancho = (pc.get("ancho_trans") or pb.get("_cw_base") or pb["corridor_width"]) if editable else \
+            pb["corridor_width"]                                                             # núcleo (no se angosta)
+    else:
+        ancho, largo = ancho_de(pc, pb), b - a + pc.get("prolonga", 0.0)
+    return {"id": "P%d" % (pc["_pas"] + 1), "bloque": bi, "eje": W(pc, [(a, 0.0), (b, 0.0)]), "largo": round(largo, 2),
+            "ancho": round(ancho, 3), "propio": "ancho_k" in pc, "spec": pc.get("ancho_k"), "editable": editable,
+            "partes": partes}
+
+
+def _rectos(pieces, pasillos, tol=0.05):
+    """R10.8: los tramos que siguen derecho uno tras otro (un vértice intermedio sobre la recta, las dos mitades de una
+    línea cortada en un cruce, una L más el brazo que la completa en T) son un solo pasillo recto para el art. 35: cada
+    uno toma el largo de todos y pc["_recto"] dice cuáles son (sus viviendas son las que pasan por cualquiera de
+    ellos). Se miden por geometría: extremos a tol o menos y cada vértice a tol o menos de la recta del grupo (una
+    polilínea curva no suma sus giros)."""
+    def ext(pc):
+        if pc.get("between"):
+            return None
+        if pc.get("dibujo"):
+            return [tuple(q) for q in pc["dibujo"]]
+        a, b = pc.get("eje", (pc["xa"], pc["xb"]))
+        return G.to_world([(a, 0.0), (b, 0.0)], pc["origin"], pc["angle"])
+    E = [ext(pc) for pc in pieces]
+    cerca = lambda P, Q: math.hypot(P[0] - Q[0], P[1] - Q[1]) <= tol
+
+    def recta(P):
+        (ax, ay), (bx, by) = P[0], P[-1]
+        L = math.hypot(bx - ax, by - ay)
+        return L > tol and all(abs((bx - ax) * (y - ay) - (by - ay) * (x - ax)) / L <= tol for x, y in P[1:-1])
+    sigue = {}                                     # (pieza, extremo) -> (pieza que sigue derecho, su extremo)
+    for i in range(len(E)):
+        for k in range(i + 1, len(E)):
+            for e in (0, 1):
+                for f in (0, 1):
+                    if E[i] is None or E[k] is None or (i, e) in sigue or (k, f) in sigue or not cerca(E[i][e], E[k][f]):
+                        continue
+                    A, B = E[i][1 - e], E[k][1 - f]
+                    if (A[0] - E[i][e][0]) * (B[0] - E[k][f][0]) + (A[1] - E[i][e][1]) * (B[1] - E[k][f][1]) < 0 and \
+                            recta([A, E[i][e], B]):
+                        sigue[(i, e)], sigue[(k, f)] = (k, f), (i, e)
+    grupo, hecho = {}, set()
+    for s in sorted(range(len(E)), key=lambda i: ((i, 0) in sigue) + ((i, 1) in sigue)):   # primero las puntas
+        if s in hecho:
+            continue
+        hecho.add(s)
+        if E[s] is None:
+            grupo[s] = [s]
+            continue
+        e = 1 if (s, 0) in sigue and (s, 1) not in sigue else 0
+        g, P, i, sale = [s], [E[s][e], E[s][1 - e]], s, 1 - e
+        while (i, sale) in sigue and sigue[(i, sale)][0] not in hecho:
+            k, f = sigue[(i, sale)]
+            hecho.add(k)
+            if recta(P + [E[k][1 - f]]):
+                g, P = g + [k], P + [E[k][1 - f]]
+            else:                                  # gira de a poco: empieza otro tramo recto
+                for m in g:
+                    grupo[m] = g
+                g, P = [k], [E[k][f], E[k][1 - f]]
+            i, sale = k, 1 - f
+        for m in g:
+            grupo[m] = g
+    largos = {i: sum(pasillos[pieces[k]["_pas"]]["largo"] for k in grupo[i]) for i in grupo}
+    for i, pc in enumerate(pieces):
+        pc["_recto"] = sorted(pieces[k]["_pas"] for k in grupo[i])
+        if len(grupo[i]) > 1:
+            pasillos[pc["_pas"]]["largo"] = round(largos[i], 2)
+
+
+def _caja_sin_pasillos(pieces, pc, c, cw):
+    """R10.8: la caja de las partes del núcleo llega hasta el pasillo de otra pieza, no lo pisa (el núcleo de un
+    pasillo ancho es más hondo y, en un ala angosta, llegaría al pasillo del ala paralela vecina)."""
+    b, sd = c["box"], c["side"]
+    lim = b[3] if sd > 0 else b[1]
+    for q in pieces:
+        if q is pc or not q.get("corridor_local"):
+            continue
+        ol = G.clip_rect(G.to_local(G.to_world(q["corridor_local"], q["origin"], q["angle"]), pc["origin"], pc["angle"]),
+                         b[0] + 0.05, b[2] - 0.05)
+        if not ol or abs(G.area(ol)) < 1e-6:
+            continue
+        o = G.bbox(ol)
+        if sd > 0 and cw / 2 - 1e-6 <= o[1] < lim:
+            lim = o[1]
+        elif sd < 0 and lim < o[3] <= -cw / 2 + 1e-6:
+            lim = o[3]
+    return (b[0], b[1], b[2], lim) if sd > 0 else (b[0], lim, b[2], b[3])
+
+
+def _art35(res, S):
+    """R10.8: el ancho mínimo de cada tramo según la norma nacional (art. 35) y un aviso por cada uno que no llega."""
+    for ps in res["pasillos"]:
+        minimo, motivo = ST.ancho_art35(S, ps.get("viviendas"), ps["largo"])
+        ps.update(minimo=minimo, ok=ps["ancho"] >= minimo - 1e-6)
+        if not ps["ok"]:
+            res["warnings"].append("Pasillo %s de %.2f m: el art. 35 de la norma nacional pide %.2f m %s" % (
+                ps["id"], ps["ancho"], minimo, motivo))
+
+
 # ---------------------------------------------------------------- orquestación
 def generate(data):
     params = merge_params(data.get("params"))
@@ -145,6 +256,7 @@ def generate(data):
     if params.get("core_auto", True):
         params["core_width"], params["core_depth"] = tam(n_elev)
     params["_core_90"] = tam(n_elev, 90)                   # núcleo girado (R3.5)
+    params["_partes_nucleo"] = lambda box, side, cw_: PR.core_parts(box, side, cw_, S["nucleo"], floor_h, n_elev)
     otra_pasada = lambda n: generate(dict(data, params=dict(data.get("params") or {}, _ascensores=n)))
     sw_, sl_, risers_ = ST.stair_box(S["nucleo"], floor_h)
     stype = ("común" if top_h <= 12 else "protegida (EP)" if top_h <= 30 else "presurizada (PFP)")
@@ -197,6 +309,8 @@ def generate(data):
     bloques_pc = []                                          # por bloque: (piezas, parámetros, planta, núcleos, viviendas)
     emax = area_codos = 0.0
     state, hechos, avisos_u = {}, set(), []                  # mix compartido entre bloques, cambios R4.4 aplicados
+    params["_anchos_usados"] = set()                         # R10.8: anchos de pasillo pedidos que se aplicaron
+    res["pasillos"] = []                                     # R10.8: cada tramo de pasillo (para elegirlo en la web)
     for bi, (pl_b, ph_b) in enumerate(plantas):
         pb = dict(params)
         mapa = None
@@ -217,7 +331,6 @@ def generate(data):
             pb["_cw_base"] = pb["corridor_width"]
             pb["corridor_width"] = max(pb["corridor_width"], pb["core_depth"] - pb["corridor_width"])
             res["metrics"]["between"] = True
-        cw_b = pb["corridor_width"]
         pieces = generate_circulation(pl_b, pb)
         if "frame" not in res:
             p0 = pieces[0]
@@ -229,10 +342,12 @@ def generate(data):
                 if c["poly_local"]:
                     cen = G.to_world([G.centroid(c["poly_local"])], pc["origin"], pc["angle"])[0]
                     n_c = c["ascensores"] if c.get("ascensores") is not None else n_elev      # R10.7
+                    cw_p = ancho_de(pc, pb)                  # R10.8: el ancho del pasillo de su tramo
                     if c.get("between"):
                         parts = PR.core_parts(c["box"], 1, -(c["box"][3] - c["box"][1]), S["nucleo"], floor_h, n_c)
                     else:
-                        parts = PR.core_parts(c["box"], c["side"], cw_b, S["nucleo"], floor_h, n_c, c.get("giro", 0))
+                        parts = PR.core_parts(_caja_sin_pasillos(pieces, pc, c, cw_p), c["side"], cw_p, S["nucleo"],
+                                              floor_h, n_c, c.get("giro", 0))
                     c["_res"] = len(res["cores"])
                     spec = c.get("spec")
                     if mapa is not None and spec is not None:
@@ -242,7 +357,7 @@ def generate(data):
                                          "center": [round(cen[0], 3), round(cen[1], 3)], "spec": spec,
                                          "giro": c.get("giro", 0), "frente": round(b_[2] - b_[0], 2),
                                          "ascensores": n_c, "ascensores_propios": c.get("ascensores") is not None,
-                                         "fondo": round(b_[3] - b_[1] - cw_b, 2),
+                                         "fondo": round(b_[3] - b_[1] - cw_p, 2),
                                          "parts": [{"kind": p_["kind"], "name": p_["name"], "poly": W(pc, p_["poly"]),
                                                     "lines": [W(pc, ln) for ln in p_["lines"]]} for p_ in parts]})
                     cpolys.append(res["cores"][-1]["poly"])
@@ -268,10 +383,16 @@ def generate(data):
             t = pc.get("tramo")                          # R3.7: solo se corta la punta que ya no hace falta
             pasillo = G.clip_rect(pc["corridor_local"], t[0] if t[0] > pc["xa"] + 1e-6 else None,
                                   t[1] if t[1] < pc["xb"] - 1e-6 else None) if t else pc["corridor_local"]
+            partes = []
             for parte in G.split_parts(pasillo):           # un pasillo que cruza una muesca: varias partes
+                partes.append(len(res["corridors"]))
                 res["corridors"].append(W(pc, parte))
             for ext in pc["corridor_ext"]:
+                partes.append(len(res["corridors"]))
                 res["corridors"].append(G.pol_to_list(ext))
+            pc["_pas"] = len(res["pasillos"])
+            res["pasillos"].append(_pasillo(pc, pb, bi, partes, W))
+        _rectos(pieces, res["pasillos"])
         res["dark_zones"] += [G.pol_to_list(d_) for pc in pieces for d_ in pc.get("dark", [])]
         codos = [G.pol_to_list(d_) for pc in pieces for d_ in pc.get("codos", [])]
         res["dark_zones"] += codos
@@ -342,7 +463,15 @@ def generate(data):
             if d:
                 d["stalls"] = acc["count"] * d["stories"]
     res["program_layouts"] = layouts
+    sin_tramo = [k for k in range(len(params.get("anchos_pasillo") or [])) if k not in params["_anchos_usados"]]
+    if sin_tramo:
+        res["anchos_sin_tramo"] = sin_tramo
+        res["warnings"].append("%d ancho(s) de pasillo pedido(s) no tiene(n) tramo: la planta o las líneas cambiaron desde "
+                               "que los marcaste. Quítalos con «Quitar los que no tienen tramo» (en Circulación) y elige "
+                               "el tramo de nuevo" % len(sin_tramo))
     if stage == "corridor":
+        if n_res_lv:                                       # el art. 35 es de la norma de vivienda
+            _art35(res, S["nucleo"])
         pide = _ascensores_pedidos(res["cores"], S["nucleo"], len(stories), sube, por_nucleo=units_est)
         if pide is not None and pide != n_elev and params.get("_ascensores") is None and not fijo.isdigit():
             return otra_pasada(pide)
@@ -356,7 +485,15 @@ def generate(data):
             u["egress"] = min(1e9, EV.recorrido(pb["_evac"], u["_i"], xd) + extra)
             u["saco"] = min(1e9, EV.saco(pb["_evac"], u["_i"], xd) + extra)
             u["_nucleo"] = _nucleo_de(pb["_evac"], pieces, u["_i"], xd)
+            if n_res_lv:                                    # R10.8: las viviendas que sirve cada tramo recto
+                for k in {k for i in EV.piezas(pb["_evac"], u["_i"], xd) for k in pieces[i]["_recto"]}:
+                    ps = res["pasillos"][k]
+                    ps["viviendas"] = ps.get("viviendas", 0) + 1
         units += del_bloque
+    if n_res_lv:                                           # el art. 35 es de la norma de vivienda
+        for ps in res["pasillos"]:
+            ps.setdefault("viviendas", 0)
+        _art35(res, S["nucleo"])
     pide = _ascensores_pedidos(res["cores"], S["nucleo"], len(stories), sube, units=units, n_res=n_res_lv)
     if pide is not None and pide != n_elev and params.get("_ascensores") is None and not fijo.isdigit():
         return otra_pasada(pide)              # R10.7: núcleos con los ascensores que piden las viviendas que sirven
@@ -398,6 +535,7 @@ def generate(data):
                 "width": round(u["width"], 2), "depth": round(u["depth"], 2), "egress": round(eg, 1),
                 "saco": round(sc, 1), "egress_status": status, "poly": W(pc, u["poly_local"]),
                 "door": [round(v, 3) for v in G.to_world([u["door_local"]], pc["origin"], pc["angle"])[0]]}
+        item["pasillo"] = res["pasillos"][pc["_pas"]]["id"]   # R10.8: el tramo de pasillo de su puerta
         if u.get("editada"):
             item["editada"] = True
         if u.get("frente"):

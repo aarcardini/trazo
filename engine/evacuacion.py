@@ -61,8 +61,9 @@ def _alcanzan(ady, nucleos, sin_nodo=None, sin_arista=None):
     return vis
 
 
-def _dijkstra(ady, fuentes, sin_arista=None, origen=False):
-    """Distancia de cada nodo a la fuente más cercana; con origen=True, también cuál es esa fuente."""
+def _dijkstra(ady, fuentes, sin_arista=None, origen=False, pred=None):
+    """Distancia de cada nodo a la fuente más cercana; con origen=True, también cuál es esa fuente. pred: una lista
+    que se llena con el nodo anterior de cada uno en su camino más corto (None en las fuentes)."""
     d, o = [INF] * len(ady), [None] * len(ady)
     q = [(0.0, s) for s in fuentes]
     for s in fuentes:
@@ -75,6 +76,8 @@ def _dijkstra(ady, fuentes, sin_arista=None, origen=False):
         for v, w, k in ady[u]:
             if k != sin_arista and dd + w < d[v]:
                 d[v], o[v] = dd + w, o[u]
+                if pred is not None:
+                    pred[v] = u
                 heapq.heappush(q, (d[v], v))
     return (d, o) if origen else d
 
@@ -87,7 +90,8 @@ def analizar(pieces):
     nodos, aristas, nucleos = _red(pieces)
     n = len(nodos)
     ady = _ady(n, aristas)
-    rec, origen = _dijkstra(ady, nucleos, origen=True)
+    pred = [None] * n
+    rec, origen = _dijkstra(ady, nucleos, origen=True, pred=pred)
     seguros = set(nucleos)                                 # núcleos y nodos con dos direcciones de salida
     for N in range(n):
         if N not in seguros and nucleos:
@@ -115,7 +119,8 @@ def analizar(pieces):
             if t is not None and t[0] is not None and t[0] != N:
                 mejor = min(mejor, w + t[1])
         saco_nodo.append(mejor)
-    return {"nodos": nodos, "aristas": aristas, "rec": rec, "origen": origen, "tramo": tramo, "saco_nodo": saco_nodo}
+    return {"nodos": nodos, "aristas": aristas, "rec": rec, "origen": origen, "tramo": tramo, "saco_nodo": saco_nodo,
+            "pred": pred}
 
 
 def _sobre(red, i, x):
@@ -154,6 +159,21 @@ def nucleo(red, i, x):
     nodos, rec = red["nodos"], red["rec"]
     N = min(ab if isinstance(ab, tuple) else (ab,), key=lambda N: rec[N] + abs(x - nodos[N][1]))
     return nodos[red["origen"][N]] if rec[N] < INF else None
+
+
+def piezas(red, i, x):
+    """R10.8: piezas (tramos de pasillo) por las que pasa el recorrido más corto desde el punto x del eje de la pieza i
+    hasta su núcleo (las viviendas que sirve cada tramo, para el ancho del art. 35)."""
+    k, ab = _sobre(red, i, x)
+    if ab is None:
+        return {i}
+    nodos, rec, pred = red["nodos"], red["rec"], red["pred"]
+    N = min(ab if isinstance(ab, tuple) else (ab,), key=lambda N: rec[N] + abs(x - nodos[N][1]))
+    out = {i}
+    while N is not None and rec[N] < INF:
+        out.add(nodos[N][0])
+        N = pred[N]
+    return out
 
 
 def saco(red, i, x):

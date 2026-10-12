@@ -155,6 +155,20 @@ def test_nucleo_con_ascensores():
     assert m.nucleo([1.0, 2.0], None) == [1.0, 2.0] and m.nucleo([1.0, 2.0], "ascensores=dos") == [1.0, 2.0]
 
 
+def test_ancho_de_linea():
+    """R10.8: una polilínea de Trazo::Centerline llamada «ancho=1.4» pide ese ancho para cada uno de sus tramos."""
+    m = cargar()
+    pts = [[0.0, 0.0], [10.0, 0.0], [10.0, 8.0]]
+    assert m.anchos_de_linea(pts, "ancho=1.4") == [{"seg": [[0.0, 0.0], [10.0, 0.0]], "ancho": 1.4},
+                                                   {"seg": [[10.0, 0.0], [10.0, 8.0]], "ancho": 1.4}]
+    assert m.anchos_de_linea(pts, "Ancho = 1,6")[0]["ancho"] == 1.6
+    assert m.anchos_de_linea(pts, None) == [] and m.anchos_de_linea(pts, "ancho=uno") == [] and \
+        m.anchos_de_linea(pts, "ancho=0") == []
+    # un tramo de 5 cm o menos (una esquina resuelta en dos vértices) no se manda: el motor une esos vértices
+    assert [a["seg"] for a in m.anchos_de_linea([[0.0, 0.0], [10.0, 0.0], [10.03, 0.0], [10.03, 8.0]], "ancho=1.4")] == \
+        [[[0.0, 0.0], [10.0, 0.0]], [[10.03, 0.0], [10.03, 8.0]]]
+
+
 def test_curva_a_puntos():
     """El contorno pasa a polilínea con las dos formas en que el Python de Rhino devuelve TryGetPolyline."""
     m = cargar()
@@ -411,7 +425,7 @@ def todas():
     for t in (test_servidor_apagado, test_con_servidor, test_objeto_no_valido, test_medidas,
               test_curva_a_puntos, test_origen_resultado, test_error_inesperado,
               test_capas_resultado, test_recibir_primera_vez, test_recibir_reemplaza, test_recibir_cancelar_o_agregar,
-              test_recibir_dos_veces, test_recibir_no_pudo_borrar, test_nucleo_con_ascensores):
+              test_recibir_dos_veces, test_recibir_no_pudo_borrar, test_nucleo_con_ascensores, test_ancho_de_linea):
         t()
 
 

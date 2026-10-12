@@ -13,6 +13,7 @@ o ábrelo en _ScriptEditor y pulsa Run.
 Requiere que el servidor esté corriendo:  py server.py (Windows)  /  python3 server.py (Mac)
 """
 import json
+import math
 import socket
 import sys
 import traceback
@@ -204,6 +205,20 @@ def nucleo(punto, nombre):
     return punto
 
 
+def anchos_de_linea(pts, nombre):
+    """R10.8: una polilínea de la capa Trazo::Centerline llamada «ancho=1.4» (o «ancho=1,4») pide ese ancho de pasillo
+    para todos sus tramos: [{"seg": [a, b], "ancho": 1.4}] (puntos en metros). Sin ese nombre, [] (el ancho general)."""
+    nm = (nombre or "").lower().replace(" ", "")
+    if "ancho=" not in nm:
+        return []
+    try:
+        a = float(nm.split("ancho=")[1].split(";")[0].replace(",", "."))
+    except ValueError:
+        return []
+    return [{"seg": [p, q], "ancho": a} for p, q in zip(pts, pts[1:])
+            if math.hypot(q[0] - p[0], q[1] - p[1]) > 0.05] if a > 0 else []      # el motor une los vértices a 5 cm o menos
+
+
 def send_mass():
     http("GET", "/api/version")          # sin servidor, avisa antes de pedir la masa
     oid = rs.GetObject("Selecciona la masa (sólido cerrado: polisuperficie o extrusión)", preselect=True)
@@ -249,8 +264,9 @@ def send_mass():
         "footprint": fp,
     }
     # polilíneas centrales opcionales: curvas en la capa Trazo::Centerline (cada vértice cuenta)
+    # (nombre del objeto «ancho=1.4»: ese ancho de pasillo en todos sus tramos; R10.8)
     if rs.IsLayer("Trazo::Centerline"):
-        lines = []
+        lines, anchos = [], []
         for cid in rs.ObjectsByLayer("Trazo::Centerline") or []:
             crv = rs.coercecurve(cid)
             if crv is None:
@@ -260,8 +276,11 @@ def send_mass():
                 if not crv.IsClosed:
                     cp = cp + [crv.PointAtEnd] if cp[-1].DistanceTo(crv.PointAtEnd) > tol else cp
                 lines.append([[q.X * k, q.Y * k] for q in cp])
+                anchos += anchos_de_linea(lines[-1], rs.ObjectName(cid))
         if lines:
             payload["centerlines"] = lines
+        if anchos:
+            payload["anchos_pasillo"] = anchos
     # medianeras opcionales: curvas en la capa Trazo::Medianeras (nombre del objeto "retiro=3" para indicar retiro)
     if rs.IsLayer("Trazo::Medianeras"):
         meds = []
@@ -308,9 +327,11 @@ def send_mass():
     for a in avisos:
         print("Trazo: aviso: " + a)
     print("Masa enviada (versión %s): huella de %.0f m² (%.1f × %.1f m), %.2f m de alto, archivo en %s; "
-          "%d polilínea(s), %d medianera(s), %d patio(s), %d núcleo(s) manual(es). Abre %s" %
+          "%d polilínea(s), %d medianera(s), %d patio(s), %d núcleo(s) manual(es), %d tramo(s) de pasillo con ancho "
+          "propio. Abre %s" %
           (res.get("version"), _area(fp), largo, ancho, alto, unidades(), len(payload.get("centerlines", [])),
-           len(payload.get("medianeras", [])), len(payload.get("patios", [])), len(payload.get("cores", [])), SERVER))
+           len(payload.get("medianeras", [])), len(payload.get("patios", [])), len(payload.get("cores", [])),
+           len(payload.get("anchos_pasillo", [])), SERVER))
 
 
 # ------------------------------------------------------------------ recibir resultado
