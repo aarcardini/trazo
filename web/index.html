@@ -44,7 +44,8 @@ main{grid-area:main;position:relative;overflow:hidden;min-width:0}main>svg{width
 .dibujo button{display:inline-flex;align-items:center;gap:6px;background:transparent;color:var(--ink);border:0;margin:0;padding:6px 10px;border-radius:7px;font-weight:600}.dibujo button:hover{background:var(--bg)}
 .dibujo button.on{background:var(--acc);color:#fff;outline:0}.dibujo .sep{width:1px;height:22px;background:var(--line);margin:0 4px}
 .toggle{display:inline-flex!important;align-items:center;gap:5px;margin:0!important;padding:6px 9px;border-radius:7px;font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--mut);cursor:pointer;user-select:none}.toggle input{display:none}
-.toggle.on{background:rgba(47,111,237,.12);color:var(--acc)}.toggle small{font-weight:500;letter-spacing:0;display:inline-block;min-width:4.2em}.grilla{fill:none;stroke:var(--grilla);stroke-width:1}.grilla.mayor{stroke:var(--grilla2)}.toggle kbd,.herr kbd{font:10px ui-monospace,monospace;border:1px solid var(--line);border-radius:4px;padding:0 3px;color:var(--mut)}
+.toggle.on{background:rgba(47,111,237,.12);color:var(--acc)}.toggle small{font-weight:500;letter-spacing:0;display:inline-block;min-width:4.2em}.grilla{fill:none;stroke:var(--grilla);stroke-width:1}.grilla.mayor{stroke:var(--grilla2)}.toggle kbd,.herr kbd,.atajos kbd{font:10px ui-monospace,monospace;border:1px solid var(--line);border-radius:4px;padding:0 3px;color:var(--mut)}.toggle.temp{outline:1px dashed var(--acc);outline-offset:-1px}
+.atajos{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:12px;align-items:baseline}.atajos>span{color:var(--mut)}.atajos>div{white-space:nowrap}
 .herr{position:absolute;left:50%;transform:translateX(-50%);bottom:64px;align-items:center;gap:6px;background:var(--pan);border:1px solid var(--line);border-radius:8px;padding:4px 6px 4px 10px;z-index:3;font-size:12px;max-width:calc(100% - 20px);white-space:nowrap}.herr button{margin:0;padding:3px 8px;font-size:12px}.herr .esc{color:var(--mut);margin-left:4px}.herr{width:max-content}.herr>span:first-child{white-space:normal;min-width:0}
 .herr label{display:inline-flex;align-items:center;gap:4px;margin:0;color:var(--mut)}.herr input{width:64px;padding:2px 6px;font-size:12px;text-align:right}.herr input.mal{border-color:var(--bad);outline:0}
 aside.r{grid-area:right;background:var(--pan);overflow:auto;padding:12px 14px;border-left:1px solid var(--line)}aside.r h2:first-child{margin-top:4px}
@@ -201,6 +202,18 @@ table{width:100%;border-collapse:collapse;font-size:12px}
    <div class="k"><span>Conexión abierta</span><b style="color:#1a9d5b">——</b></div>
    <div class="k"><span>Conexión con puerta</span><b style="color:#2f6fed">- - -</b></div>
    <div class="k"><span>Conexión que no cumple</span><b style="color:#d63b3b">——</b></div>
+   <h2>Atajos de teclado</h2>
+   <div class="atajos" id="atajos">
+    <div><kbd>L</kbd> <kbd>N</kbd> <kbd>M</kbd> <kbd>P</kbd> <kbd>S</kbd></div><span>Línea, Núcleo, Medianera, Patio y SCP; la misma letra cierra la herramienta</span>
+    <div><kbd>D</kbd></div><span>Mostrar u ocultar las cotas</span>
+    <div><kbd>Supr</kbd> <kbd>⌫</kbd></div><span>Quitar el núcleo, el patio o el tramo de pasillo elegido (Supr o Retroceso; ↶ lo devuelve); una vivienda no se borra</span>
+    <div><kbd>Shift</kbd></div><span>Orto mientras lo mantienes apretado, aunque esté apagado</span>
+    <div><kbd>Ctrl</kbd>+<kbd>Z</kbd></div><span>Deshacer (en Mac, Cmd+Z); rehacer, Ctrl+Y o Ctrl+Shift+Z</span>
+    <div><kbd>F7</kbd> <kbd>F8</kbd> <kbd>F9</kbd></div><span>Grilla, Orto y snap; con Alt, el punto queda libre</span>
+    <div><kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd></div><span>Mover el patio o el núcleo elegido un paso de grilla (Shift: diez)</span>
+    <div><kbd>Esc</kbd></div><span>Salir de la herramienta, soltar lo elegido o cerrar el panel</span>
+   </div>
+   <div class="hint">Las letras no actúan mientras escribes en un campo ni en la axonometría 3D.</div>
   </div>
  </div>
 </section>
@@ -212,7 +225,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}
   <details class="capas" id="capas"><summary class="grp" title="Qué se dibuja en la planta"><svg viewBox="0 0 24 24"><path d="M12 3 3 8l9 5 9-5z"/><path d="m3 13 9 5 9-5"/></svg>Capas <small id="nCapas"></small></summary><div>
    <label title="Conexiones entre estancias: abiertas (verde) y con puerta (azul)"><span>Conexiones</span><input type="checkbox" id="showGraph" checked onchange="showGraph=this.checked;draw();capas()"></label>
    <label title="Artefactos de baños, cocina y lavadero, y muebles"><span>Equipamiento</span><input type="checkbox" id="showEquip" checked onchange="showEquip=this.checked;draw();capas()"></label>
-   <label title="Medidas totales por fuera de la planta y escala gráfica"><span>Cotas</span><input type="checkbox" id="showDims" checked onchange="showDims=this.checked;draw();capas()"></label>
+   <label title="Cotas (D): las medidas totales por fuera de la planta y la escala gráfica; dentro, el frente y el fondo de cada vivienda y el ancho de cada tramo de pasillo (en metros)"><span>Cotas</span><input type="checkbox" id="showDims" checked onchange="showDims=this.checked;draw();capas()"></label>
    <label title="Tramos de pasillo y viviendas que no cumplen el fondo de saco (naranja) o el recorrido máximo (rojo)"><span>Evacuación</span><input type="checkbox" id="showEvac" checked onchange="showEvac=this.checked;draw();capas()"></label>
    <label title="Al pasar el mouse por la planta: nombre y superficie de cada estancia, vivienda, núcleo, pasillo o patio"><span>Datos al pasar</span><input type="checkbox" id="showTip" checked onchange="showTip=this.checked;ocultarDato();capas()"></label>
   </div></details>
@@ -229,14 +242,14 @@ table{width:100%;border-collapse:collapse;font-size:12px}
  <div class="tag" id="tag">Listo</div>
  <div class="herr" id="herr" style="display:none"></div>
  <div class="dibujo" id="dibujo" aria-label="Barra de dibujo">
-  <button id="btnDraw" data-tool="line" onclick="setTool('line')" title="Línea central del pasillo (polilínea)"><svg viewBox="0 0 24 24"><path d="M4 18 9 9l5 6 6-10"/></svg>Línea</button>
-  <button id="btnAddCore" data-tool="addcore" onclick="setTool('addcore')" title="Añadir núcleo (y quitar, desde la barra que aparece)"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="1.5"/><path d="M4 12h16M12 4v16"/></svg>Núcleo</button>
-  <button id="btnMed" data-tool="medianera" onclick="setTool('medianera')" title="Marcar o desmarcar un borde de la planta como medianera"><svg viewBox="0 0 24 24"><path d="M5 5h14v14H5z" stroke-dasharray="2 2.5"/><path d="M5 4v16" stroke="#d63b3b" stroke-width="2.4"/></svg>Medianera</button>
-  <button id="btnPatio" data-tool="patio" onclick="setTool('patio')" title="Dibujar un patio (dos esquinas opuestas)"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16"/><path d="M4 12 12 4M4 20 20 4M12 20l8-8"/></svg>Patio</button>
+  <button id="btnDraw" data-tool="line" onclick="setTool('line')" title="Línea (L): línea central del pasillo (polilínea)"><svg viewBox="0 0 24 24"><path d="M4 18 9 9l5 6 6-10"/></svg>Línea</button>
+  <button id="btnAddCore" data-tool="addcore" onclick="setTool('addcore')" title="Núcleo (N): añadir núcleo (y quitar, desde la barra que aparece)"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="1.5"/><path d="M4 12h16M12 4v16"/></svg>Núcleo</button>
+  <button id="btnMed" data-tool="medianera" onclick="setTool('medianera')" title="Medianera (M): marcar o desmarcar un borde de la planta como medianera"><svg viewBox="0 0 24 24"><path d="M5 5h14v14H5z" stroke-dasharray="2 2.5"/><path d="M5 4v16" stroke="#d63b3b" stroke-width="2.4"/></svg>Medianera</button>
+  <button id="btnPatio" data-tool="patio" onclick="setTool('patio')" title="Patio (P): dibujar un patio (dos esquinas opuestas)"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16"/><path d="M4 12 12 4M4 20 20 4M12 20l8-8"/></svg>Patio</button>
   <span class="sep"></span>
-  <button id="btnScp" data-tool="scp" onclick="setTool('scp')" title="SCP: clic en un borde de la masa para alinear con él la grilla y el Orto; «Edificio» o «Mundo» en la barra que aparece"><svg viewBox="0 0 24 24"><path d="M5 19V5M5 19h14"/><path d="m3 7 2-2 2 2M17 17l2 2-2 2"/></svg>SCP</button>
+  <button id="btnScp" data-tool="scp" onclick="setTool('scp')" title="SCP (S): clic en un borde de la masa para alinear con él la grilla y el Orto; «Edificio» o «Mundo» en la barra que aparece"><svg viewBox="0 0 24 24"><path d="M5 19V5M5 19h14"/><path d="m3 7 2-2 2 2M17 17l2 2-2 2"/></svg>SCP</button>
   <label class="toggle on" title="Grilla: se adapta al zoom (de 10 m a 0,05 m) y sigue al SCP (F7; en Mac, fn+F7)"><input type="checkbox" id="grilla" checked onchange="preferencia(this)">GRILLA <small id="pasoTxt"></small> <kbd>F7</kbd></label>
-  <label class="toggle on" title="Ortogonal: las líneas van a 90° en el SCP (F8; en Mac, fn+F8)"><input type="checkbox" id="orto" checked onchange="preferencia(this)">ORTO <kbd>F8</kbd></label>
+  <label class="toggle on" title="Ortogonal: las líneas van a 90° en el SCP (F8; en Mac, fn+F8). Con Shift apretado, Orto solo mientras lo mantienes"><input type="checkbox" id="orto" checked onchange="preferencia(this)">ORTO <kbd>F8</kbd></label>
   <label class="toggle on" title="Snap: los puntos se pegan al paso de la grilla que se ve; con Alt, el punto queda libre (tampoco se pega a los vértices de la masa) (F9; en Mac, fn+F9)"><input type="checkbox" id="snap" checked onchange="preferencia(this)">SNAP <kbd>F9</kbd></label>
  </div>
  <svg id="svg"><defs><pattern id="hatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="8" height="8" fill="rgba(120,120,130,.12)"/><line x1="0" y1="0" x2="0" y2="8" stroke="#8a8f99" stroke-width="1.2"/></pattern></defs><g id="gb"></g><g id="go"></g></svg>
@@ -333,7 +346,7 @@ const aMundo=(q,S)=>{ const c=Math.cos(S.a), s=Math.sin(S.a); return [S.o[0]+q[0
 function ajustar(p,prev,e,opt){ opt=opt||{}; const S=scpActual(), alt=!!(e&&e.altKey), libre=alt||!$('snap').checked;   // un punto: vértice de la masa, paso de la grilla en el SCP y Orto en el SCP; Alt lo deja libre
  if(!alt&&opt.vertices!==false&&view){ let best=null; footprint.forEach(v=>{ const d=Math.hypot(v[0]-p[0],v[1]-p[1]); if(d*view.s<10&&(!best||d<best[0])) best=[d,v]; }); if(best) return [best[1][0],best[1][1]]; }   // a 10 px de un vértice de la masa: el vértice (sin Orto)
  let q=aLocal(p,S); if(!libre){ const k=pasoGrilla(); q=[Math.round(q[0]/k)*k,Math.round(q[1]/k)*k]; }
- if($('orto').checked&&prev){ const P=aLocal(prev,S); if(Math.abs(q[0]-P[0])>=Math.abs(q[1]-P[1])) q[1]=P[1]; else q[0]=P[0]; }
+ if(($('orto').checked||ortoTemporal)&&prev){ const P=aLocal(prev,S); if(Math.abs(q[0]-P[0])>=Math.abs(q[1]-P[1])) q[1]=P[1]; else q[0]=P[0]; }
  const w=aMundo(q,S); return [+w[0].toFixed(3),+w[1].toFixed(3)]; }
 function ajustarDesp(base,dir,d,e){ if((e&&e.altKey)||!$('snap').checked) return d;   // un arrastre en una dirección (tabiques, puertas): base + dir·d cae en la grilla
  const S=scpActual(), k=pasoGrilla(), c=Math.cos(S.a), s=Math.sin(S.a), du=dir[0]*c+dir[1]*s, dv=-dir[0]*s+dir[1]*c;
@@ -361,6 +374,8 @@ function scpTxt(){ const S=scpActual(), g=((S.a*180/Math.PI)%360+360)%360;
  return 'SCP '+(S.modo==='objeto'?'alineado con un borde':S.modo==='mundo'?'del mundo (ejes x, y del plano)':'del edificio (su fachada principal)')+(g>0.05&&g<359.95?' · '+g.toFixed(1)+'°':'')+': clic en un borde de la masa para alinear la grilla y el Orto con él'; }
 function preferencia(c){ c.parentNode.classList.toggle('on',c.checked); try{ localStorage.setItem('trazo.'+c.id,c.checked?'1':'0'); }catch(e){} if(c.id==='grilla'&&viewMode==='plan') draw(); else drawOverlay(); }
 function alternar(id){ const c=$(id); c.checked=!c.checked; c.onchange(); }
+let ortoTemporal=false;   // R9.8: Shift apretado = Orto mientras se mantiene, aunque la casilla esté apagada; es un estado aparte: la casilla, F8 y la preferencia 'trazo.orto' no cambian
+function ortoShift(v){ if(v===ortoTemporal) return; ortoTemporal=v; const c=$('orto'), l=c.parentNode; l.classList.toggle('on',c.checked||v); l.classList.toggle('temp',v&&!c.checked); if(viewMode==='plan') drawOverlay(); }   // al apretar o soltar, la línea que se dibuja salta al Orto o vuelve
 /* ---------- dibujo ---------- */
 function draw(){ const gb=$('gb'); gb.innerHTML='';
  if(!footprint.length){ view=null; $('pasoTxt').textContent=''; const W=$('svg').clientWidth||800, H=$('svg').clientHeight||600;
@@ -426,12 +441,72 @@ function domAngle(poly){ // dirección (módulo 90°) de las cotas: entre las de
   const A=(Math.max(...xs)-Math.min(...xs))*(Math.max(...ys)-Math.min(...ys)), g=Math.min(a,r-a), tol=best?best[0]*1e-3:0;
   if(!best||A<best[0]-tol||(A<=best[0]+tol&&(g<best[3]-1e-9||(g<=best[3]+1e-9&&L>best[1])))) best=[A,L,a,g]; });
  return best?best[2]:0; }
-function cota(g,a,b,ea,eb){ const st={stroke:'#667085','stroke-width':1};   // línea de cota a-b; ea/eb: puntos acotados
- [[ea,a],[eb,b]].forEach(([p,q])=>g.appendChild(el('line',{x1:X(p),y1:Y(p),x2:X(q),y2:Y(q),...st,'stroke-dasharray':'2 2','pointer-events':'none'})));
+function cota(g,a,b,ea,eb,o){ const st={stroke:'#667085','stroke-width':1};   // línea de cota a-b; ea/eb: puntos acotados (sin ellos, sin líneas de referencia); o: el texto y su lugar (cotaTxt)
+ if(ea&&eb) [[ea,a],[eb,b]].forEach(([p,q])=>g.appendChild(el('line',{x1:X(p),y1:Y(p),x2:X(q),y2:Y(q),...st,'stroke-dasharray':'2 2','pointer-events':'none'})));
  g.appendChild(el('line',{x1:X(a),y1:Y(a),x2:X(b),y2:Y(b),...st,'pointer-events':'none'}));
- [a,b].forEach(p=>g.appendChild(el('line',{x1:X(p)-4,y1:Y(p)+4,x2:X(p)+4,y2:Y(p)-4,...st,'stroke-width':1.5,'pointer-events':'none'})));
- const m=[(a[0]+b[0])/2,(a[1]+b[1])/2]; let r=Math.atan2(Y(b)-Y(a),X(b)-X(a))*180/Math.PI; if(r>90||r<-90) r+=180;
- g.appendChild(el('text',{x:X(m),y:Y(m)-5,'text-anchor':'middle','font-size':11,fill:TINTA(),stroke:HALO(),'stroke-width':3,'paint-order':'stroke','pointer-events':'none',transform:'rotate('+r.toFixed(1)+' '+X(m)+' '+Y(m)+')'},Math.hypot(b[0]-a[0],b[1]-a[1]).toFixed(2)+' m')); }
+ [a,b].forEach((p,i)=>{ if(!o||!o.puntas||o.puntas[i]) g.appendChild(el('line',{x1:X(p)-4,y1:Y(p)+4,x2:X(p)+4,y2:Y(p)-4,...st,'stroke-width':1.5,'pointer-events':'none'})); });   // o.puntas: cuáles de las dos puntas llevan marca
+ const T=cotaTxt(a,b,o);
+ g.appendChild(el('text',Object.assign({x:T.mx,y:T.y,'text-anchor':'middle','font-size':T.tam,fill:TINTA(),stroke:HALO(),'stroke-width':3,'paint-order':'stroke','pointer-events':'none',transform:'rotate('+T.r.toFixed(1)+' '+T.mx+' '+T.my+')'},o&&o.tipo?{'data-cota':o.tipo}:{}),T.t)); }
+/* ---------- cotas de las viviendas y de los pasillos (R9.8): la capa «Cotas» suma, dentro de la planta, el frente de cada vivienda, el fondo de cada vivienda y el ancho de cada tramo de pasillo; solo donde caben y sin pisar nada ---------- */
+const COTA_TAM=10, COTA_OFS=5.5, LUGARES=Array.from({length:23},(_,i)=>(i+1)/24).sort((p,q)=>Math.abs(p-0.5)-Math.abs(q-0.5));   // el texto de estas cotas (px; las totales llevan 11), a cuántos px del borde del pasillo va la cadena de frentes y dónde probar la cota del ancho: el medio de la franja y después, hacia las puntas, de a 1/24
+const medidaTxt={}; let lienzo=null;   // ancho en pantalla de un texto, por tamaño y texto (con un lienzo, sin tocar la planta)
+function anchoTxt(s,tam){ const k=tam+'|'+s; if(medidaTxt[k]==null){ let w=0; try{ lienzo=lienzo||document.createElement('canvas').getContext('2d'); lienzo.font=tam+'px '+getComputedStyle($('svg')).fontFamily; w=lienzo.measureText(s).width; }catch(e){} medidaTxt[k]=w>0?w:s.length*0.6*tam; } return medidaTxt[k]; }
+function cajaGirada(mx,my,r,u0,u1,v0,v1){ const c=Math.cos(r*Math.PI/180), s=Math.sin(r*Math.PI/180), q=[[u0,v0],[u1,v0],[u1,v1],[u0,v1]].map(([u,v])=>[mx+u*c-v*s,my+u*s+v*c]), xs=q.map(p=>p[0]), ys=q.map(p=>p[1]);   // la caja (en pantalla) de un rectángulo u × v girado r grados alrededor de (mx, my)
+ return {x0:Math.min(...xs),x1:Math.max(...xs),y0:Math.min(...ys),y1:Math.max(...ys)}; }
+function cotaTxt(a,b,o){ o=o||{}; const tam=o.tam||11, f=o.f==null?0.5:o.f, gap=o.gap==null?5:o.gap, A=[X(a),Y(a)], B=[X(b),Y(b)], mx=A[0]+(B[0]-A[0])*f, my=A[1]+(B[1]-A[1])*f;   // el texto de la cota a-b: en la fracción f de su largo, a `gap` px de la línea y del lado `lado` (vector en pantalla; sin él, arriba); da también la caja que ocupa, para no pisar otras
+ let r=Math.atan2(B[1]-A[1],B[0]-A[0])*180/Math.PI; if(r>90||r<-90) r+=180;
+ const c=Math.cos(r*Math.PI/180), s=Math.sin(r*Math.PI/180), alto=0.72*tam, abajo=!!o.lado&&o.lado[0]*s-o.lado[1]*c<0, ty=abajo?gap+alto:-gap;   // el texto se escribe hacia «arriba» de su línea, el vector (sen r, -cos r); del otro lado se baja su alto
+ const t=o.texto||Math.hypot(b[0]-a[0],b[1]-a[1]).toFixed(2)+' m', w=anchoTxt(t,tam)/2+1.5;
+ return {mx,my,y:my+ty,r,t,tam,caja:cajaGirada(mx,my,r,-w,w,ty-alto-1.5,ty+1.5)}; }
+const cajaLibre=(c,oc)=>!oc.some(b=>c.x0<b.x1&&b.x0<c.x1&&c.y0<b.y1&&b.y0<c.y1);   // la caja c no pisa ninguna de las ocupadas (oc)
+function visible(A,B){ const W=$('svg').clientWidth||800, H=$('svg').clientHeight||600, dx=B[0]-A[0], dy=B[1]-A[1]; let t0=0, t1=1;   // la parte del segmento A-B (px) que cae dentro de la pantalla, como fracciones [t0, t1] de su largo; null si no se ve
+ for(const [p,q] of [[-dx,A[0]],[dx,W-A[0]],[-dy,A[1]],[dy,H-A[1]]]){ if(Math.abs(p)<1e-9){ if(q<0) return null; continue; } const r=q/p; if(p<0){ if(r>t1) return null; t0=Math.max(t0,r); } else { if(r<t0) return null; t1=Math.min(t1,r); } }
+ return [t0,t1]; }
+function cotaLugar(a,b,o,oc){ const A=[X(a),Y(a)], B=[X(b),Y(b)], L=Math.hypot(B[0]-A[0],B[1]-A[1]), v=L>1?visible(A,B):null; if(!v) return null;   // dónde va el texto de la cota a-b, a la vista y sin pisar lo ocupado: la fracción f libre más cercana al medio; null si no entra
+ const hw=anchoTxt(o.texto,o.tam||11)/2+1.5+4, lo=v[0]*L+hw, hi=v[1]*L-hw; if(lo>hi) return null;   // el texto entero, a 4 px de las puntas de la cota (o del borde de la pantalla)
+ const ps=[]; for(let i=0;i<9;i++) ps.push(lo+(hi-lo)*i/8); const mid=(v[0]+v[1])/2*L; ps.sort((p,q)=>Math.abs(p-mid)-Math.abs(q-mid));
+ for(const p of ps) if(cajaLibre(cotaTxt(a,b,Object.assign({},o,{f:p/L})).caja,oc)) return p/L;
+ return null; }
+function cotasViviendas(g){ if(!result||viewMode!=='plan'||!view) return;
+ const st=result.stories&&planStory!=null?result.stories[planStory]:null, L=result.pasillos||[], todas=result.units||[]; if((st&&st.program!=='Residential')||!L.length) return;   // solo en un nivel de vivienda
+ const cg=g.appendChild(el('g',{id:'cotasViv','pointer-events':'none'})), s=view.s, oc=[], f2=v=>v.toFixed(2), pw=(+$('party_wall').value||0.3)/2, cors=result.corridors||[], nucs=result.cores||[];
+ const W=$('svg').clientWidth||800, H=$('svg').clientHeight||600, dentro=c=>c.x0>=0&&c.x1<=W&&c.y0>=0&&c.y1<=H;
+ const rect=(x0,x1,y0,y1)=>({x0,x1,y0,y1}), linea=(A,B)=>rect(Math.min(X(A),X(B))-2,Math.max(X(A),X(B))+2,Math.min(Y(A),Y(B))-2,Math.max(Y(A),Y(B))+2);   // una caja en pantalla; y la que ocupa la línea A-B
+ todas.forEach(u=>{ if(!u.poly||!u.poly.length) return;   // lo que ya está escrito o dibujado y no se pisa: la etiqueta de cada vivienda y el punto de su puerta
+  const c=[u.poly.reduce((a,p)=>a+p[0],0)/u.poly.length,u.poly.reduce((a,p)=>a+p[1],0)/u.poly.length], w=anchoTxt(u.id+' · '+u.area+' m²'+(u.editada?' ✎':''),11)/2+2;
+  oc.push(rect(X(c)-w,X(c)+w,Y(c)-10,Y(c)+4)); if(u.door) oc.push(rect(X(u.door)-4,X(u.door)+4,Y(u.door)-4,Y(u.door)+4)); });
+ L.forEach(ps=>{ if(!ps.propio) return; const a=ps.eje[0], b=ps.eje[1], m=[(a[0]+b[0])/2,(a[1]+b[1])/2], w=anchoTxt(ps.ancho.toFixed(2)+' m',11)*1.1/2+2;   // el ancho de un tramo con ancho propio que dibuja drawOverlay, a lo largo del pasillo
+  let r=Math.atan2(Y(b)-Y(a),X(b)-X(a))*180/Math.PI; if(r>90) r-=180; if(r<-90) r+=180; oc.push(cajaGirada(X(m),Y(m),r,-w,w,-6,6)); });
+ const marco=(u,ps)=>{ const a=ps.eje[0], b=ps.eje[1], l=Math.hypot(b[0]-a[0],b[1]-a[1]); if(l<1e-6) return null;   // la vivienda en el marco de su pasillo: t a lo largo del eje, z hacia el lado donde está (0 en el eje)
+  const d=[(b[0]-a[0])/l,(b[1]-a[1])/l], n=[-d[1],d[0]], t=u.poly.map(p=>(p[0]-a[0])*d[0]+(p[1]-a[1])*d[1]), q=u.poly.map(p=>(p[0]-a[0])*n[0]+(p[1]-a[1])*n[1]), lado=q.reduce((x,y)=>x+y,0)>=0?1:-1, z=q.map(v=>v*lado);
+  return z.every(v=>v>0.3)?{a,d,n,lado,t0:Math.min(...t),t1:Math.max(...t),z0:Math.min(...z),z1:Math.max(...z)}:null; };   // la que cruza el eje (al frente) no está de un solo lado: sin cotas
+ const viv=[]; todas.forEach(u=>{ if(u.al_frente||!u.poly||u.poly.length<3) return; const ps=L.find(p=>p.id===u.pasillo), m=ps&&marco(u,ps); if(m) viv.push({u,m,ps}); });
+ // 1) el frente de cada vivienda: una cadena a cada lado de cada pasillo, dentro de él, junto al borde de las viviendas; el texto, hacia el eje del pasillo (con poco lugar, sobre la línea, corrido de la puerta)
+ viv.forEach(({u,m,ps})=>{ const fr=m.t1-m.t0, o=m.z0-pw-COTA_OFS/s, P=t=>[m.a[0]+m.d[0]*t+m.n[0]*m.lado*o,m.a[1]+m.d[1]*t+m.n[1]*m.lado*o]; if(o<=0.2) return;
+  let c=null; (ps.partes||[]).forEach(i=>{ const q=cors[i]; if(!q) return;   // la cadena va dentro del pasillo: se corta donde él termina (la vivienda de la esquina de una L sigue por debajo del otro ala) y esa punta queda sin marca
+   const ts=q.map(p=>(p[0]-m.a[0])*m.d[0]+(p[1]-m.a[1])*m.d[1]), lo=Math.max(m.t0,Math.min(...ts)), hi=Math.min(m.t1,Math.max(...ts)); if(hi-lo<0.3) return;
+   const v=tramoEn(q,P(m.t0),m.d,(lo+hi)/2-m.t0); if(!v) return; const c0=Math.max(m.t0,m.t0+v[0]), c1=Math.min(m.t1,m.t0+v[1]); if(!c||c1-c0>c[1]-c[0]) c=[c0,c1]; });
+  if(!c) return; const e0=c[0]-m.t0<0.35, e1=m.t1-c[1]<0.35, t0=e0?m.t0:c[0], t1=e1?m.t1:c[1]; if((t1-t0)*s<24) return;   // una punta a menos de 35 cm de la de la vivienda es la de la vivienda
+  const A=P(t0), B=P(t1), base={tipo:'frente',texto:f2(Math.abs(fr-u.width)<0.015?u.width:fr),tam:COTA_TAM,lado:[-m.lado*m.n[0],m.lado*m.n[1]],puntas:[e0,e1]};
+  for(const gap of ps.ancho*s>=32?[1.5]:[-0.36*COTA_TAM,1.5]){ const op=Object.assign({gap},base), f=cotaLugar(A,B,op,oc);   // en un pasillo angosto, el texto sobre la línea; si no entra (la puerta lo tapa), al costado
+   if(f!=null){ op.f=f; cota(cg,A,B,null,null,op); oc.push(cotaTxt(A,B,op).caja); break; } } });
+ // 2) el ancho de cada tramo de pasillo: una cota transversal en el medio de su franja (si ahí hay un cruce, un núcleo o un texto, más cerca de una punta)
+ L.forEach(ps=>{ const a=ps.eje[0], b=ps.eje[1], l=Math.hypot(b[0]-a[0],b[1]-a[1]); if(l<1||ps.ancho*s<16) return; let puesta=false;
+  const d=[(b[0]-a[0])/l,(b[1]-a[1])/l], n=[-d[1],d[0]], h=ps.ancho/2, mias=(ps.partes||[]).map(i=>cors[i]).filter(Boolean).map(c=>({c,t:c.map(p=>(p[0]-a[0])*d[0]+(p[1]-a[1])*d[1]),z:c.map(p=>(p[0]-a[0])*n[0]+(p[1]-a[1])*n[1])}))
+   .map(q=>Object.assign(q,{t0:Math.min(...q.t),t1:Math.max(...q.t),z0:Math.min(...q.z),z1:Math.max(...q.z)})).filter(q=>Math.abs(q.z1-q.z0-ps.ancho)<0.03&&q.t1-q.t0>=1.2).sort((p,q)=>(q.t1-q.t0)-(p.t1-p.t0));   // las franjas del tramo que miden su ancho (la más larga primero); entre medianeras, el eje cae en el núcleo: la franja está al lado
+  for(const q of mias) for(const f of LUGARES){ if(puesta) break; const t=q.t0+(q.t1-q.t0)*f, zc=(q.z0+q.z1)/2, at=z=>[a[0]+d[0]*t+n[0]*z,a[1]+d[1]*t+n[1]*z], P=at(zc), A=at(zc-h), B=at(zc+h), r=tramoEn(q.c,P,n,0);
+   if(!r||Math.abs(r[0]+h)>=0.03||Math.abs(r[1]-h)>=0.03||nucs.some(c=>enPoly(P,c.poly))||cors.some((c,i)=>!(ps.partes||[]).includes(i)&&enPoly(P,c))) continue;   // la franja mide eso justo ahí, y no cruza otro pasillo ni un núcleo
+   const op={tipo:'ancho',texto:f2(ps.ancho),tam:COTA_TAM,gap:3}, T=cotaTxt(A,B,op), li=linea(A,B);
+   if(!cajaLibre(T.caja,oc)||!cajaLibre(li,oc)||!dentro(T.caja)||!dentro(li)) continue;
+   cota(cg,A,B,null,null,op); oc.push(T.caja,li); puesta=true; } });
+ // 3) el fondo de cada vivienda: una cota perpendicular al pasillo, dentro de la vivienda, solo si se ve lo bastante grande y no pisa su etiqueta ni otra cota
+ viv.forEach(({u,m})=>{ const fr=(m.t1-m.t0)*s, pf=m.z1-m.z0; if(fr<60||pf*s<40) return;
+  const val=Math.abs(pf-u.depth)<0.015?u.depth:pf;
+  for(const [x,h] of [[14,1],[14,-1],[fr-14,-1],[fr-14,1],[fr*0.3,1],[fr*0.3,-1],[fr*0.7,1],[fr*0.7,-1]]){ const t=m.t0+x/s, P=q=>[m.a[0]+m.d[0]*t+m.n[0]*m.lado*q,m.a[1]+m.d[1]*t+m.n[1]*m.lado*q], A=P(m.z0), B=P(m.z1);   // cerca de cada punta y a 3/10 y 7/10; el texto, hacia el centro de la vivienda (h = 1 o -1 a lo largo del pasillo) y, si no entra, hacia el tabique
+   if(![0.04,0.25,0.5,0.75,0.96].every(k=>enPoly(P(m.z0+pf*k),u.poly))) continue;   // la línea entera cae dentro de la vivienda
+   const op={tipo:'fondo',texto:f2(val),tam:COTA_TAM,gap:3,lado:[h*m.d[0],-h*m.d[1]]}, T=cotaTxt(A,B,op), li=linea(A,B);
+   if(!cajaLibre(T.caja,oc)||!cajaLibre(li,oc)||!dentro(T.caja)||!dentro(li)) continue;
+   cota(cg,A,B,null,null,op); oc.push(T.caja,li); break; } }); }
 function drawDims(g){ if(!showDims||!view||!footprint.length) return;
  const th=domAngle(footprint), c=Math.cos(th), s=Math.sin(th), L=p=>[p[0]*c+p[1]*s,-p[0]*s+p[1]*c], W=q=>[q[0]*c-q[1]*s,q[0]*s+q[1]*c];
  const lc=footprint.map(L), todo=lc.concat((lote()||[]).map(L)), xs=todo.map(p=>p[0]), ys=todo.map(p=>p[1]), x0=Math.min(...xs), x1=Math.max(...xs), y0=Math.min(...ys), y1=Math.max(...ys), o=28/view.s;
@@ -442,6 +517,7 @@ function drawDims(g){ if(!showDims||!view||!footprint.length) return;
  if(cx.length>2) cx.forEach((a,i)=>{ if(i) cota(g,W([cx[i-1],y0-o]),W([a,y0-o]),W([cx[i-1],y0]),W([a,y0])); });
  if(cy.length>2) cy.forEach((a,i)=>{ if(i) cota(g,W([x0-o,a]),W([x0-o,cy[i-1]]),W([x0,a]),W([x0,cy[i-1]])); });
  cota(g,W([x0,y0-ox]),W([x1,y0-ox]),W([x0,y0]),W([x1,y0])); cota(g,W([x0-oy,y1]),W([x0-oy,y0]),W([x0,y1]),W([x0,y0]));
+ try{ cotasViviendas(g); }catch(e){ console.error('Trazo: las cotas de las viviendas no se pudieron dibujar',e); }   // R9.8: dentro de la planta, el frente y el fondo de cada vivienda y el ancho de cada tramo de pasillo; si falla, que la planta se dibuje igual
  // escala gráfica: la mayor longitud «redonda» que entra en ~150 px
  const Wd=$('svg').clientWidth||800, Hd=$('svg').clientHeight||600; let m=1; [1,2,5,10,20,50,100,200,500,1000].forEach(v=>{ if(v*view.s<=150) m=v; });
  const px=m*view.s, x=Wd-px-24, y=Hd-22;
@@ -853,7 +929,7 @@ function puntoLinea(w,e){ const prev=curLine[curLine.length-1], L=medidaNum('lar
  if(!prev||(!tL&&!tA)) return ajustar(w,prev,e);
  const S=scpActual(), P=aLocal(prev,S), q=aLocal(w,S), dx=q[0]-P[0], dy=q[1]-P[1]; let u;   // todo en el SCP: 0° es su eje x, antihorario
  if(tA) u=[Math.cos(A*Math.PI/180),Math.sin(A*Math.PI/180)];   // el ángulo tipeado manda sobre el Orto
- else if($('orto').checked) u=Math.abs(dx)>=Math.abs(dy)?[dx<0?-1:1,0]:[0,dy<0?-1:1];   // el puntero elige hacia qué eje del SCP va
+ else if($('orto').checked||ortoTemporal) u=Math.abs(dx)>=Math.abs(dy)?[dx<0?-1:1,0]:[0,dy<0?-1:1];   // el puntero elige hacia qué eje del SCP va
  else { const n=Math.hypot(dx,dy); u=n>1e-9?[dx/n,dy/n]:[1,0]; }   // o hacia dónde está
  let d=L; if(!tL){ const c=Math.cos(S.a), s=Math.sin(S.a); d=ajustarDesp(prev,[u[0]*c-u[1]*s,u[0]*s+u[1]*c],dx*u[0]+dy*u[1],e); if(d<0.001) return null; }   // solo el ángulo: el largo lo da el puntero (su proyección sobre esa dirección, al paso de la grilla)
  const r=aMundo([P[0]+u[0]*d,P[1]+u[1]*d],S); return [+r[0].toFixed(3),+r[1].toFixed(3)]; }   // lo tipeado no se redondea a la grilla
@@ -1076,10 +1152,30 @@ svg.addEventListener('pointerup',e=>{ if(!dragPatio) return; const g=dragPatio; 
 window.addEventListener('keydown',e=>{ const t=e.target, texto=t.tagName==='TEXTAREA'||(t.tagName==='INPUT'&&!/^(checkbox|radio|button|file|range|color)$/.test(t.type));   // en un campo de texto, su propio deshacer
  if((e.ctrlKey||e.metaKey)&&!texto){ const k=e.key.toLowerCase();
   if(k==='z'&&!e.shiftKey){ e.preventDefault(); deshacer(); return; } if((k==='z'&&e.shiftKey)||k==='y'){ e.preventDefault(); rehacer(); return; } }
+ if(atajoTecla(e,t,texto)){ e.preventDefault(); return; }   // R9.8: L N M P S (herramientas), D (cotas), Supr o Retroceso (quitan lo elegido) y Shift (Orto mientras se mantiene)
  if(FLECHAS[e.key]&&!texto&&t.tagName!=='SELECT'&&!(t.tagName==='INPUT'&&/^(radio|range)$/.test(t.type))&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&moverConFlechas(e)){ e.preventDefault(); return; }   // R4.12: las flechas mueven el patio o el núcleo elegido (Shift: diez pasos); en un campo de texto o una lista siguen siendo del campo
  if(!texto&&t.tagName!=='SELECT'&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&/^[0-9.,]$/.test(e.key)){ const f=document.querySelector('#herr [data-medida]'); if(f&&$('herr').style.display!=='none') f.focus(); }   // R4.13b: un número, con la barra con campos, va al primero (el carácter se escribe ahí)
  if(e.key==='Enter'&&tool==='line') finishLine(); if(e.key==='Escape'){ if(!tool&&selTab){ selTab=null; drawOverlay(); return; } if(!tool&&selPatio!=null){ if(texto) t.blur(); else { sinPatio(); draw(); unitPanel(); } return; } if(!tool&&!curLine.length&&!$('panel').hidden&&!texto) grupo(null); curLine=[]; curPatio=[]; if(tool) setTool(tool); drawOverlay(); }
  if(e.key==='F7'||e.key==='F8'||e.key==='F9'){ e.preventDefault(); alternar({F7:'grilla',F8:'orto',F9:'snap'}[e.key]); } });   // F7 grilla, F8 Orto y F9 snap, como en AutoCAD (R4.6, R4.7)
+window.addEventListener('keyup',e=>{ if(e.key==='Shift') ortoShift(false); });   // R9.8: al soltar Shift, el Orto vuelve a como estaba
+window.addEventListener('blur',()=>ortoShift(false));   // y si la ventana pierde el foco con Shift apretado, el keyup no llega
+/* ---------- atajos de teclado de la planta (R9.8): una letra por herramienta, D para las cotas, Supr para quitar lo elegido, Shift para el Orto ---------- */
+const HERR_TECLA={l:'line',n:'addcore',m:'medianera',p:'patio',s:'scp'};   // la letra de cada herramienta de la barra de dibujo (los title de sus botones la dicen)
+const teclaDe=t=>(Object.keys(HERR_TECLA).find(k=>HERR_TECLA[k]===(t==='delcore'?'addcore':t))||'').toUpperCase();   // «Quitar núcleo» es parte de la herramienta Núcleo
+function quitarElegido(){ if(viewMode!=='plan'||tool||!result) return false;   // Supr o Retroceso quitan lo elegido con lo mismo que hacen su ficha y su barra (pasan por recordar: se deshacen con ↶); un tabique o una vivienda no se borran
+ if(selCore!=null&&result.cores&&result.cores[selCore]){ quitarNucleo(); return true; }
+ if(selPas!=null&&result.pasillos&&result.pasillos[selPas]){ quitarTramo(); return true; }   // si es el único pasillo de su bloque o rodea un patio interior, lo avisa y no lo quita, como su ficha
+ if(selPatio!=null&&patioElegido()){ quitarPatioElegido(); return true; }
+ if(selUnit){ $('tag').textContent='Una vivienda no se borra con Supr: «Dividir» y «Unir» están en su ficha'; return true; }
+ return false; }
+function atajoTecla(e,t,texto){ if(texto||t.tagName==='SELECT'||e.ctrlKey||e.metaKey||e.altKey||e.isComposing) return false;   // nunca en un campo de texto o una lista (son del campo) ni con Ctrl, Alt o Cmd (son del navegador, de deshacer y de rehacer)
+ const k=String(e.key||''), l=k.length===1?k.toLowerCase():k;
+ if(k==='Shift'){ if(!e.repeat) ortoShift(true); return false; }   // Shift apretado: Orto mientras se mantiene; la tecla sigue su camino
+ if(viewMode!=='plan') return false;   // la barra de dibujo y las capas son de la planta 2D
+ if(l.length===1&&HERR_TECLA[l]){ if(!e.repeat) setTool(tool===HERR_TECLA[l]||(l==='n'&&tool==='delcore')?tool:HERR_TECLA[l]); return true; }   // la letra de la herramienta activa la cierra, como otro clic en su botón
+ if(l==='d'){ if(!e.repeat){ alternar('showDims'); $('tag').textContent='Cotas '+(showDims?'visibles':'ocultas')+' (D)'; } return true; }   // la casilla «Cotas» de Capas, showDims y el contador de capas, juntos
+ if(k==='Delete'||k==='Backspace') return quitarElegido();
+ return false; }
 
 /* ---------- programas ---------- */
 let PROGS=[{key:'Residential',label:'Residencial',color:'#f2a93b'},{key:'Retail',label:'Comercial',color:'#9b6bd6'},{key:'Office',label:'Oficinas',color:'#4f8fe6'},{key:'Circulation',label:'Circulación',color:'#8a94a6'},{key:'Parking',label:'Estacionamiento',color:'#5c6370'},{key:'Amenities',label:'Amenities',color:'#2bb38a'}];
@@ -1139,7 +1235,7 @@ function herramientaBar(auto){ const h=$('herr'); $('tag').style.visibility=tool
  const txt=modo==='linea'||modo==='patio'?'Clic o escribe medidas y Enter':ts?'Tabique: escribe un frente y Enter':esc(herrTxt);
  h.innerHTML='<span>'+txt+'</span>'+campos+(tool==='line'?b('Terminar','finishLine()')+b('Borrar última','undoLine()','La última línea o el último vértice'):
   tool==='addcore'?b('Quitar núcleo',"setTool('delcore')"):tool==='delcore'?b('Añadir núcleo',"setTool('addcore')"):tool==='medianera'?b('Quitar todas','quitarMedianeras()'):tool==='patio'?b('Quitar todos','quitarPatios()'):tool==='scp'?b('Edificio','scpEdificio()','Origen en la esquina del rectángulo que contiene la masa, alineado con su fachada principal')+b('Mundo','scpMundo()','Los ejes x, y del plano (de Rhino)'):'')+
-  '<span class="esc"><kbd>Esc</kbd> '+(tool?'salir':'cerrar')+'</span>'; h.style.display='flex'; }
+  '<span class="esc"><kbd>Esc</kbd>'+(tool?' o <kbd>'+teclaDe(tool)+'</kbd> salir':' cerrar')+'</span>'; h.style.display='flex'; }
 function quitarMedianeras(){ if(medianeras.length) recordar('quitar las medianeras'); medianeras=[]; renderMeds(); draw(); if(lastStage) run(lastStage,{keepView:true}); }
 function capas(){ const ks=['showGraph','showEquip','showDims','showEvac','showTip']; $('nCapas').textContent=ks.filter(k=>$(k).checked).length+' de '+ks.length; }
 function verTodo(v){ const t=$('todo'); t.hidden=v!=null?!v:!t.hidden; $('btnTodo').textContent=t.hidden?'Ver todo ›':'Ver menos ‹'; }
