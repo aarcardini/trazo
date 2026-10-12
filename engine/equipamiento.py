@@ -301,9 +301,12 @@ def _bano(r, libres, zonas, puerta, S, con_bide):
     return mejor[0], [mod.get(k) or ("ducha", dw, dd) for k in mejor[1]]
 
 
-def _cocina(r, libres, zonas, S):
+def _cocina(r, libres, zonas, S, parcial=False, accesos=()):
     """Mesada corrida contra una pared maciza: heladera, bacha, mesada de trabajo y cocina-horno, con el paso delante.
-    Si no entra en línea, la heladera va en otra pared (en L)."""
+    Si no entra en línea, la heladera va en otra pared (en L). parcial (R5.11): la cocina tiene la puerta del lavadero
+    (solo con la tira de servicios: las demás cocinas siguen como en v2.41): si la mesada no entra en un tramo entero, va
+    en una parte de él, y cada acomodo vale solo si desde sus puertas y aberturas (accesos) se llega a la heladera y a la
+    mesada sin pisarlas (_alcanza): la heladera no encierra la puerta del lavadero."""
     f, paso = S["mesada_fondo"], S["paso_cocina"]
     hw, hd = S["heladera"]
     bw, cw, tw = S["bacha_cocina"], S["cocina_horno"], S["mesada_trabajo"]
@@ -350,30 +353,40 @@ def _cocina(r, libres, zonas, S):
             return None
         o = hel[0]
         return [(k, ld, t, w, d) for k, t, w, d in pz] + [(o[0], o[1], o[2], o[3], o[4])]
+
+    def pasa(pz):
+        """R5.11: desde las puertas y aberturas se llega a la heladera y a la mesada (su paso delante) sin pisarlas. Con
+        la grilla fina (0,05 m): un paso angosto, pero de más de 0,50 m, entre la heladera y la punta de la mesada sirve."""
+        if not parcial or not accesos or not pz:
+            return bool(pz)
+        pz = [x for x in pz if x[0] in ("heladera", "mesada")]
+        return _alcanza(r, [_caja(ld, t, w, 0.0, d) for _, ld, t, w, d in pz], accesos,
+                        [_caja(ld, t, w, d, d + paso) for _, ld, t, w, d in pz], g=0.05)
+    linea = lambda ld, pz: [(k, ld, t, w, d) for k, t, w, d in pz] if pz else None
     for _, i, ld, a, b in tramos:                     # en línea, en el tramo más largo que alcance
-        pz = corrida(ld, a, b, True)
-        if pz:
-            return [(k, ld, t, w, d) for k, t, w, d in pz], []
+        pz = linea(ld, corrida(ld, a, b, True))
+        if pasa(pz):
+            return pz, []
     for _, i, ld, a, b in tramos:                     # en L: la mesada en un tramo y la heladera en otro
         pz = en_l(ld, i, a, b)
-        if pz:
+        if pasa(pz):
             return pz, []
-    for _, i, ld, a, b in tramos:                     # R5.11: en línea en una parte del tramo
+    for _, i, ld, a, b in tramos if parcial else ():  # R5.11: en línea en una parte del tramo
         for a2, b2 in partes(a, b, True):
-            pz = corrida(ld, a2, b2, True)
-            if pz:
-                return [(k, ld, t, w, d) for k, t, w, d in pz], []
-    for _, i, ld, a, b in tramos:                     # R5.11: en L, la mesada en una parte del tramo
+            pz = linea(ld, corrida(ld, a2, b2, True))
+            if pasa(pz):
+                return pz, []
+    for _, i, ld, a, b in tramos if parcial else ():  # R5.11: en L, la mesada en una parte del tramo
         for a2, b2 in partes(a, b, False):
             pz = en_l(ld, i, a2, b2)
-            if pz:
+            if pasa(pz):
                 return pz, []
-    for parcial in (False, True):                     # la mesada sola (si hace falta, en una parte del tramo): falta la
-        for _, i, ld, a, b in tramos:                 # heladera
-            for a2, b2 in partes(a, b, False) if parcial else [(a, b)]:
-                pz = corrida(ld, a2, b2, False)
-                if pz:
-                    return [(k, ld, t, w, d) for k, t, w, d in pz], ["la heladera (%.2f × %.2f m)" % (hw, hd)]
+    for parte in (False, True) if parcial else (False,):     # la mesada sola (R5.11: si hace falta, en una parte del
+        for _, i, ld, a, b in tramos:                         # tramo): falta la heladera
+            for a2, b2 in partes(a, b, False) if parte else [(a, b)]:
+                pz = linea(ld, corrida(ld, a2, b2, False))
+                if pasa(pz):
+                    return pz, ["la heladera (%.2f × %.2f m)" % (hw, hd)]
     return [], ["la mesada con bacha y cocina (%.2f m en línea, con %.2f m de paso delante)" % (bw + tw + cw, paso)]
 
 
@@ -417,12 +430,14 @@ def resolver(rm, puertas, aberturas, S, fachada=(), nb=1, mesa=True, ids=None, a
              nb if tipo in ("estar", "comedor") else None, mesa if tipo == "estar" else None,
              bool(acc) and tipo == "bath" and rm["id"] == "bath1",
              tuple(sorted((k, tuple(v) if isinstance(v, list) else v) for k, v in S.items())),
-             bool(placard) or tipo != "dormitorio")
+             bool(placard) or tipo != "dormitorio",
+             tipo == "cocina" and any("laundry" in (d["a"], d["b"]) for d in puertas if d["a"] in ids or d["b"] in ids))
     if clave not in _memo:
         if len(_memo) > 4000:
             _memo.clear()
         r = _estancia(x1 - x0, v1 - v0, forma)
-        _memo[clave] = _equipar_estancia(tipo, clave[1], r, pts, abre, S, clave[7], nb, mesa, clave[10], clave[12])
+        _memo[clave] = _equipar_estancia(tipo, clave[1], r, pts, abre, S, clave[7], nb, mesa, clave[10], clave[12],
+                                         clave[13])
     return _memo[clave]
 
 
@@ -478,9 +493,11 @@ def equipar(rooms, puertas, aberturas, S, nb, fachadas=None, chicas=(), acc=Fals
     return piezas, checks
 
 
-def _equipar_estancia(tipo, principal, r, puertas, aberturas, S, fachada=(), nb=1, mesa=True, acc=False, placard=True):
+def _equipar_estancia(tipo, principal, r, puertas, aberturas, S, fachada=(), nb=1, mesa=True, acc=False, placard=True,
+                      lavadero=False):
     """Una estancia en su propio origen (para reusar el resultado en estancias iguales). Devuelve (piezas
-    [(kind, esquina, dirección, frente, largo, fondo)], lo que no entra, avisos)."""
+    [(kind, esquina, dirección, frente, largo, fondo)], lo que no entra, avisos). lavadero (R5.11): la cocina tiene la
+    puerta del lavadero (ver _cocina)."""
     libres, zonas = _paredes(r, aberturas, [(p, q, ancho, adentro) for p, q, ancho, adentro in puertas])
     if tipo in MUEBLES:
         return _amueblar(tipo, principal, r, libres, zonas, puertas, aberturas, S, fachada, nb, mesa, placard)
@@ -511,7 +528,8 @@ def _equipar_estancia(tipo, principal, r, puertas, aberturas, S, fachada=(), nb=
         if isinstance(acc, str):                      # vivienda accesible: queda el baño común y el aviso
             txt = [acc] + txt
     elif tipo == "cocina":
-        hechas, txt = _cocina(r, libres, zonas, S)
+        hechas, txt = _cocina(r, libres, zonas, S, lavadero, [(p, q) for p, q, _, _ in puertas] +
+                              [(a[0], a[1]) for a in aberturas])
         return [(k,) + _marco(ld, t) + (w, d) for k, ld, t, w, d in hechas], txt, info
     else:
         puestos, fal = _lavadero(r, libres, zonas, puerta, S)
