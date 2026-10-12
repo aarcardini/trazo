@@ -2459,6 +2459,40 @@ def test_superficie_con_muros():
     # en la etapa de viviendas (sin planos) también
     r = generate({"footprint": [[0, 0], [60, 0], [60, 16], [0, 16]], "height": 15, "stage": "units", "params": {}})
     assert r["units"] and all(u["area_muros"] > u["area"] for u in r["units"])
+    # segunda revisión: sin muro entre viviendas («Muro entre viviendas» en 0) no falla (antes, ZeroDivisionError en las
+    # etapas Viviendas y Planos): las vecinas se tocan y cada una llega hasta el borde común
+    for st in ("units", "plans"):
+        r = generate({"footprint": [[0, 0], [60, 0], [60, 16], [0, 16]], "height": 15, "stage": st,
+                      "params": {"party_wall": 0}})
+        assert r["units"] and all(u["area_muros"] >= u["area"] for u in r["units"]), st
+    a, b = U.superficie_con_muros([rec(0, 5), rec(5, 10)], [lejos, lejos], [], [], {"outer_wall": ow, "party_wall": 0.0})
+    assert abs(a - 5 * 6) < 1e-6 and abs(b - 5 * 6) < 1e-6, (a, b)
+    # segunda revisión: en un rincón entrante de la planta (el codo de una L, la esquina de un patio) el cuadrado de muro
+    # exterior se parte por la bisectriz y cada vivienda cuenta la mitad junto a su fachada; la fachada cambia en el
+    # vértice de la planta (antes, las dos contaban el cuadrado entero y el escalón caía hasta 0,25 m más allá, en la
+    # superficie libre de la vecina)
+    tri = ow * ow / 2
+    ele = [(0.0, 0.0), (20.0, 0.0), (20.0, 10.0), (10.0, 10.0), (10.0, 20.0), (0.0, 20.0)]
+    A = [(5.1, 5.0), (20.0, 5.0), (20.0, 10.0), (5.1, 10.0)]
+    B = [(5.1, 10.0), (10.0, 10.0), (10.0, 20.0), (5.1, 20.0)]
+    a, b = U.superficie_con_muros([A, B], [[ele], [ele]], [], [], P0)
+    assert abs(a - ((20 + ow - 5.1 + pw / 2) * (5 + pw / 2) + (20 + ow - 10) * ow - tri)) < 1e-6, a
+    assert abs(b - ((10 + ow - 5.1 + pw / 2) * (10 + ow) - tri)) < 1e-6, b
+    ext, patio = [(0.0, 0.0), (30.0, 0.0), (30.0, 30.0), (0.0, 30.0)], [(10.0, 10.0), (20.0, 10.0), (20.0, 20.0), (10.0, 20.0)]
+    C = [(5.1, 5.0), (15.0, 5.0), (15.0, 10.0), (5.1, 10.0)]
+    D = [(5.1, 10.0), (10.0, 10.0), (10.0, 15.0), (5.1, 15.0)]
+    for hueco in (patio, patio[::-1]):
+        c, d = U.superficie_con_muros([C, D], [[ext, hueco], [ext, hueco]], [], [], P0)
+        assert abs(c - ((15 + pw - 5.1) * (5 + pw / 2) + (15 + pw / 2 - 10) * ow - tri)) < 1e-6, c
+        assert abs(d - ((10 + ow - 5.1 + pw / 2) * (5 + pw / 2) - tri)) < 1e-6, d
+    # en el motor: la vivienda del codo de una L de viviendas de 27 m² queda bajo los 32 m² del art. 3 (antes, 32.0:
+    # contaba 0,17 m² que también contaba la vecina)
+    r = generate({"footprint": [[0, 0], [41.961, 0], [41.961, 14], [16, 14], [16, 40], [0, 40]], "height": 3,
+                  "stage": "plans", "params": {"unit_mix": [{"name": "A", "area": 27, "percent": 100, "dorms": 1}]}})
+    (u,) = [u for u in r["units"] if min(p[0] for p in u["poly"]) < 15.65 < max(p[0] for p in u["poly"]) and
+            abs(max(p[1] for p in u["poly"]) - 13.65) < 0.01]
+    assert u["area_muros"] < 32 and "Superficie con muros %.1f m² < mínimo 32 m² para 1 dormitorio (norma nacional, " \
+        "art. 3)" % u["area_muros"] in [c["msg"] for c in u["checks"] if not c["ok"]], (u["area_muros"], u["checks"])
     html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
     assert html.count("+u.area_muros+' m² con muros'") == 2 and "+u.area_muros+' con muros</small>'" in html
 
@@ -2473,8 +2507,10 @@ def test_cocina_integrada():
     2,00 o 2,20 m; más angosta, la mesada contra la pared del costado, 2,70 m) y, si aún pasa, se angosta y lo que deja va
     al hall. Donde comparte el fondo con el baño (monoambiente y vivienda poco profunda), primero se angosta. El fondo que
     pierde no lleva al estar más allá de 3 veces su ancho (art. 14). Se mide lo que queda dentro de la vivienda (un muro
-    oblicuo). Sus mínimos son los de la cocina integrada (3 m², lado 1,40); una de más de 5 m² (por ejemplo, con un
-    tabique corrido a mano) se avisa. El vano del estar es el 10 % del estar y la cocina, con 2 m² como mínimo."""
+    oblicuo), y su mesada, con la pared recta. Donde comparte la franja con el baño, lo que deja la cocina va primero al
+    baño, después a un depósito y, en la vivienda poco profunda, si aún sobra, queda sin uso (el hall no crece). Sus
+    mínimos son los de la cocina integrada (3 m², lado 1,40); una de más de 5 m² (por ejemplo, con un tabique corrido a
+    mano) se avisa. El vano del estar es el 10 % del estar y la cocina, con 2 m² como mínimo."""
     import copy
     from engine import plans as P, standards as ST
     rect = lambda w, d: [(0.0, 0.0), (w, 0.0), (w, d), (0.0, d)]
@@ -2501,9 +2537,12 @@ def test_cocina_integrada():
         assert 3.0 - 1e-6 <= k["area"] <= 5.0 + 1e-6, (poly, nb, kw, k["area"])
         assert {"heladera", "mesada", "bacha_cocina", "cocina_horno"} <= {q["kind"] for q in res["equipamiento"] if q["room"] == "kitchen"}
         assert not any("Cocina" in m for m in malos(res)), malos(res)
-        if kw.get("entrada") == (0.0, 2.0):
-            h = caja(next(x for x in res["rooms"] if x["kind"] == "hall"))
-            assert abs(h[0]) < 1e-6 and abs(h[2] - caja(k)[0]) < 1e-6 and h[2] - h[0] > P.HALL_W + 0.1, (poly, nb, h)
+        if kw.get("entrada") == (0.0, 2.0):                # (segunda revisión: en el monoambiente, entre el hall y la
+            h = caja(next(x for x in res["rooms"] if x["kind"] == "hall"))     # cocina, el depósito)
+            entre = [x["kind"] for x in res["rooms"] if h[2] - 1e-6 <= caja(x)[0] and caja(x)[2] <= caja(k)[0] + 1e-6 and
+                     caja(x)[1] < caja(k)[3]]
+            assert abs(h[0]) < 1e-6 and h[2] - h[0] > P.HALL_W + 0.1 and entre == (["storage"] if nb == 0 else []), \
+                (poly, nb, h, entre)
     # vivienda profunda de 9,50 × 8,00: la cocina (en L) pierde fondo, desde 2,64 m, y el estar lo gana
     res = P.layout_unit(rect(9.5, 8.0), 2)
     R = {x["id"]: caja(x) for x in res["rooms"]}
@@ -2525,11 +2564,13 @@ def test_cocina_integrada():
     hc = next(x for x in res["rooms"] if x["name"] == "Hall / Cocina")
     b = caja(hc)
     assert hc["area"] - P.HALL_W * (b[3] - b[1]) <= 5.0 + 1e-6 and not any("art. 27" in m for m in malos(res))
-    # revisión: monoambiente, el baño comparte el fondo con la cocina: la cocina se angosta y el baño conserva su bidé
+    # revisión: monoambiente, el baño comparte el fondo con la cocina: la cocina se angosta y el baño conserva su bidé (y
+    # gana lo que deja la cocina, hasta su máximo)
     for W in (6.0, 7.0, 14.0):
         res = P.layout_unit(rect(W, 8.0), 0, lambda p, q: abs(p[1] - 8.0) < 0.05 and abs(q[1] - 8.0) < 0.05)
         b = next(x for x in res["rooms"] if x["id"] == "bath1")
-        assert abs(b["area"] - 4.8) < 0.01 and "bide" in {q["kind"] for q in res["equipamiento"] if q["room"] == "bath1"}
+        assert 4.8 - 0.01 <= b["area"] <= ST.DEFAULTS["vivienda"]["bano"]["max_area"] + 0.01 and \
+            "bide" in {q["kind"] for q in res["equipamiento"] if q["room"] == "bath1"}
         assert next(x for x in res["rooms"] if x["kind"] == "kitchen")["area"] <= 5.0 + 1e-6 and res["score"] == 100
     oblicuo = P.layout_unit([(0.0, 0.0), (5.0, 0.0), (5.0, 8.0), (1.5, 8.0)], 0)   # y con un muro oblicuo, el inodoro
     assert "inodoro" in {q["kind"] for q in oblicuo["equipamiento"] if q["room"] == "bath1"}, malos(oblicuo)
@@ -2610,6 +2651,59 @@ def test_cocina_integrada():
                       "params": {"unit_mix": [{"name": "T", "area": 45, "percent": 100, "dorms": 1}]}})
         assert r["metrics"]["plan_score"] == 100 and all(x["area"] <= 5.0 + 0.05 for u in r["units"] for x in u["rooms"]
                                                          if x["kind"] == "kitchen"), D
+    # segunda revisión. Vivienda poco profunda: lo que deja la cocina va al baño (hasta su máximo), a un depósito que se
+    # abre al estar y, si aún sobra, queda sin uso, con aviso; el hall, abierto al estar, no crece (antes, de 2 a 5 m de
+    # ancho, el estar perdía el sofá y el rack). Con el hall en x0 (R3.7), igual; ninguna estancia queda sin acceso
+    fac = lambda D: (lambda p, q: abs(p[1] - D) < 0.05 and abs(q[1] - D) < 0.05)
+    equipo = lambda res, i: {q["kind"] for q in res["equipamiento"] if q["room"] == i}
+    cocina = {"heladera", "mesada", "bacha_cocina", "cocina_horno"}
+    for W, nb, kw in ((10.5, 1, {}), (10.5, 1, {"entrada": (0.0, 1.5)}), (19.1, 3, {}), (13.0, 1, {}),
+                      (13.0, 1, {"entrada": (0.0, 1.5)}), (16.0, 1, {})):
+        res = P.layout_unit(rect(W, 4.5), nb, fac(4.5), **kw)
+        R = {x["id"]: x for x in res["rooms"]}
+        h = caja(R["hall"])
+        assert {"sofa", "rack_tv"} <= equipo(res, "living") and abs(h[2] - h[0] - P.HALL_W) < 1e-6, (W, kw, h)
+        assert R["kitchen"]["area"] <= 5.0 + 1e-6 and cocina <= equipo(res, "kitchen"), (W, kw)
+        assert R["bath1"]["area"] <= ST.DEFAULTS["vivienda"]["bano"]["max_area"] + 1e-6, (W, kw)
+        assert not any(m.startswith("Sin acceso") or "no conecta" in m for m in malos(res)), (W, kw, malos(res))
+        if W in (10.5, 19.1):
+            assert res["score"] == 100, (W, kw, malos(res))
+        if W == 13.0:
+            assert "storage" in R and ("living", "storage") in [(d["a"], d["b"]) for d in res["doors"]], (W, kw)
+        if W == 16.0:
+            assert any(m.startswith("Sin uso:") and m.endswith("la vivienda tiene más frente del que su tipo necesita")
+                       for m in malos(res)), malos(res)
+    r = generate({"footprint": [[0, 0], [42, 0], [42, 12], [0, 12]], "height": 3, "stage": "plans",
+                  "params": {"unit_mix": [{"name": "3d", "area": 95, "percent": 100, "dorms": 3}]}})
+    assert all(u["plan_score"] == 100 and "sofa" in {e["kind"] for e in u["equipamiento"]} for u in r["units"])
+    # segunda revisión. Monoambiente: el hall llega a su lado mínimo solo si la cocina conserva el ancho de su acomodo
+    # (con la heladera) o si se lo da el baño, que conserva su ducha (antes, la cocina perdía la heladera y, con 4,15 m,
+    # «Hall: lado 1.20 m < mínimo 1.20 m»); el baño accesible, también con 5 m justos de frente
+    for W, D in ((4.8, 7.15), (4.9, 7.0), (5.1, 5.0)):
+        res = P.layout_unit(rect(W, D), 0, fac(D))
+        assert "heladera" in equipo(res, "kitchen") and not any(m.startswith("Hall: lado") for m in malos(res)), (W, malos(res))
+    assert not any(m.startswith("Hall: lado 1.20 m <") for m in malos(P.layout_unit(rect(4.15, 8.5), 0, fac(8.5))))
+    for W in (4.95, 5.0):
+        assert "giro" in equipo(P.layout_unit(rect(W, 6.0), 0, fac(6.0), accesible=True), "bath1"), W
+    # segunda revisión: un muro oblicuo en la esquina de la cocina (una ochava junto al pasillo común, un trapecio): la
+    # mesada se prueba con su pared recta y se elige la cocina de 5 m² como máximo en la que entran los cuatro artefactos
+    for poly in ([(0.0, 1.2), (1.2, 0.0), (9.0, 0.0), (9.0, 5.5), (0.0, 5.5)], [(1.5, 0.0), (9.0, 0.0), (9.0, 10.5), (0.0, 10.5)]):
+        for f in (None, fac(max(p[1] for p in poly))):
+            res = P.layout_unit(poly, 1, f)
+            k = next(x for x in res["rooms"] if x["kind"] == "kitchen")
+            assert k["area"] <= 5.0 + 1e-6 and cocina <= equipo(res, "kitchen"), (poly, malos(res))
+            assert not any(m.startswith("Cocina") for m in malos(res)), malos(res)
+            assert res["score"] == 100 or poly[0] != (0.0, 1.2), malos(res)     # la ochava: como la base
+    # segunda revisión: monoambiente con el muro del extremo oblicuo: la estancia de ese extremo (el baño con la entrada
+    # en x0, R3.7; si no, el hall) se ensancha lo que pierde su borde recto, y la puerta de entrada va dentro del borde
+    # (antes, con la entrada en x0, un baño de 1,6 m² sin artefactos; sin ella, la puerta fuera de la vivienda)
+    for kw in ({}, {"entrada": (0.0, 1.6)}):
+        res = P.layout_unit([(0.0, 0.0), (4.5, 0.0), (6.0, 10.0), (0.0, 10.0)], 0, fac(10.0), **kw)
+        b = next(x for x in res["rooms"] if x["id"] == "bath1")
+        d = next(d for d in res["doors"] if d.get("entry"))
+        assert b["area"] >= 3.0 and "inodoro" in equipo(res, "bath1") and 0.0 <= min(d["p"][0], d["q"][0]) and \
+            max(d["p"][0], d["q"][0]) <= 4.5 + 1e-6, (kw, b["area"], d)
+        assert not any("puerta de entrada" in m for m in malos(res)), malos(res)
 
 if __name__ == "__main__":
     test_cocina_integrada(); print("OK55")
