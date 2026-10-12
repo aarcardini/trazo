@@ -3705,3 +3705,225 @@ def test_cocina_ventana():
 
 if __name__ == "__main__":
     test_cocina_ventana(); print("OK62")
+
+
+def test_importar_dxf():
+    """R1.5: «Abrir DXF…». engine/dxf_lector.py lee un DXF de texto de AutoCAD o Revit y devuelve lo mismo que manda Rhino
+    a /api/mass (footprint antihorario, medianeras, centerlines, anchos_pasillo, cores, patios), en metros y con las
+    coordenadas como vienen, más `unidades` y `warnings`; POST /api/dxf lo guarda como masa (source «dxf») para la web.
+    Fixtures en tests/dxf/: (a) AutoCAD en mm con las capas de Trazo, (b) R12 en metros sin unidades, (c) cuatro LINE,
+    (d) bloques con escala y giro en coordenadas UTM, (e) bulge, CIRCLE y ARC."""
+    import math, threading, urllib.request, urllib.error
+    import server, test_rhino
+    from engine import dxf_lector as L, dxf as DXF, geometry as G, layout
+    carpeta = os.path.join(os.path.dirname(__file__), "dxf")
+
+    def archivo(nombre):                  # los bytes como salen de AutoCAD en Windows (CRLF), decodificados como la web
+        with open(os.path.join(carpeta, nombre), "rb") as f:
+            return f.read().decode("utf-8")
+
+    def mismo(a, b, tol=1e-6):            # los mismos vértices en el mismo sentido, sea cual sea el primero
+        return len(a) == len(b) and any(all(abs(p[0] - q[0]) <= tol and abs(p[1] - q[1]) <= tol
+                                            for p, q in zip(a[k:] + a[:k], b)) for k in range(len(a)))
+
+    par = lambda c, v: "%3d\n%s\n" % (c, v)
+
+    def ent(tipo, capa, *pares):
+        return par(0, tipo) + par(8, capa) + "".join(par(c, v) for c, v in pares)
+
+    def lw(capa, pts, cerrada=True, *pares):
+        return ent("LWPOLYLINE", capa, (90, len(pts)), (70, 1 if cerrada else 0), *(
+            [(c, v) for x, y in pts for c, v in ((10, x), (20, y))] + list(pares)))
+
+    def linea(capa, a, b):
+        return ent("LINE", capa, (10, a[0]), (20, a[1]), (11, b[0]), (21, b[1]))
+
+    def dxf(entidades, insunits=None, tablas="", bloques=""):
+        s = (par(0, "SECTION") + par(2, "HEADER") + par(9, "$INSUNITS") + par(70, insunits) + par(0, "ENDSEC")
+             if insunits is not None else "")
+        s += par(0, "SECTION") + par(2, "TABLES") + tablas + par(0, "ENDSEC") if tablas else ""
+        s += par(0, "SECTION") + par(2, "BLOCKS") + bloques + par(0, "ENDSEC") if bloques else ""
+        return s + par(0, "SECTION") + par(2, "ENTITIES") + "".join(entidades) + par(0, "ENDSEC") + par(0, "EOF")
+
+    rect = lambda w, h, x=0.0, y=0.0: [(x, y), (x + w, y), (x + w, y + h), (x, y + h)]
+    hay = lambda r, txt: any(txt in w for w in r["warnings"])
+    # (a) el de la meta del ítem: AutoCAD, rectángulo de 15 × 30 m en milímetros, dibujado en sentido horario
+    a = L.leer(archivo("autocad_mm.dxf"), "autocad_mm.dxf")
+    assert mismo(a["footprint"], [[0, 0], [15, 0], [15, 30], [0, 30]]) and abs(G.area(a["footprint"]) - 450) < 1e-6
+    assert a["name"] == "autocad_mm" and a["unidades"] == "mm" and "height" not in a
+    assert a["medianeras"] == [{"a": [0, 0], "b": [0, 30], "retiro": 3.0},
+                               {"a": [15, 30], "b": [15, 0], "retiro": 3.0}]
+    assert a["centerlines"] == [[[7.5, 1.0], [7.5, 14.0], [7.5, 26.0]]]
+    assert a["cores"] == [[7.5, 3.0]] and mismo(a["patios"][0], [[4.5, 27], [10.5, 27], [10.5, 30], [4.5, 30]])
+    rh = test_rhino.cargar()              # misma estructura que el script de Rhino: anchos por segmento y núcleos
+    assert a["anchos_pasillo"] == rh.anchos_de_linea(a["centerlines"][0], "ancho=1.4") and len(a["anchos_pasillo"]) == 2
+    assert rh.nucleo([1.0, 2.0], "ascensores=2") == L.leer(dxf([ent("POINT", "Trazo_Cores ascensores 2",
+        (10, 1.0), (20, 2.0)), lw("Trazo_Terreno", rect(10, 10))]), "")["cores"][0]
+    assert len(a["warnings"]) == 2 and hay(a, "Ignoré 2 entidades TEXT de la capa «COTAS»: Trazo no las lee.") and \
+        hay(a, "No leí 1 entidad de la capa «Escombros» (capa apagada o congelada).")   # el marco apagado no es la masa
+    # (b) R12: POLYLINE/VERTEX/SEQEND en metros, sin $INSUNITS; hay otra figura cerrada y se toma la más grande
+    b = L.leer(archivo("r12_metros.dxf"), "r12_metros")
+    assert mismo(b["footprint"], [[100, 200], [120, 200], [120, 240], [100, 240]]) and b["unidades"] == "m"
+    assert hay(b, "no dice en qué unidades está dibujado") and hay(b, "tomé la figura cerrada más grande") and \
+        hay(b, "la masa mide 20.0 × 40.0 m") and "medianeras" not in b and "cores" not in b
+    # (c) cuatro LINE en desorden, algunas al revés: el lazo cerrado es la masa (una sexta línea suelta no cuenta)
+    c = L.leer(archivo("rectangulo_lineas.dxf"), "rectangulo_lineas.dxf")
+    assert mismo(c["footprint"], [[0, 0], [12, 0], [12, 25], [0, 25]]) and G.area(c["footprint"]) > 0
+    assert c["unidades"] == "m" and len(c["warnings"]) == 1 and hay(c, "con 4 líneas que se tocan punta con punta")
+    # (d) el lote está dentro de un bloque (escala 2, giro de 90°) y el núcleo es otro bloque: su centro; UTM sin mover
+    d = L.leer(archivo("bloques.dxf"), "bloques")
+    assert mismo(d["footprint"], [[500100, 6150200], [500100, 6150220], [500060, 6150220], [500060, 6150200]])
+    assert d["cores"] == [[500091.5, 6150213.0]] and hay(d, "el bloque «NO_EXISTE»") and hay(d, "TEXT de la capa «Planos»")
+    # (e) esquina redondeada (bulge), patio redondo (CIRCLE) y pasillo en arco (ARC), en tramos de 5°
+    e = L.leer(archivo("arco.dxf"), "arco")
+    assert abs(G.area(e["footprint"]) - (191 + 9 * math.pi / 4)) < 0.02 and len(e["footprint"]) == 5 + 17
+    assert len(e["patios"][0]) == 72 and abs(G.area(e["patios"][0]) - math.pi * 1.5 ** 2) < 0.02
+    arco = e["centerlines"][0]
+    assert len(arco) == 13 and all(abs(math.hypot(x - 10, y + 20) - 25) < 1e-4 for x, y in arco) and \
+        abs(arco[0][0] - 22.5) < 1e-4 and abs(arco[-1][0] + 2.5) < 1e-4
+    # nombres de capa: mayúsculas, «_», «-», espacio o «:»; «ancho 1.4», «ancho_1.4», «ancho-1,4», «ancho=1.4»
+    for capa in ("Trazo_Centerline ancho 1.4", "TRAZO CENTERLINE ANCHO=1.4", "trazo-centerline-ancho-1,4",
+                 "Trazo_Centerline_ancho_1.4", "Trazo:Centerline ancho1.4"):
+        r = L.leer(dxf([lw("Trazo_Terreno", rect(10, 20)), lw(capa, [(5, 1), (5, 19)], False)], 6), "")
+        assert r["anchos_pasillo"] == [{"seg": [[5, 1], [5, 19]], "ancho": 1.4}], capa
+    for capa, retiro in (("Trazo_Medianeras retiro 3", 3.0), ("Trazo-Medianeras-Retiro=3,5", 3.5), ("Trazo_Medianeras", 0.0)):
+        assert L.leer(dxf([lw("Trazo_Terreno", rect(10, 20)), linea(capa, (0, 0), (0, 20))], 6), "")["medianeras"] == \
+            [{"a": [0, 0], "b": [0, 20], "retiro": retiro}], capa
+    assert L.leer(dxf([lw("Trazo_Terreno", rect(10, 20)), linea("Trazo_Centerline", (5, 1), (5, 19))], 6), "").get(
+        "anchos_pasillo") is None                                            # sin ancho en el nombre: el general
+    # unidades: $INSUNITS (pulgadas, pies, cm, mm) o, sin él, por el tamaño de la masa (hasta 500 m, 10000 cm, más mm)
+    for ins, w, h in ((1, 600, 1200), (2, 50, 100), (5, 1524, 3048), (4, 15240, 30480), (6, 15.24, 30.48)):
+        r = L.leer(dxf([lw("Trazo_Terreno", rect(w, h))], ins), "")
+        assert mismo(r["footprint"], [[0, 0], [15.24, 0], [15.24, 30.48], [0, 30.48]]) and not r["warnings"], ins
+    for ins, w, h, nombre in ((None, 15, 30, "m"), (0, 1500, 3000, "cm"), (None, 15000, 30000, "mm")):
+        r = L.leer(dxf([lw("Trazo_Terreno", rect(w, h))], ins), "")
+        assert r["unidades"] == nombre and mismo(r["footprint"], [[0, 0], [15, 0], [15, 30], [0, 30]]) and \
+            hay(r, "no dice en qué unidades"), nombre
+    assert hay(L.leer(dxf([lw("Trazo_Terreno", rect(15000, 30000))], 6), ""), "La masa mide 15000.0 × 30000.0 m, enorme")
+    # lo que no es la masa: el espacio papel (marcos de hoja), las capas apagadas por color y los bloques anidados
+    r = L.leer(dxf([lw("Marco", rect(900, 600), True, (67, 1)), lw("Lote", rect(15, 30)), lw("Viejo", rect(50, 80))], 6,
+                   tablas=par(0, "LAYER") + par(2, "Viejo") + par(70, 0) + par(62, -7)), "")
+    assert mismo(r["footprint"], rect(15, 30)) and hay(r, "No leí 1 entidad de la capa «Viejo»") and \
+        not hay(r, "figuras cerradas")
+    ins = lambda n, x: ent("INSERT", "0", (2, n), (10, x), (20, 0))
+    bloque = lambda n, ents: par(0, "BLOCK") + par(2, n) + par(10, 0) + par(20, 0) + "".join(ents) + par(0, "ENDBLK")
+    try:
+        L.leer(dxf([ins("AFUERA", 0)], bloques=bloque("ADENTRO", [lw("Trazo_Terreno", rect(10, 20))]) +
+                   bloque("AFUERA", [ins("ADENTRO", 0)])), "")
+        raise AssertionError("un bloque anidado no se lee")
+    except L.ErrorDxf as ex:
+        assert str(ex).startswith("Trazo: no encontré una polilínea cerrada") and \
+            any("bloques dentro de bloques de la capa «0»" in w for w in ex.warnings), ex.warnings
+    # extrusión (0, 0, -1): el eje x del sistema propio de la polilínea mira al revés
+    r = L.leer(dxf([lw("Trazo_Terreno", rect(10, 20), True, (210, 0), (220, 0), (230, -1))], 6), "")
+    assert mismo(r["footprint"], [[-10, 0], [0, 0], [0, 20], [-10, 20]])
+    # una polilínea abierta que vuelve a su primer punto es cerrada; las medianeras cerradas dan todos sus lados
+    r = L.leer(dxf([lw("Terreno", rect(10, 20) + [(0, 0)], False), lw("Trazo_Medianeras retiro 2", rect(10, 20))], 6), "")
+    assert mismo(r["footprint"], rect(10, 20)) and len(r["medianeras"]) == 4 and \
+        hay(r, "a más de 0,5 m del borde") is False
+    r = L.leer(dxf([lw("Trazo_Terreno", rect(10, 20)), linea("Trazo_Medianeras", (0, -4), (10, -4))], 6), "")
+    assert hay(r, "Una medianera queda a más de 0,5 m del borde de la masa")
+    # núcleos: punto, figura cerrada chica (su centro) y con «ascensores 2» en el nombre; una grande o abierta no sirve
+    r = L.leer(dxf([lw("Trazo_Terreno", rect(10, 30)), ent("POINT", "Trazo_Cores", (10, 2), (20, 3)),
+                    lw("Trazo_Cores ascensores 2", rect(2, 4, 4, 10)), lw("Trazo_Cores", rect(10, 30)),
+                    linea("Trazo_Cores", (0, 0), (5, 5))], 6), "")
+    assert r["cores"] == [[2.0, 3.0], {"p": [5.0, 12.0], "ascensores": 2}] and hay(r, "2 figuras de la capa Trazo_Cores no sirven")
+    # patios: cerrados (también de líneas que se tocan); uno abierto no se usa y se avisa
+    r = L.leer(dxf([lw("Trazo_Terreno", rect(10, 30)), lw("Trazo_Patios", rect(3, 3, 1, 1)),
+                    linea("Trazo_Patios", (5, 10), (8, 10)), linea("Trazo_Patios", (8, 10), (8, 13)),
+                    linea("Trazo_Patios", (8, 13), (5, 13)), linea("Trazo_Patios", (5, 13), (5, 10)),
+                    lw("Trazo_Patios", [(1, 20), (4, 20), (4, 25)], False)], 6), "")
+    assert len(r["patios"]) == 2 and all(G.area(p) > 0 for p in r["patios"]) and \
+        hay(r, "1 figura de la capa Trazo_Patios no está cerrada y no se usa")
+    # varias figuras en Trazo_Terreno: la mayor; sin figura cerrada en esa capa: error que dice qué hacer
+    r = L.leer(dxf([lw("Trazo_Terreno", rect(10, 20)), lw("Trazo_Terreno", rect(30, 40)), lw("Otra", rect(99, 99))], 6), "")
+    assert mismo(r["footprint"], rect(30, 40)) and hay(r, "La capa «Trazo_Terreno» tiene 2 figuras cerradas")
+    # un archivo con BOM, con los saltos de línea de Windows o de Unix y con renglones de más al final se lee igual
+    base = dxf([lw("Trazo_Terreno", rect(10, 20))], 6)
+    for texto in ("\ufeff" + base, base.replace("\n", "\r\n"), base + "\n\n  \n"):
+        assert mismo(L.leer(texto, "")["footprint"], rect(10, 20))
+    # la misma figura dibujada dos veces no es «varias figuras»
+    r = L.leer(dxf([lw("Trazo_Terreno", rect(10, 20)), lw("Trazo_Terreno", rect(10, 20)[::-1]), lw("Otra", rect(10, 20))], 6), "")
+    assert mismo(r["footprint"], rect(10, 20)) and not r["warnings"]
+    # SPLINE: por sus puntos de ajuste, o por sus puntos de control y nudos (Bézier cúbica: en t = 0,5, (P0+3P1+3P2+P3)/8)
+    sp = lambda capa, *pares: ent("SPLINE", capa, *pares)
+    r = L.leer(dxf([lw("Trazo_Terreno", rect(10, 20)),
+                    sp("Trazo_Centerline", (70, 8), (71, 3), (74, 3), (11, 1), (21, 1), (11, 5), (21, 9), (11, 9), (21, 15)),
+                    sp("Trazo_Centerline", (70, 8), (71, 3), *([(40, 0)] * 4 + [(40, 1)] * 4 + [(c, v) for x, y in
+                       ((0, 0), (0, 10), (10, 10), (10, 0)) for c, v in ((10, x), (20, y))]))], 6), "")
+    assert r["centerlines"][0] == [[1, 1], [5, 9], [9, 15]] and len(r["centerlines"][1]) == 33 and \
+        r["centerlines"][1][16] == [5.0, 7.5] and r["centerlines"][1][0] == [0, 0] and r["centerlines"][1][-1] == [10, 0]
+    assert hay(r, "2 SPLINEs de la capa «Trazo_Centerline» se leyeron con tramos rectos")
+    # errores: DXF binario, DWG, algo que no es un DXF y un DXF sin figura cerrada (o con la capa abierta)
+    for texto, frase in (("AutoCAD Binary DXF\r\n\x1a\x00\x00\x00", "este DXF es binario"), ("AC1032\x00\x00\x00\x00", "eso es un DWG"),
+                         ("hola, esto no es un DXF", "no parece un DXF de texto"), ("   \n  ", "no parece un DXF de texto"),
+                         (dxf([linea("Lote", (0, 0), (10, 0)), ent("TEXT", "Textos", (10, 0), (20, 0), (1, "x"))]),
+                          "no encontré una polilínea cerrada en el DXF"),
+                         (dxf([lw("Trazo_Terreno", [(0, 0), (10, 0), (10, 5)], False)]), "la capa «Trazo_Terreno» no tiene ninguna polilínea cerrada")):
+        try:
+            L.leer(texto, "")
+            assert frase is None, frase
+        except L.ErrorDxf as ex:
+            assert frase and frase in str(ex) and str(ex).startswith("Trazo:"), (frase, str(ex))
+    # ida y vuelta con engine/dxf.py: lo que Trazo exporta (Trazo_Footprint y Trazo_Patios) se vuelve a leer
+    s = json.load(open(os.path.join(os.path.dirname(__file__), "..", "samples", "entre_medianeras_patio_central.json"),
+                       encoding="utf-8"))
+    res = layout.generate({"footprint": s["footprint"], "height": s["height"], "stage": "plans",
+                           "params": {"medianeras": s["medianeras"], "patios": s["patios"], "patios_mode": "manual"}})
+    v = L.leer(DXF.result_to_dxf(res), "resultado.dxf")
+    assert mismo(v["footprint"], res["footprint"], 1e-4) and len(v["patios"]) == 1 and mismo(v["patios"][0], res["patios"][0], 1e-4)
+    # el motor corre con la masa importada, como lo hace la web (medianeras, pasillo, núcleo y patio de la capa)
+    params = {"medianeras": a["medianeras"], "centerlines": a["centerlines"], "anchos_pasillo": a["anchos_pasillo"],
+              "cores": a["cores"], "cores_mode": "manual", "patios": a["patios"], "patios_mode": "manual"}
+    gen = layout.generate({"footprint": a["footprint"], "height": 15, "stage": "plans", "params": params})
+    assert len(gen["units"]) > 0 and not gen.get("error")
+    assert len(layout.generate({"footprint": c["footprint"], "height": 15, "stage": "mix", "params": {}})["units"]) > 0
+    # el servidor: POST /api/dxf guarda la masa como si viniera de Rhino y la web la toma de GET /api/mass
+    server.STATE.update(mass=None, result=None)
+    srv = server.ThreadingHTTPServer(("127.0.0.1", 0), server.H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    url = "http://127.0.0.1:%d" % srv.server_address[1]
+
+    def api(ruta, cuerpo=None):
+        req = urllib.request.Request(url + ruta, data=None if cuerpo is None else json.dumps(cuerpo).encode(),
+                                     method="GET" if cuerpo is None else "POST", headers={"Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=10) as r:
+                return r.status, json.loads(r.read().decode())
+        except urllib.error.HTTPError as ex:
+            return ex.code, json.loads(ex.read().decode())
+    try:
+        assert api("/api/mass")[1]["mass"] is None
+        cod, j = api("/api/dxf", {"name": "autocad_mm", "dxf": archivo("autocad_mm.dxf")})
+        assert cod == 200 and j["ok"] and j["source"] == "dxf" and j["unidades"] == "mm" and len(j["warnings"]) == 2
+        assert mismo(j["footprint"], a["footprint"]) and j["medianeras"] == a["medianeras"] and j["name"] == "autocad_mm"
+        cod, m = api("/api/mass")
+        assert cod == 200 and m["version"] == j["version"] and m["mass"]["source"] == "dxf" and \
+            mismo(m["mass"]["footprint"], [[0, 0], [15, 0], [15, 30], [0, 30]]) and len(m["mass"]["medianeras"]) == 2 and \
+            m["mass"]["anchos_pasillo"] == a["anchos_pasillo"] and m["mass"]["patios"] == a["patios"] and \
+            m["mass"]["cores"] == [[7.5, 3.0]]
+        cod, g = api("/api/generate", {"footprint": m["mass"]["footprint"], "height": 15, "stage": "plans",
+                                       "params": {"medianeras": m["mass"]["medianeras"]}})
+        assert cod == 200 and len(g["units"]) > 0
+        for cuerpo, frase in (({"name": "x", "dxf": ""}, "llegó vacío"), ({"name": "x"}, "llegó vacío"),
+                              ({"name": "x", "dxf": "AutoCAD Binary DXF\r\n\x1a\x00"}, "este DXF es binario"),
+                              ({"name": "x", "dxf": dxf([linea("Lote", (0, 0), (10, 0))])}, "no encontré una polilínea cerrada")):
+            cod, j2 = api("/api/dxf", cuerpo)
+            assert cod == 400 and j2["error"].startswith("Trazo:") and frase in j2["error"], (cuerpo, j2)
+        assert api("/api/mass")[1]["version"] == m["version"]            # un DXF que falla no cambia la masa
+        api("/api/dxf", {"name": "bloques", "dxf": archivo("bloques.dxf")})
+        assert api("/api/mass")[1]["mass"]["name"] == "bloques" and api("/api/mass")[1]["version"] == m["version"] + 1
+    finally:
+        srv.shutdown()
+        srv.server_close()
+        server.STATE.update(mass=None, result=None)
+    # la web: el botón «Abrir DXF…» (con su selector de archivos .dxf), el POST y los avisos junto a los del resultado
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    assert 'id="btnAbrirDxf"' in html and ">Abrir DXF…</button>" in html and \
+        'id="archivoDxf" accept=".dxf"' in html and "onchange=\"leerDxf(this)\"" in html
+    js = html.split("<script>", 1)[1]
+    assert "async function leerDxf(" in js and "fetch('/api/dxf'" in js and "function avisosPanel(" in js and \
+        "m.source==='dxf'" in js and "'__dxf'" in js and "avisosPanel();" in js.split("function panels2(){", 1)[1].split("\n", 1)[0]
+
+if __name__ == "__main__":
+    test_importar_dxf(); print("OK63")

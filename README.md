@@ -80,6 +80,7 @@ Desde entonces basta con escribir `trazo` en Rhino.
    - Para fijar los núcleos, coloca puntos en la capa `Trazo::Cores`; se usan en modo manual (nombre `ascensores=2` para fijar los ascensores de ese núcleo).
    - Para marcar medianeras, dibuja líneas en la capa `Trazo::Medianeras` (nombre `retiro=3` si el edificio se retira).
    - Para abrir patios, dibuja curvas cerradas en la capa `Trazo::Patios`; llegan a la web en modo manual.
+   - ¿Usas AutoCAD o Revit, sin Rhino? En Proyecto, **Abrir DXF…** toma el terreno de un DXF (ver «Desde AutoCAD o Revit»).
 3. En la web: Calcular masa → Generar pasillo y núcleos → Generar mix → Generar planos. Cada botón está al pie de su grupo, en el riel de la izquierda: **Masa** (Calcular masa), **Circulación** (Generar pasillo y núcleos) y **Viviendas** (Generar mix y Generar planos). Un clic en el grupo abre su panel y otro lo cierra (o Esc).
    - **La interfaz (v2.37):**
      - **Arriba:** el nombre de lo que está abierto, su etapa, deshacer y rehacer, y el botón del sol o la luna que cambia entre el tema claro y el oscuro (v2.43).
@@ -106,6 +107,21 @@ Desde entonces basta con escribir `trazo` en Rhino.
    - Si ya habías recibido un resultado, pregunta qué hacer: **Reemplazar** (borra el anterior, también lo que esté oculto o bloqueado, y dibuja el nuevo), **Agregar** (deja los dos) o **Cancelar**. No dibujes a mano en las capas `Trazo::Footprint` ni `Trazo::L00…`: Reemplazar las vacía.
    - Los patios recibidos se dibujan en cada nivel (`Trazo::L00::Patios`…); la capa `Trazo::Patios` es solo para enviar.
    - Alternativa sin script: botón **DXF (Rhino)** y luego `Import`.
+
+## Desde AutoCAD o Revit
+Trazo lee un **DXF de texto**: en la web, **Proyecto → Abrir DXF…**, y la masa aparece como si la hubiera mandado Rhino (con medianeras, pasillos, núcleos y patios si el DXF los trae). No hace falta Rhino.
+1. **Guarda un DXF, no un DWG.** En AutoCAD: «Guardar como» → «DXF de AutoCAD» (si ofrece formato, elige **ASCII**, no binario). Revit exporta DXF de texto. Un DWG (el formato nativo de AutoCAD) no se puede leer: Trazo lo avisa.
+2. **El terreno es una polilínea cerrada.** Ponla en la capa **`Trazo_Terreno`** (en AutoCAD, PEDIT → Cerrar si hace falta). Si no hay esa capa, Trazo toma la polilínea cerrada más grande del dibujo y avisa cuál eligió; si el terreno son líneas sueltas que se tocan punta con punta, arma el contorno con ellas. Con varias figuras en `Trazo_Terreno`, toma la mayor.
+3. **Capas opcionales, como las de Rhino.** Los nombres no distinguen mayúsculas y aceptan «_», «-» o espacio:
+   - `Trazo_Medianeras retiro 3`: líneas sobre el borde del terreno (cada una es una medianera; el retiro, en metros, va en el nombre de la capa; sin él, retiro 0). Si una línea queda a más de 0,5 m del borde, Trazo avisa.
+   - `Trazo_Centerline ancho 1.4`: polilíneas con el eje del pasillo (cada vértice es un giro). El ancho de pasillo, en metros, va en el nombre de la capa; sin él se usa el ancho general.
+   - `Trazo_Cores`: un punto, un bloque o una figura cerrada chica (hasta 120 m²) por núcleo; Trazo toma su centro. `Trazo_Cores ascensores 2` fija los ascensores de esos núcleos.
+   - `Trazo_Patios`: polilíneas cerradas (patios de aire y luz).
+   - AutoCAD no admite «=» en el nombre de una capa: escribe `ancho 1.4`, `ancho_1.4` o `ancho-1.4`. Con «=» (`ancho=1.4`) o con coma decimal (`ancho 1,4`) también vale.
+4. **Unidades.** Un DXF dice en qué unidades está dibujado (son las unidades de inserción de AutoCAD, la variable `INSUNITS`, que también está en el cuadro del comando UNITS): se leen milímetros, centímetros, metros, pulgadas y pies, y todo pasa a metros. Si no las dice, Trazo las deduce por el tamaño de la masa (hasta 500: metros; hasta 10 000: centímetros; más: milímetros) y lo avisa con la medida que resultó. Las coordenadas no se mueven (pueden ser UTM).
+5. **La altura no viene en el DXF:** queda la del campo «Altura» (Masa).
+
+**Qué se lee:** líneas, polilíneas (LWPOLYLINE y POLYLINE, también con arcos), arcos y círculos (como tramos rectos de 5°), puntos, splines (aproximadas) y bloques (INSERT, con su escala y su giro; un solo nivel). **Qué no:** textos, cotas, rellenos, sólidos y mallas 3D, referencias externas (XREF), bloques dentro de bloques, el espacio papel (las hojas) ni las capas apagadas o congeladas. Lo que Trazo no lee se avisa a la derecha, con el nombre de la entidad y de su capa, antes de los avisos del resultado y con el prefijo «DXF:». Si no encuentra ninguna figura cerrada, dice cómo preparar el terreno.
 
 ## Actualizar Trazo
 Cuando haya cambios nuevos en GitHub (por ejemplo, después de aceptar un PR):
@@ -148,6 +164,14 @@ Si algo falla en Rhino, ejecuta el script y elige **Diagnostico**. Si no se resu
 - **Pasillo y núcleos**: eje (automático o dibujado), ancho de pasillo, núcleos (ancho, fondo incluyendo pasillo, cantidad), distancias de evacuación (salida única / múltiple) y núcleos extra automáticos.
 - **Mix**: tipos con m² objetivo y %, ancho mínimo, muro medianero; métricas Match Score, Fit y Unidades únicas.
 - **Planos**: distribución día/noche con pasillo interno, puertas y grafo de conexiones verificado.
+
+## Novedades v2.47
+- **Abrir el terreno desde un DXF de AutoCAD o Revit (R1.5):** en **Proyecto**, el botón nuevo **Abrir DXF…** lee un archivo `.dxf` y lo deja como masa, igual que si la mandara Rhino: no hace falta Rhino. Un rectángulo de 15 × 30 m dibujado en milímetros se abre como una masa de 15 × 30 m, con sus medianeras si las dibujaste en la capa `Trazo_Medianeras retiro 3`. Cómo preparar el DXF (capas, unidades, qué se lee y qué no), en «Desde AutoCAD o Revit».
+  - **Capas como las de Rhino:** `Trazo_Terreno` (la masa), `Trazo_Medianeras` («retiro 3»), `Trazo_Centerline` («ancho 1.4»), `Trazo_Cores` y `Trazo_Patios`. Como AutoCAD no admite «=» en el nombre de una capa, el ancho y el retiro se escriben con espacio, «_» o «-» (`ancho 1.4`, `ancho_1.4`, `ancho-1.4`); con «=» o con coma decimal también valen. Sin `Trazo_Terreno`, se toma la polilínea cerrada más grande del dibujo (o el contorno que forman líneas sueltas que se tocan) y se avisa.
+  - **Unidades:** las del DXF (milímetros, centímetros, metros, pulgadas, pies); si no las dice, se deducen por el tamaño de la masa y se avisa. Todo pasa a metros; las coordenadas (UTM, por ejemplo) no se mueven.
+  - **Avisos:** a la derecha, con el prefijo «DXF:» y antes de los del resultado: las unidades supuestas, la figura elegida entre varias, lo que no se lee (con la entidad y la capa) y las medianeras que no quedan sobre el borde. Un DWG, un DXF binario o un DXF sin ninguna figura cerrada no se abren: un mensaje dice qué hacer.
+  - **Cómo probarlo:** Proyecto → **Abrir DXF…** y elige un DXF (en `tests/dxf/` hay cinco de ejemplo, por ejemplo `autocad_mm.dxf`). La planta muestra el terreno con sus medianeras y los avisos aparecen a la derecha; sigue como siempre con «Generar pasillo y núcleos». La API es `POST /api/dxf`; el motor no cambia: las métricas de los ejemplos son las mismas.
+  - **No se pudo probar con un DXF real de AutoCAD o Revit** (solo con archivos escritos a mano y con los que genera una biblioteca de DXF, de R12 a 2018): si tu DXF no abre como esperas, el mensaje o los avisos dicen por qué.
 
 ## Novedades v2.46
 - **Cocina con ventana propia (R10.9):** la cocina que toca una fachada (en las viviendas de punta o de esquina, donde su costado da al exterior) lleva ahora **su propia ventana**, de 1,00 × 1,20 m (0,40 m² como mínimo, norma nacional, art. 24; más ancha si el 10 % de su superficie pide más), y **conserva su medida típica**: es una cocina según el art. 21 (mínimo 4 m² y lado 1,60 m), se dibuja con su superficie típica (7 m², «Normativa → Vivienda → Cocina») como máximo en vez de los 5 m² de la cocina integrada sin ventana, conserva su fondo (se angosta, y lo que deja va al hall, al baño o a un depósito, como antes) y no cuenta en el vano del estar. En «Barra 60x16», las dos viviendas de punta que tocan la fachada del extremo (U04 y U05) pasan de 5 a 7 m² de cocina, con su ventana en el muro del extremo.
