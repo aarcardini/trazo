@@ -2653,7 +2653,8 @@ def test_cocina_integrada():
     res = P.layout_unit(rect(9.5, 8.0), 2, ventanas=dict(S, iluminacion=0.5))
     assert any(m.startswith("Estar-Comedor: ventana de") and m.endswith("(50 % de la superficie del estar y la cocina, 2 m² "
                                                                          "como mínimo: norma nacional, art. 27)") for m in malos(res)), malos(res)
-    # en los ejemplos: ninguna cocina de más de 5 m² (de un «Hall / Cocina», su parte)
+    # en los ejemplos: ninguna cocina sin ventana propia de más de 5 m² (de un «Hall / Cocina», su parte); R10.9: la cocina
+    # con fachada lleva su ventana y no se acota (test_cocina_ventana)
     for n in ("L", "quiebre_45", "T_dos_lineas", "entre_medianeras_patio_central"):
         s = json.load(open(os.path.join(os.path.dirname(__file__), "..", "samples", n + ".json"), encoding="utf-8"))
         p = {k: s[k] for k in ("centerlines", "medianeras") if s.get(k)}
@@ -2664,7 +2665,7 @@ def test_cocina_integrada():
         r = run(s["footprint"], h=s["height"], **p)
         for u in r["units"]:
             for x in u["rooms"]:
-                if x["kind"] == "kitchen":
+                if x["kind"] == "kitchen" and x.get("ventilacion") != "ventana":
                     assert x["area"] <= 5.0 + 0.05, (n, u["id"], x["area"])
             assert not any("art. 27" in c["msg"] for c in u["checks"]), (n, u["id"])
     # en layout, los mínimos de la cocina integrada (quiebre_45, U08: antes «< mínimo 4.0 m²»)
@@ -2676,7 +2677,7 @@ def test_cocina_integrada():
         r = generate({"footprint": [[0, 0], [40, 0], [40, D], [0, D]], "height": 3, "stage": "plans",
                       "params": {"unit_mix": [{"name": "T", "area": 45, "percent": 100, "dorms": 1}]}})
         assert r["metrics"]["plan_score"] == 100 and all(x["area"] <= 5.0 + 0.05 for u in r["units"] for x in u["rooms"]
-                                                         if x["kind"] == "kitchen"), D
+                                                         if x["kind"] == "kitchen" and x.get("ventilacion") != "ventana"), D
     # segunda revisión. Vivienda poco profunda: lo que deja la cocina va al baño (hasta su máximo), a un depósito que se
     # abre al estar y, si aún sobra, queda sin uso, con aviso; el hall, abierto al estar, no crece (antes, de 2 a 5 m de
     # ancho, el estar perdía el sofá y el rack). Con el hall en x0 (R3.7), igual; ninguna estancia queda sin acceso
@@ -3101,7 +3102,8 @@ def test_rincones():
     assert res["segunda_fachada"] == "estar" and "dining" not in caja(res) and res["score"] >= 50
     # - sin tira y con un muro oblicuo (una ochava junto al pasillo común, un costado inclinado), los planos tampoco
     #   cambian: la mesada en una parte de su pared es solo de la cocina con la puerta del lavadero (antes, estas cocinas
-    #   cambiaban y el trapecio, con fachada en su lado oblicuo, bajaba de 100 a 33): huellas de v2.41
+    #   cambiaban y el trapecio, con fachada en su lado oblicuo, bajaba de 100 a 33): huellas de v2.41 (el trapecio, de
+    #   v2.46: su cocina toca la fachada oblicua y lleva ventana propia, R10.9, test_cocina_ventana)
     def oblicua(D, a, b):
         L = ((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2) ** 0.5
         sobre = lambda t: abs((t[0] - a[0]) * (b[1] - a[1]) - (t[1] - a[1]) * (b[0] - a[0])) / L < 0.05
@@ -3109,7 +3111,7 @@ def test_rincones():
     OBLICUAS = {
         "d95a8e7e": ([(2, 0), (6, 0), (6, 9), (0, 9), (0, 2)], 1, fondo(9.0), {}),
         "baa0fc5a": ([(0, 0.6), (0.6, 0), (9.5, 0), (9.5, 8.5), (0, 8.5)], 2, fondo(8.5), {}),
-        "13e0855e": ([(0.25, 0), (21.45, 0), (21.45, 5.5), (1.425, 5.5)], 3, oblicua(5.5, (0.25, 0), (1.425, 5.5)), {}),
+        "67bafc22": ([(0.25, 0), (21.45, 0), (21.45, 5.5), (1.425, 5.5)], 3, oblicua(5.5, (0.25, 0), (1.425, 5.5)), {}),
         "08602931": ([(0, 0), (7, 0), (8, 8.5), (0, 8.5)], 2, fondo(8.5), {}),
         "a00862d0": ([(0, 0), (8, 0), (9, 1), (9, 8), (0, 8)], 2, fondo(8.0), {"accesible": True}),
     }
@@ -3611,3 +3613,95 @@ def test_medidas_tipeadas():
 
 if __name__ == "__main__":
     test_medidas_tipeadas(); print("OK61")
+
+def test_cocina_ventana():
+    """R10.9 (decisión del usuario, v2.41; norma nacional, art. 24): la cocina con un tramo de fachada en el que entra una
+    ventana lleva la suya (de ventanas["ancho_cocina"], con ventanas["vano_cocina"] como mínimo y más ancha si el 10 % de
+    su superficie pide más) y conserva la medida de antes de v2.41: no se acota a los 5 m² de la cocina integrada sin
+    ventana (art. 27) ni suma su superficie al vano del estar, y sus mínimos son los de una cocina (art. 21). Si no llega
+    al vano, avisa como las demás ventanas. La cocina sin fachada (o con un tramo en el que no entra una ventana) sigue
+    integrada, de 5 m² como máximo, y trae ventilacion = "extractor", que la ficha de la web muestra como «con
+    extractor». En «Barra 60x16», las cocinas de las viviendas de punta con fachada lateral (U04 y U05) tienen ventana y
+    su medida; las del medio (y las de punta contra el núcleo), extractor."""
+    from engine import plans as P, standards as ST
+    rect = lambda w, d: [(0.0, 0.0), (w, 0.0), (w, d), (0.0, d)]
+    S, V = ST.DEFAULTS["ventanas"], ST.DEFAULTS["vivienda"]
+    assert S["ancho_cocina"] == 1.0 and S["vano_cocina"] == 0.4
+    fondo = lambda p, q: abs(p[1] - 8.0) < 0.05 and abs(q[1] - 8.0) < 0.05
+    esquina = lambda p, q: fondo(p, q) or (abs(p[0]) < 0.05 and abs(q[0]) < 0.05)      # fachada al fondo y en x0
+    corta = lambda p, q: fondo(p, q) or (abs(p[0]) < 0.05 and abs(q[0]) < 0.05 and max(p[1], q[1]) <= 1.0)   # 1 m en x0
+    malos = lambda res: [c["msg"] for c in res["checks"] if not c["ok"]]
+    cocina = lambda res: next(r for r in res["rooms"] if r["kind"] == "kitchen")
+    estar = lambda res: next(r for r in res["rooms"] if r["kind"] == "living")
+    de = lambda res, i: [w for w in res["ventanas"] if w["room"] == i]
+    # 9,50 × 8,00 con 2 dormitorios y fachada en x0: la cocina, en x0, lleva ventana (1,00 × 1,20 m en la fachada
+    # lateral, hacia afuera), mide 2,10 × 2,64 m como antes de v2.41 (sin la ventana, 5 m²) y el vano del estar no la
+    # cuenta
+    con = P.layout_unit(rect(9.5, 8.0), 2, esquina)
+    k = cocina(con)
+    assert k["ventilacion"] == "ventana" and abs(k["area"] - 2.1 * 2.64) < 0.01, k
+    (w,) = de(con, "kitchen")
+    req = max(S["vano_cocina"], S["iluminacion"] * k["area"])
+    assert w["ancho"] == S["ancho_cocina"] and w["alto"] == S["alto"] and abs(w["minimo"] - req) < 0.01 and \
+        w["area"] >= req - 0.01 and w["n"] == (-1.0, 0.0) and abs(w["p"][0]) < 1e-6 and abs(w["q"][0]) < 1e-6, w
+    assert max(w["p"][1], w["q"][1]) <= 2.64 - S["mocheta"] + 1e-6 and min(w["p"][1], w["q"][1]) >= S["mocheta"] - 1e-6
+    assert abs(de(con, "living")[0]["minimo"] - S["iluminacion"] * estar(con)["area"]) < 0.01     # sin la cocina
+    assert con["score"] == 100 and not any("Cocina" in m for m in malos(con)), malos(con)
+    assert any(m.startswith("Por debajo de la medida típica: Cocina 5.5 de 7 m²") for m in
+               (c["msg"] for c in con["checks"] if c.get("info")))      # sus mínimos y su típica: los de una cocina
+    # la misma vivienda solo con fachada al fondo (o sin fachada conocida, o con 1 m de fachada lateral, donde no entra
+    # una ventana): la cocina integrada, 5 m² como máximo, con extractor, y el vano del estar la cuenta (art. 27)
+    for fac in (fondo, None, corta):
+        sin = P.layout_unit(rect(9.5, 8.0), 2, fac)
+        k2 = cocina(sin)
+        assert k2["ventilacion"] == "extractor" and abs(k2["area"] - 5.0) < 0.01 and not de(sin, "kitchen"), k2
+        assert abs(de(sin, "living")[0]["minimo"] - max(V["cocina_integrada"]["vano_min"], S["iluminacion"] * (
+            estar(sin)["area"] + k2["area"]))) < 0.01 and sin["score"] == 100
+    # si no llega al vano: aviso, como en las demás ventanas (con el mínimo del art. 24)
+    res = P.layout_unit(rect(9.5, 8.0), 2, esquina, ventanas=dict(S, vano_cocina=4.0))
+    assert de(res, "kitchen")[0]["minimo"] == 4.0 and [m for m in malos(res) if m.startswith("Cocina")] == [
+        "Cocina: ventana de 2.69 m² < 4.00 m² (10 % de la superficie, 4 m² como mínimo: norma nacional, art. 24)"], \
+        malos(res)
+    res = P.layout_unit(rect(9.5, 8.0), 2, esquina, ventanas=dict(S, iluminacion=0.5))
+    assert any(m.startswith("Cocina: ventana de 2.69 m² < 2.77 m² (50 % de la superficie, 0.4 m² como mínimo")
+               for m in malos(res))
+    # el monoambiente: la cocina va entre el baño y el hall, nunca al costado: extractor
+    assert cocina(P.layout_unit(rect(6.0, 8.0), 0, esquina))["ventilacion"] == "extractor"
+    # de la superficie típica de una cocina (7 m²) como máximo, conservando su fondo (se angosta; lo que deja va al hall,
+    # al baño o a un depósito, como con la integrada), con el fondo que deja al estar no más ancho que 3 veces su fondo
+    # (art. 14): en el trapecio de 21,45 × 5,50 con 3 dormitorios y fachada en su lado oblicuo (test_rincones), la cocina
+    # mide 7 m² con su ventana en el muro oblicuo y 2,17 m de fondo (con 2,20, el estar de 10 m quedaba con 3,30 de
+    # fondo), y quedan el depósito y el baño de 6 m² (sin el tope, una cocina de 14,7 m² se los comía)
+    oblicua = lambda p, q: fondo_(p, q) or (sobre(p) and sobre(q))
+    fondo_ = lambda p, q: abs(p[1] - 5.5) < 0.05 and abs(q[1] - 5.5) < 0.05
+    sobre = lambda t: abs((t[0] - 0.25) * 5.5 - t[1] * 1.175) / (1.175 ** 2 + 5.5 ** 2) ** 0.5 < 0.05
+    res = P.layout_unit([(0.25, 0), (21.45, 0), (21.45, 5.5), (1.425, 5.5)], 3, oblicua)
+    R = {r["id"]: r for r in res["rooms"]}
+    k = R["kitchen"]
+    assert k["ventilacion"] == "ventana" and abs(k["area"] - V["cocina"]["typ_area"]) < 0.01 and de(res, "kitchen"), k
+    assert abs(max(p[1] for p in k["poly"]) - (5.5 - 10.0 / S["proporcion_max"])) < 0.01 and "storage" in R and \
+        abs(R["bath1"]["area"] - V["bano"]["max_area"]) < 0.01 and res["score"] == 100, (k, malos(res))
+    # en el edificio («Barra 60x16»): U04 y U05 tocan la fachada del extremo con la cocina: ventana propia (en el muro
+    # exterior, con poly, lines y seg para la web, Rhino y el DXF) y al menos su superficie típica; las demás, extractor
+    barra = run([[0, 0], [60, 0], [60, 16], [0, 16]])
+    por = {u["id"]: u for u in barra["units"]}
+    vent = {i for i, u in por.items()
+            if next(x for x in u["rooms"] if x["kind"] == "kitchen")["ventilacion"] == "ventana"}
+    assert vent == {"U04", "U05"}, vent
+    for i, u in por.items():
+        k = next(x for x in u["rooms"] if x["kind"] == "kitchen")
+        vk = [w for w in u["ventanas"] if w["room"] == "kitchen"]
+        if i in vent:                                  # 7 m² (antes 5), con el fondo de antes (1,80 y 2,00 m)
+            assert abs(k["area"] - V["cocina"]["typ_area"]) < 0.05 and len(vk) == 1 and vk[0]["poly"] and vk[0]["lines"] \
+                and vk[0]["seg"] and vk[0]["area"] >= max(vk[0]["minimo"], S["vano_cocina"]) - 0.01, (i, k, vk)
+            assert max(p[1] for p in k["poly"]) - min(p[1] for p in k["poly"]) >= 1.8 - 0.01, (i, k["poly"])
+        else:
+            assert k["ventilacion"] == "extractor" and k["area"] <= 5.0 + 0.05 and not vk, (i, k)
+        assert not any("Cocina" in c["msg"] for c in u["checks"] if not c["ok"]), (i, u["checks"])
+    assert barra["metrics"]["plan_score"] == 100
+    # la web: la ficha dice «con extractor» y «Normativa → Ventanas» edita las dos medidas nuevas
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    assert "con extractor" in html and "ancho_cocina:" in html and "vano_cocina:" in html
+
+if __name__ == "__main__":
+    test_cocina_ventana(); print("OK62")

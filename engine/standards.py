@@ -37,7 +37,8 @@ DEFAULTS = {
         "cocina": {"min_area": 4.0, "min_side": 1.60, "typ_area": 7.0, "typ": [2.40, 2.90]},
         # R10.8 (norma nacional, art. 27): cocina integrada al estar sin ventana propia, de min_area a max_area con lado
         # min_side; el vano del estar ilumina los dos locales (su 10 %) y no baja de vano_min (m²). Trazo la dibuja con
-        # max_area como máximo (criterio del usuario); más grande necesita su propia ventana (art. 24)
+        # max_area como máximo (criterio del usuario); más grande necesita su propia ventana (art. 24). R10.9: la cocina
+        # con fachada lleva su ventana (ventanas["vano_cocina"]) y conserva la medida de «cocina»; las demás, extractor
         "cocina_integrada": {"min_area": 3.0, "min_side": 1.40, "max_area": 5.0, "vano_min": 2.0},
         # max_area (v2.33, criterio de proyecto): hasta dónde se agranda con la franja sin luz que sobra
         "bano": {"min_area": 3.0, "min_side": 1.20, "typ_area": 4.0, "typ": [1.70, 2.40], "max_area": 6.0},
@@ -180,6 +181,11 @@ DEFAULTS = {
         "mocheta": 0.20,                 # libre entre la ventana y una esquina o un tabique (criterio de proyecto)
         "proporcion_max": 3.0,           # R10.8: profundidad del local de hasta 3 veces su lado menor (Normativa Nacional,
                                          # art. 14; el estar con el comedor interior, desde la ventana y contra su ancho)
+        "ancho_cocina": 1.00,            # R10.9: ancho típico de la ventana de una cocina con fachada (criterio de
+                                         # proyecto); más ancha si el 10 % de su superficie pide más
+        "vano_cocina": 0.40,             # R10.9: vano mínimo de la cocina con ventana propia, m² (Normativa Nacional,
+                                         # art. 24); sin fachada, la cocina se ventila con extractor (criterio del
+                                         # usuario)
     },
 }
 
