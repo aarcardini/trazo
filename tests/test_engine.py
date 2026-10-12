@@ -798,7 +798,7 @@ def test_deshacer():
     js = html.split("<script>", 1)[1].split("</script>", 1)[0]
     exentas = ("function volverA", "function setMass", "async function nuevo", "function ensureManual", "function ensurePatiosManual")
     bloques = re.compile(r"\nfunction |\nasync function |addEventListener\(|onclick=\"|onchange=\"")
-    cambio = re.compile(r"\b(centerlines|coresManual|medianeras|patios|ediciones|interiores)(\[[^\]]*\])*(\.retiro)?(=(?![=>])|\.(push|pop|splice)\()|\bpl\.splice\(|\bpl\[drag\.vi\]=")
+    cambio = re.compile(r"\b(centerlines|coresManual|medianeras|patios|ediciones|interiores|anchosPasillo)(\[[^\]]*\])*(\.retiro)?(=(?![=>])|\.(push|pop|splice)\()|\bpl\.splice\(|\bpl\[drag\.vi\]=")
     sin, n = [], 0
     for m in cambio.finditer(js):
         linea = js[js.rfind("\n", 0, m.start()) + 1:m.start()]
@@ -2028,3 +2028,84 @@ def test_vestidor():
 
 if __name__ == "__main__":
     test_vestidor(); print("OK48")
+
+
+def test_pasillo_por_tramo():
+    """R10.8 (pedido del usuario): el ancho del pasillo común se puede fijar tramo por tramo (clic en el tramo en la web;
+    «ancho=1.4» en la polilínea desde Rhino); los demás siguen con el general. Cada tramo trae su largo, las viviendas
+    que sirve y el mínimo del art. 35 de la norma nacional (1,20 m hasta 3 viviendas, 1,40 de 4 a 10, 1,60 con 11 o
+    más; 2,00 m si el tramo recto pasa de 15 m), con un aviso si no llega. Sin anchos propios, la planta no cambia."""
+    import math
+    from engine import geometry as G, standards as ST, layout as LY
+    caja = lambda p: G.bbox([tuple(q) for q in p])
+    toca = lambda a, b: a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]
+    pisa = lambda a, b: sum(abs(G.area(o)) for o in G.subtract(a, [b])[1][0]) if toca(caja(a), caja(b)) else 0.0
+
+    def solapes(r):
+        us, cs = [u["poly"] for u in r["units"]], [c["poly"] for c in r["cores"]]
+        return round(sum(pisa(a, b) for i, a in enumerate(us) for b in us[i + 1:]) +
+                     sum(pisa(a, b) for a in us for b in r["corridors"] + cs), 1)
+
+    def ancho_real(r, ps):
+        a, b = ps["eje"]
+        loc = G.to_local([tuple(q) for q in r["corridors"][ps["partes"][0]]], tuple(a), math.atan2(b[1] - a[1], b[0] - a[0]))
+        return round(G.bbox(loc)[3] - G.bbox(loc)[1], 3)
+    medio = lambda ps: [(ps["eje"][0][0] + ps["eje"][1][0]) / 2, (ps["eje"][0][1] + ps["eje"][1][1]) / 2]
+    sin_pas = lambda r: json.dumps({k: v for k, v in r.items() if k not in ("pasillos", "units")}, sort_keys=True)
+    # el art. 35
+    S = ST.DEFAULTS["nucleo"]
+    assert [ST.ancho_art35(S, n, 10.0)[0] for n in (2, 3, 4, 10, 11)] == [1.20, 1.20, 1.40, 1.40, 1.60]
+    assert ST.ancho_art35(S, 5, 20.0)[0] == 2.00 and ST.ancho_art35(S, None, 10.0)[0] == 0.0
+    # L (automático): el tramo corto de 1,40 m; el largo sigue en 2,00 m y la planta, sin solapes
+    L = [[0, 0], [50, 0], [50, 14], [16, 14], [16, 40], [0, 40]]
+    base = run(L)
+    assert [p["id"] for p in base["pasillos"]] == ["P1", "P2"] and not any(p["propio"] for p in base["pasillos"])
+    assert all(p["ancho"] == 2.0 and p["ok"] and p["viviendas"] > 0 for p in base["pasillos"])
+    p2 = base["pasillos"][1]
+    r = run(L, anchos_pasillo=[{"p": medio(p2), "ancho": 1.4}])
+    q1, q2 = r["pasillos"]
+    assert q2["propio"] and q2["ancho"] == 1.4 and ancho_real(r, q2) == 1.4 and ancho_real(r, q1) == 2.0, r["pasillos"]
+    assert solapes(r) == 0 and len(r["units"]) == len(base["units"])
+    assert not q2["ok"] and q2["minimo"] == 2.0                       # tramo recto de más de 15 m
+    assert any(w.startswith("Pasillo P2 de 1.40 m: el art. 35 de la norma nacional pide 2.00 m en un tramo recto de "
+                            "más de 15 m") for w in r["warnings"]), r["warnings"]
+    u_p2 = lambda r: sorted(u["depth"] for u in r["units"] if u["pasillo"] == "P2")
+    assert all(b > a + 0.25 for a, b in zip(u_p2(base), u_p2(r))), (u_p2(base), u_p2(r))   # sus viviendas, más hondas
+    # el mismo ancho que el general: la planta no cambia
+    r = run(L, anchos_pasillo=[{"p": medio(p), "ancho": 2.0} for p in base["pasillos"]])
+    assert sin_pas(r) == sin_pas(base) and all(p["propio"] for p in r["pasillos"])
+    # un ancho que ya no tiene tramo (la planta cambió): se avisa
+    r = run(L, anchos_pasillo=[{"p": [100, 100], "ancho": 1.4}])
+    assert any("1 ancho(s) de pasillo pedido(s) no tiene(n) tramo" in w for w in r["warnings"]), r["warnings"]
+    # polilíneas que se cruzan: un segmento (como manda Rhino) llega a las dos mitades de la línea cortada
+    cruz = [[20, 0], [36, 0], [36, 20], [56, 20], [56, 36], [36, 36], [36, 56], [20, 56], [20, 36], [0, 36], [0, 20],
+            [20, 20]]
+    lineas = [[[28, 1], [28, 55]], [[1, 28], [55, 28]]]
+    r = run(cruz, centerlines=lineas, anchos_pasillo=[{"seg": [[1, 28], [55, 28]], "ancho": 1.6}])
+    propios = [p for p in r["pasillos"] if p["propio"]]
+    assert len(propios) == 2 and all(p["ancho"] == 1.6 and ancho_real(r, p) == 1.6 for p in propios), r["pasillos"]
+    assert solapes(r) == 0
+    # «Hecho cuando» (R10.8): una barra con el pasillo de 1,40 m y un tramo de más de 15 m se avisa
+    r = run([[0, 0], [60, 0], [60, 16], [0, 16]], corridor_width=1.4)
+    assert any(w.startswith("Pasillo P1 de 1.40 m: el art. 35") for w in r["warnings"]), r["warnings"]
+    # entre medianeras: el ancho es el de los pasillos que llegan a las viviendas; con núcleos manuales, el general
+    # (antes quedaba fijo en 2.00 m)
+    s = json.load(open(os.path.join(os.path.dirname(__file__), "..", "samples", "entre_medianeras.json"), encoding="utf-8"))
+    alto = lambda r: sorted(round(caja(c)[3] - caja(c)[1], 2) for c in r["corridors"] if caja(c)[2] - caja(c)[0] > 9)
+    r = run(s["footprint"], h=s["height"], medianeras=s["medianeras"], corridor_width=1.5, cores_mode="manual", cores=[[5, 14]])
+    assert alto(r) == [1.5, 1.5, 1.5], alto(r)
+    r = run(s["footprint"], h=s["height"], medianeras=s["medianeras"])
+    ps = r["pasillos"][0]
+    assert ps["editable"] and ps["ancho"] == 2.0
+    r = run(s["footprint"], h=s["height"], medianeras=s["medianeras"], anchos_pasillo=[{"p": medio(ps), "ancho": 1.2}])
+    assert r["pasillos"][0]["propio"] and r["pasillos"][0]["ancho"] == 1.2 and 1.2 in alto(r), alto(r)
+    # la web: clic en un tramo, su panel, deshacer y proyecto; Rhino lo dibuja igual (sigue en «corridors»)
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    for t in ("'data-pas':k??''", "function pasilloPanel(", "function aplicarAncho(", "anchos_pasillo:anchosPasillo.length",
+              "anchos_pasillo:P.anchos_pasillo", "m.anchos_pasillo", "interiores,anchosPasillo}", 'id="anchosInfo"',
+              "closest('[data-pas]')", "pasillo_comun:'Pasillo común (art. 35)"):
+        assert t in html, t
+    assert LY.DEFAULT_PARAMS["anchos_pasillo"] is None
+
+if __name__ == "__main__":
+    test_pasillo_por_tramo(); print("OK49")

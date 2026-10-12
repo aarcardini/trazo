@@ -110,8 +110,10 @@ def free_plan(pieces, plate_area, cores_area, cw, P_):
     shapes = []
     total_bath = 0.0
     total_hall = 0.0
+    cw0 = cw
     for k in range(n_bat):
         pc, c = cores[k]
+        cw = pc.get("ancho") or cw0                     # R10.8: el ancho del pasillo de ese tramo
         bx0, by0, bx1, by1 = c["box"]
         side = c["side"]
         loc = pc["loc_plate"]

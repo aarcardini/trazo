@@ -148,6 +148,15 @@ Si algo falla en Rhino, ejecuta el script y elige **Diagnostico**. Si no se resu
 - **Mix**: tipos con m² objetivo y %, ancho mínimo, muro medianero; métricas Match Score, Fit y Unidades únicas.
 - **Planos**: distribución día/noche con pasillo interno, puertas y grafo de conexiones verificado.
 
+## Novedades v2.39
+- **Ancho del pasillo común tramo por tramo (R10.8):** el ancho general sigue en Circulación → «Ancho pasillo» (2,00 m). Ahora, además, cada tramo puede tener el suyo:
+  - **En la web:** haz clic en un tramo de pasillo de la planta. Su ficha muestra el largo del tramo recto, cuántas viviendas sirve por planta y el mínimo de la norma. Escribe el ancho y pulsa «Aplicar»; «Como los demás» lo devuelve al general. Los tramos con ancho propio muestran su medida en la planta, y Circulación dice cuántos hay, con «Quitar». Se guarda en el proyecto y se deshace con Ctrl+Z.
+  - **Desde Rhino:** nombra «ancho=1.4» una polilínea de la capa `Trazo::Centerline` y todos sus tramos van con ese ancho.
+  - Las viviendas de ese tramo ganan o pierden el fondo que cambia el pasillo; las de los demás tramos no cambian.
+- **Art. 35 de la norma nacional:** cada tramo se compara con lo que pide la norma: 1,20 m hasta 3 viviendas, 1,40 de 4 a 10, 1,60 con 11 o más, y 2,00 m si el tramo recto pasa de 15 m. Si no llega, el tramo se dibuja con borde rojo punteado y un aviso lo dice, por ejemplo «Pasillo P2 de 1.40 m: el art. 35 de la norma nacional pide 2.00 m en un tramo recto de más de 15 m (este mide 32.6 m)…». Los valores se cambian en «Normativa → Núcleo». Con 2,00 m, ningún ejemplo tiene avisos.
+- **Corrección:** entre medianeras con núcleos manuales, los pasillos que llegan a las viviendas medían siempre 2,00 m aunque cambiaras el ancho general.
+- Sin anchos propios, los ejemplos dan exactamente la misma planta que antes.
+
 ## Novedades v2.38
 - **Vestidor opcional (R5.10):** cada tipo del mix tiene una casilla **Vest.**, apagada por defecto. Sus viviendas llevan un vestidor de todo el ancho del dormitorio principal, entre el pasillo interno y el dormitorio. El dormitorio sigue con su ventana a la fachada, abierto al vestidor, y ya no lleva placard: el vestidor tiene estantes en sus paredes libres.
   - **Con la suite:** el vestidor queda entre el dormitorio y su baño, en la parte del dormitorio que no tenía luz. Se entra desde el pasillo y desde el vestidor al baño. Si el tipo lo pide, la suite se arma aunque no sobre franja, siempre que los demás dormitorios no pierdan fondo; el depósito puede no entrar, porque el vestidor guarda.

@@ -66,6 +66,12 @@ DEFAULTS = {
         "unidades_por_ascensor": 60,     # criterio de proyecto
         "altura_sin_ascensor": 9.0,      # acceso a más de 9 m requiere ascensor (MVOT)
         "pisos_dos_ascensores": 10,      # a partir de este nº de niveles, mínimo 2 ascensores
+        # pasillo común (norma nacional, art. 35): ancho mínimo con hasta 3 viviendas por planta, de 4 a 10 y con 11 o
+        # más; con un tramo recto de más de 15 m, 2,00 m (salvo con el 60 % de sus paredes vidriado o abierto)
+        "pasillo_comun": [1.20, 1.40, 1.60],
+        "pasillo_viviendas": [3, 10],
+        "pasillo_largo": 15.0,
+        "pasillo_ancho_largo": 2.00,
     },
     "oficinas": {
         "m2_por_persona": 10.0,          # puestos de trabajo (IT 19 usa 7 m²/persona para evacuación)
@@ -194,6 +200,23 @@ def elevators_needed(S, n_levels, top_access_h, units_served):
     if n_levels >= S["pisos_dos_ascensores"]:
         n = max(n, 2)
     return n
+
+
+def ancho_art35(S, viviendas, largo):
+    """Ancho mínimo del pasillo común (norma nacional, art. 35) que sirve a «viviendas» por planta (None: todavía sin
+    viviendas, solo cuenta el largo) con un tramo recto de «largo» m. S: standards["nucleo"]. Devuelve (mínimo, por qué)."""
+    anchos, hasta = S["pasillo_comun"], S["pasillo_viviendas"]
+    minimo, motivo = 0.0, ""
+    if viviendas is not None:
+        k = 0 if viviendas <= hasta[0] else 1 if viviendas <= hasta[1] else 2
+        minimo = anchos[k]
+        motivo = "para %s viviendas por planta (sirve a %d)" % (
+            ("hasta %d" % hasta[0], "%d a %d" % (hasta[0] + 1, hasta[1]), "%d o más" % (hasta[1] + 1))[k], viviendas)
+    if largo > S["pasillo_largo"] + 1e-6 and S["pasillo_ancho_largo"] > minimo:
+        minimo = S["pasillo_ancho_largo"]
+        motivo = "en un tramo recto de más de %.0f m (este mide %.1f m), salvo con el 60 %% de sus paredes vidriado o " \
+                 "abierto" % (S["pasillo_largo"], largo)
+    return minimo, motivo
 
 
 def core_size(S, floor_h, n_elev, corridor_w, giro=0):
