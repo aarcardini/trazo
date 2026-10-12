@@ -4415,3 +4415,78 @@ def test_alas_unidas():
 
 if __name__ == "__main__":
     test_alas_unidas(); print("OK67")
+
+
+def test_puerta_en_la_punta():
+    """R3.7b: en una punta libre del pasillo común (sin unión, núcleo ni conector), la vivienda del extremo pone el hall
+    —y su puerta— en la punta si el plano no empeora: el pasillo termina en la última puerta en vez de seguir unos
+    metros sin servir a nadie (pedido del usuario, «Terreno 15 × 30»: el pasillo P1 seguía 1,9 m más allá de la puerta
+    de U01; en una barra con el núcleo manual al medio, 4,2 m en cada punta)."""
+    import math
+    from engine import geometry as G, layout as LY
+    from engine.massing import _dist_to_boundary
+
+    def puntas(r):
+        """(tramo, punta, metros desde la punta hasta el borde de la primera puerta de entrada) de cada punta libre."""
+        out = []
+        cores = [c["poly"] for c in r["cores"]]
+        doors = [(d["p"], d["q"], u["id"]) for u in r["units"] for d in u["doors"] if d.get("entry")]
+        for ps in r["pasillos"]:
+            (x0, y0), (x1, y1) = ps["eje"]
+            L = math.hypot(x1 - x0, y1 - y0)
+            d = ((x1 - x0) / L, (y1 - y0) / L)
+            otros = [r["corridors"][k] for q in r["pasillos"] if q is not ps for k in q["partes"]] + \
+                [r["corridors"][k] for k in ps["partes"][1:]] + cores
+            for E, sgn in (((x0, y0), 1), ((x1, y1), -1)):
+                if any(G.point_in_poly(E, pg) or _dist_to_boundary(E, pg) < 0.6 for pg in otros):
+                    continue
+                ts = []
+                for p, q, uid in doors:
+                    m = ((p[0] + q[0]) / 2, (p[1] + q[1]) / 2)
+                    v = (m[0] - E[0], m[1] - E[1])
+                    t, perp = (v[0] * d[0] + v[1] * d[1]) * sgn, abs(v[0] * d[1] - v[1] * d[0])
+                    if perp < ps["ancho"] / 2 + 0.4 and -0.5 <= t <= L + 0.5:
+                        ts.append((round(max(t - 0.45, 0), 2), uid))
+                out.append((ps["id"], [round(c, 2) for c in E], min(ts) if ts else None))
+        return out
+
+    def sin_regla(fp, **p):
+        antes = LY.puntas_libres
+        LY.puntas_libres = lambda *a: None
+        try:
+            return run(fp, **p)
+        finally:
+            LY.puntas_libres = antes
+    fp = [[0, 0], [15, 0], [15, 30], [0, 30]]
+    mix = [{"name": "2 dorm", "area": 75, "percent": 50, "dorms": 2}, {"name": "3 dorm", "area": 95, "percent": 50, "dorms": 3}]
+    std = {"vivienda": {"dorm_principal": {"min_area": 8, "min_side": 2.6, "typ_area": 11.5, "typ": [3.2, 3.6]},
+                        "estudio": {"min_area": 0, "min_side": 0, "typ_area": 0, "typ": [0, 0]}}}
+    p = dict(corridor_width=1, min_unit_width=5, core_width=4.5, core_depth=6.02, egress_single=18, egress_multi=30,
+             unit_mix=mix, cores_mode="manual", cores=[[12.8, 9.1]], patios_mode="manual",
+             patios=[[[0.5, 19.5], [8.1, 19.5], [8.1, 12.7], [0.5, 12.7]]], standards=std,
+             medianeras=[{"a": [0, 30], "b": [0, 0], "retiro": 0}])
+    r, r0 = run(fp, **p), sin_regla(fp, **p)
+    print(puntas(r0), puntas(r))
+    a0, a = dict((q[0], q[2]) for q in puntas(r0)), dict((q[0], q[2]) for q in puntas(r))
+    assert a0["P1"][0] >= 1.5 and a["P1"][0] <= 0.3 and a["P3"][0] <= 0.3, (a0, a)   # antes 1,87 m; ahora la puerta en la punta
+    assert [u["id"] for u in r["units"]] == [u["id"] for u in r0["units"]]
+    for u, u0 in zip(r["units"], r0["units"]):                                       # la regla no empeora ningún plano
+        assert u["plan_score"] >= u0["plan_score"] and len(u["rooms"]) >= len(u0["rooms"]), (u["id"], u["plan_score"], u0["plan_score"])
+        assert abs(u["area"] - u0["area"]) < 1e-6
+    assert [ps["eje"] for ps in r["pasillos"]] == [ps["eje"] for ps in r0["pasillos"]]  # el pasillo dibujado no cambia
+    # una barra con el núcleo manual al medio (las dos puntas libres: 4,2 m sin puerta en cada una) y una L con el
+    # núcleo al medio del ala larga (6,7 m en la punta de P1 y 3,4 m en la de P2): la puerta queda en la punta
+    for fp_, c_ in (([[0, 0], [40, 0], [40, 16], [0, 16]], [[20, 8]]),
+                    ([[0, 0], [50, 0], [50, 14], [16, 14], [16, 40], [0, 40]], [[30, 7]])):
+        rl, rl0 = run(fp_, cores_mode="manual", cores=c_), sin_regla(fp_, cores_mode="manual", cores=c_)
+        l0, l = [q for q in puntas(rl0) if q[2]], [q for q in puntas(rl) if q[2]]
+        print(l0, l)
+        assert len(l0) == 2 and min(q[2][0] for q in l0) >= 3.0 and len(l) == 2 and all(q[2][0] <= 0.3 for q in l), (l0, l)
+        for u, u0 in zip(rl["units"], rl0["units"]):
+            assert u["plan_score"] >= u0["plan_score"] and len(u["rooms"]) >= len(u0["rooms"]), (u["id"], u["plan_score"], u0["plan_score"])
+    # con un núcleo en cada punta (barra) no hay puntas libres: nada que mover
+    rb = run([[0, 0], [60, 0], [60, 16], [0, 16]])
+    assert puntas(rb) == [] and rb["units"] == sin_regla([[0, 0], [60, 0], [60, 16], [0, 16]])["units"]
+
+if __name__ == "__main__":
+    test_puerta_en_la_punta(); print("OK68")

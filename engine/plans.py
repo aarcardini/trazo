@@ -1325,7 +1325,7 @@ def _std_for(r, nb, integradas=()):
 
 
 def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None, accesible=False, ediciones=None, ventanas=None,
-                entrada=None, vestidor=False):
+                entrada=None, vestidor=False, punta=None):
     """Distribuye una unidad. poly en el marco de la unidad. Devuelve dict con estancias, puertas, grafo, equipamiento y
     comprobaciones. is_facade(p, q): opcional, dice si el segmento p-q (marco de la unidad) está sobre la fachada.
     accesible: puertas de dormitorios y baño de DOOR_ACC, el baño abre hacia afuera y se equipa para silla de ruedas.
@@ -1338,7 +1338,11 @@ def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None, accesible=F
     cuando hace falta y se devuelve en el marco de la vivienda.
     entrada (R3.7): (lo, hi) del borde v0 sobre el que sigue el pasillo común (se cortó donde ya no hacía falta); si la
     puerta de entrada no cae ahí, el hall va al extremo de ese lado (plano derecho o al revés).
-    vestidor (R5.10): el dormitorio principal lleva vestidor, si entra (ver _vestidor)."""
+    vestidor (R5.10): el dormitorio principal lleva vestidor, si entra (ver _vestidor).
+    punta (R3.7b): (lo, hi) del borde v0 junto a una punta libre del pasillo común (la vivienda es la del extremo): si
+    la puerta de entrada no cae ahí, se prueba el plano con el hall en ese extremo (derecho o al revés) y se usa si no
+    empeora (calidad y estancias del programa), así el pasillo termina en la última puerta; a diferencia de entrada,
+    no obliga ni avisa."""
     equip = equip or ST.DEFAULTS["equipamiento"]
     configure(vivienda or ST.DEFAULTS["vivienda"], equip, accesible)
     poly = G.ensure_ccw(poly)
@@ -1395,13 +1399,25 @@ def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None, accesible=F
             elegido, espejar, lateral, hall_x0 = mejor
         else:
             elegido = None
+    if punta is not None and entrada is None and not hall_x0:
+        base = elegido if elegido is not None else plano(espejar, lateral, None)
+        if not _entra(base, punta):                    # R3.7b: el hall en la punta, si el plano no empeora
+            mejor = None
+            for e_ in (False, True):
+                r_ = plano(e_, False, None, True)
+                if _entra(r_, punta) and r_["score"] >= base["score"] and \
+                        all(a >= b for a, b in zip(programa(r_), programa(base))) and \
+                        (mejor is None or r_["score"] > mejor[0]["score"]):
+                    mejor = (r_, e_)
+            if mejor:
+                elegido, espejar, lateral, hall_x0 = mejor[0], mejor[1], False, True
     res = elegido if elegido is not None and not ediciones else plano(espejar, lateral, ediciones, hall_x0)
     if entrada is not None and not _entra(res, entrada):
         res["checks"].append({"ok": False, "msg": "La puerta de entrada no da al pasillo común"})
         res["score"] = _calidad(res["checks"])
     if vestidor and any(r["id"] == "vest" for r in res["rooms"]):
         # R5.10: el vestidor, solo si el plano no empeora (calidad y estancias); si no, sin él y con aviso
-        sin = layout_unit(poly, nb, is_facade, vivienda, equip, accesible, ediciones, ventanas, entrada)
+        sin = layout_unit(poly, nb, is_facade, vivienda, equip, accesible, ediciones, ventanas, entrada, punta=punta)
         if res["score"] < sin["score"] or any(a < b for a, b in zip(programa(res), programa(sin))):
             antes = {c["msg"] for c in sin["checks"] if not c["ok"]}
             nuevos = [c["msg"].replace("Vestidor: ", "", 1) for c in res["checks"] if not c["ok"] and c["msg"] not in antes]

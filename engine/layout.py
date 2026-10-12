@@ -19,11 +19,11 @@ from .circulation import (pick_frame, core_positions, side_for, _frame_for_poly,
                           _add_core, _propagate_core_blocks, generate_circulation, is_between, _between_depth,
                           _generate_circulation, nucleo_punto, medidas_nucleo, ancho_de)  # noqa: F401
 from .units import (_bisect_x, _chain_union, _is_rect, _segments, generate_unit_mix, metrics_mix, bedrooms_for,
-                    unit_rooms, sin_solapes, editar_unidades, vecinas, formar_frentes, entradas,
+                    unit_rooms, sin_solapes, editar_unidades, vecinas, formar_frentes, entradas, puntas_libres,
                     superficie_con_muros)  # noqa: F401
 from .patios import (auto_patios, _anillo, split_blocks, make_patio_dark, _block_of, _block_of_line)  # noqa: F401
 
-VERSION = "2.51"
+VERSION = "2.52"
 
 DEFAULT_PARAMS = {
     # Masa
@@ -384,6 +384,7 @@ def generate(data):
         avisos_u += warns
         formar_frentes(del_bloque, pieces, pb)           # R3.7: vivienda al frente en la punta de un pasillo de borde
         entradas(del_bloque, pieces, pb)                 # R3.7: entrada por el pasillo que queda tras cortar una punta
+        puntas_libres(del_bloque, pieces, pb)            # R3.7b: la vivienda del extremo, con su puerta en la punta libre
         for pc in pieces:
             t = pc.get("tramo")                          # R3.7: solo se corta la punta que ya no hace falta
             pasillo = G.clip_rect(pc["corridor_local"], t[0] if t[0] > pc["xa"] + 1e-6 else None,

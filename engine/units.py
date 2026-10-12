@@ -350,6 +350,35 @@ def entradas(units, pieces, params):
                 u["door_local"] = (xd, u["door_local"][1])
 
 
+def puntas_libres(units, pieces, params):
+    """R3.7b: en cada punta libre del pasillo común (sin unión, núcleo ni conector en ella, y que no terminó en una
+    vivienda al frente ni se cortó tras un cruce), la vivienda del extremo de cada lado anota «punta» = (lo, hi): el
+    tramo de su borde sobre el pasillo junto a la punta, del ancho de un hall con su puerta (marco de la pieza).
+    plans.layout_unit prueba ahí el hall y lo deja si el plano no empeora: así el pasillo termina en la última puerta
+    y no sigue unos metros más sin servir a nadie."""
+    S = ST.merged(params.get("standards"))
+    largo = max(S["vivienda"]["hall"]["min_side"], S["vivienda"]["hall"]["typ"][0]) + S["equipamiento"]["puerta_entrada"] + 0.3
+    for pc in pieces:
+        if pc.get("between"):
+            continue
+        t = pc.get("tramo") or (pc["xa"], pc["xb"])
+        for e in (0, 1):
+            xe = t[e]
+            if not pc["free"][e] or any(pt["e"] == e for pt in pc.get("puntas", [])):
+                continue
+            if any(c["box"][0] - 0.5 <= xe <= c["box"][2] + 0.5 for c in pc["cores"]):
+                continue                                 # un núcleo en la punta: el pasillo llega hasta su puerta
+            if any(abs(j["x"] - xe) < 1.0 for j in pc["junctions"]) or \
+                    any(c0 - 0.5 <= xe <= c1 + 0.5 for _, c0, c1 in pc.get("conectores", [])):
+                continue                                 # ahí llega otro pasillo
+            lo, hi = (xe, xe + largo) if e == 0 else (xe - largo, xe)
+            for u in units:
+                if u.get("_pc") is not pc or u.get("frente") or u.get("entrada") or u.get("punta") or not u["side"]:
+                    continue
+                if (e == 0 and u["x0"] <= xe + 0.05) or (e == 1 and u["x1"] >= xe - 0.05):
+                    u["punta"] = (max(lo, u["x0"]), min(hi, u["x1"]))
+
+
 # ---------------------------------------------------------------- viviendas editadas (R4.4)
 def vecinas(units, params):
     """Pares (a, b) de viviendas vecinas de una misma franja (mismo tramo de pasillo y lado): b sigue a a, del otro
@@ -649,12 +678,13 @@ def unit_rooms(u, params, pc=None, plate=None, ediciones=None):
         ida = lambda pt: (pt[1] + cw / 2, sg * (pt[0] - xh))
         back = lambda pt: (xh + sg * pt[1], pt[0] - cw / 2)
         refleja = sg > 0
-        entrada = (0.0, cw)
+        entrada, punta = (0.0, cw), None
     else:
         ida = lambda pt: (pt[0], side * pt[1] - y_in)            # unidad en v>=0, v=0 junto al pasillo
         back = lambda pt: (pt[0], side * (pt[1] + y_in))
         refleja = side < 0
         entrada = u.get("entrada")
+        punta = u.get("punta")                 # R3.7b: la vivienda del extremo de una punta libre: la puerta, en la punta
     poly = [ida(p) for p in u["poly_local"]]
     if refleja:
         poly = poly[::-1]
@@ -700,7 +730,7 @@ def unit_rooms(u, params, pc=None, plate=None, ediciones=None):
                 mias.append((k, dict(e, p=q, a=marco(e["a"]) if e.get("a") else None)))
     S = ST.merged(params.get("standards"))
     res = P.layout_unit(poly, nb, is_fac, S["vivienda"], S["equipamiento"], bool(spec.get("accesible")), mias,
-                        S["ventanas"], entrada, bool(spec.get("vestidor")))
+                        S["ventanas"], entrada, bool(spec.get("vestidor")), punta=punta)
 
     def back_poly(pl):
         out = [back(p) for p in pl]
