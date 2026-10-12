@@ -329,25 +329,51 @@ def _cocina(r, libres, zonas, S):
         t += bw + tw + sobra / 3
         out.append(("cocina_horno", t, cw, f))
         return out
+
+    def partes(a, b, con_heladera):
+        """R5.11: partes del tramo [a, b], de a 0,10 m menos desde una u otra punta (la que menos corta, primero), en
+        las que todavía entra la mesada: una puerta junto a una punta de la pared (la del lavadero en la pared del
+        costado) no deja usar el tramo entero."""
+        n = int((b - a - (hw if con_heladera else 0.0) - bw - tw - cw) / 0.1 + TOL)
+        return [p for k in range(1, n + 1) for p in ((a + k * 0.1, b), (a, b - k * 0.1))]
+
+    def en_l(ld, i, a, b):
+        """En L: la mesada en el tramo [a, b] de la pared ld y la heladera en otra pared."""
+        pz = corrida(ld, a, b, False)
+        if not pz:
+            return None
+        caja = _caja(ld, a, b - a, 0.0, f)
+        resto = [(l2, [tr for tr in trs]) for j, (l2, trs) in enumerate(libres) if j != i]
+        hel, falta = _colocar(r, resto, zonas + [caja, _caja(ld, a, b - a, f, f + paso)], [("heladera", hw, hd, paso)],
+                              lambda k, c, p: 0.0)
+        if falta:
+            return None
+        o = hel[0]
+        return [(k, ld, t, w, d) for k, t, w, d in pz] + [(o[0], o[1], o[2], o[3], o[4])]
     for _, i, ld, a, b in tramos:                     # en línea, en el tramo más largo que alcance
         pz = corrida(ld, a, b, True)
         if pz:
             return [(k, ld, t, w, d) for k, t, w, d in pz], []
     for _, i, ld, a, b in tramos:                     # en L: la mesada en un tramo y la heladera en otro
-        pz = corrida(ld, a, b, False)
-        if not pz:
-            continue
-        caja = _caja(ld, a, b - a, 0.0, f)
-        resto = [(l2, [tr for tr in trs]) for j, (l2, trs) in enumerate(libres) if j != i]
-        hel, falta = _colocar(r, resto, zonas + [caja, _caja(ld, a, b - a, f, f + paso)], [("heladera", hw, hd, paso)],
-                              lambda k, c, p: 0.0)
-        if not falta:
-            o = hel[0]
-            return [(k, ld, t, w, d) for k, t, w, d in pz] + [(o[0], o[1], o[2], o[3], o[4])], []
-    for _, i, ld, a, b in tramos:                     # la mesada sola: falta la heladera
-        pz = corrida(ld, a, b, False)
+        pz = en_l(ld, i, a, b)
         if pz:
-            return [(k, ld, t, w, d) for k, t, w, d in pz], ["la heladera (%.2f × %.2f m)" % (hw, hd)]
+            return pz, []
+    for _, i, ld, a, b in tramos:                     # R5.11: en línea en una parte del tramo
+        for a2, b2 in partes(a, b, True):
+            pz = corrida(ld, a2, b2, True)
+            if pz:
+                return [(k, ld, t, w, d) for k, t, w, d in pz], []
+    for _, i, ld, a, b in tramos:                     # R5.11: en L, la mesada en una parte del tramo
+        for a2, b2 in partes(a, b, False):
+            pz = en_l(ld, i, a2, b2)
+            if pz:
+                return pz, []
+    for parcial in (False, True):                     # la mesada sola (si hace falta, en una parte del tramo): falta la
+        for _, i, ld, a, b in tramos:                 # heladera
+            for a2, b2 in partes(a, b, False) if parcial else [(a, b)]:
+                pz = corrida(ld, a2, b2, False)
+                if pz:
+                    return [(k, ld, t, w, d) for k, t, w, d in pz], ["la heladera (%.2f × %.2f m)" % (hw, hd)]
     return [], ["la mesada con bacha y cocina (%.2f m en línea, con %.2f m de paso delante)" % (bw + tw + cw, paso)]
 
 

@@ -1,7 +1,7 @@
 {
  "ejemplo": "samples/L.json",
  "nombre": "Forma en L",
- "version_motor": "2.34",
+ "version_motor": "2.42",
  "metricas": {
   "unidades": 10,
   "unidades_totales": 50,
