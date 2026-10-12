@@ -1,0 +1,350 @@
+  0
+SECTION
+  2
+HEADER
+  9
+$ACADVER
+  1
+AC1027
+  9
+$INSBASE
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  9
+$MEASUREMENT
+ 70
+1
+  9
+$INSUNITS
+ 70
+6
+  0
+ENDSEC
+  0
+SECTION
+  2
+TABLES
+  0
+TABLE
+  2
+LAYER
+ 70
+3
+  0
+LAYER
+  5
+54
+330
+2
+100
+AcDbSymbolTableRecord
+100
+AcDbLayerTableRecord
+  2
+0
+ 70
+0
+ 62
+7
+  6
+Continuous
+  0
+LAYER
+  5
+55
+330
+2
+100
+AcDbSymbolTableRecord
+100
+AcDbLayerTableRecord
+  2
+Planos
+ 70
+0
+ 62
+7
+  6
+Continuous
+  0
+LAYER
+  5
+56
+330
+2
+100
+AcDbSymbolTableRecord
+100
+AcDbLayerTableRecord
+  2
+Trazo_Cores
+ 70
+0
+ 62
+7
+  6
+Continuous
+  0
+ENDTAB
+  0
+ENDSEC
+  0
+SECTION
+  2
+BLOCKS
+  0
+BLOCK
+  5
+4F
+330
+1F
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+TERRENO_BLQ
+ 70
+0
+ 10
+0
+ 20
+0
+ 30
+0.0
+  3
+TERRENO_BLQ
+  1
+
+  0
+LWPOLYLINE
+  5
+4D
+330
+1F
+100
+AcDbEntity
+  8
+Trazo_Terreno
+100
+AcDbPolyline
+ 90
+4
+ 70
+1
+ 43
+0.0
+ 10
+0
+ 20
+0
+ 10
+10
+ 20
+0
+ 10
+10
+ 20
+20
+ 10
+0
+ 20
+20
+  0
+TEXT
+  5
+4E
+330
+1F
+100
+AcDbEntity
+  8
+0
+100
+AcDbText
+ 10
+1
+ 20
+1
+ 30
+0.0
+ 40
+250.0
+  1
+LOTE 17
+  0
+ENDBLK
+  5
+50
+330
+1F
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+52
+330
+1F
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+NUCLEO
+ 70
+0
+ 10
+0
+ 20
+0
+ 30
+0.0
+  3
+NUCLEO
+  1
+
+  0
+LWPOLYLINE
+  5
+51
+330
+1F
+100
+AcDbEntity
+  8
+0
+100
+AcDbPolyline
+ 90
+4
+ 70
+1
+ 43
+0.0
+ 10
+0
+ 20
+0
+ 10
+3
+ 20
+0
+ 10
+3
+ 20
+6
+ 10
+0
+ 20
+6
+  0
+ENDBLK
+  5
+53
+330
+1F
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+ENDSEC
+  0
+SECTION
+  2
+ENTITIES
+  0
+INSERT
+  5
+4A
+330
+1F
+100
+AcDbEntity
+  8
+Planos
+100
+AcDbBlockReference
+ 66
+0
+  2
+TERRENO_BLQ
+ 10
+500100.0
+ 20
+6150200.0
+ 30
+0.0
+ 41
+2.0
+ 42
+2.0
+ 43
+2.0
+ 50
+90.0
+  0
+INSERT
+  5
+4B
+330
+1F
+100
+AcDbEntity
+  8
+Trazo_Cores
+100
+AcDbBlockReference
+  2
+NUCLEO
+ 10
+500090.0
+ 20
+6150210.0
+ 30
+0.0
+ 41
+1.0
+ 42
+1.0
+ 43
+1.0
+ 50
+0.0
+  0
+INSERT
+  5
+4C
+330
+1F
+100
+AcDbEntity
+  8
+Planos
+100
+AcDbBlockReference
+  2
+NO_EXISTE
+ 10
+0.0
+ 20
+0.0
+  0
+ENDSEC
+  0
+EOF
