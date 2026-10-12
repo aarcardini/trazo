@@ -4052,6 +4052,161 @@ if __name__ == "__main__":
     test_equipamiento_orden(); print("OK64")
 
 
+def test_patios_editables():
+    """R4.12: patios editables en la web. Clic en un patio (automático o manual) abre su ficha (ancho y fondo en los ejes
+    del edificio, posición en el SCP actual) y se arrastra en la planta como los núcleos; al primer cambio los patios
+    pasan a manuales (como los núcleos). Las flechas del teclado mueven el patio o el núcleo elegido un paso de grilla por
+    pulsación (diez con Shift) y el motor recalcula una sola vez, cuando pasan 300 ms sin pulsar. El motor no cambia:
+    ya recibe patios manuales. (El comportamiento se comprobó en navegador; esta prueba vigila la web con comprobaciones
+    del código y el motor con el mismo recorrido que hace la web, que se repite acá en Python.)"""
+    import math
+    base = os.path.join(os.path.dirname(__file__), "..")
+    html = open(os.path.join(base, "web", "index.html"), encoding="utf-8").read()
+    js = html.split("<script>", 1)[1].split("</script>", 1)[0]
+
+    def cuerpo(nombre):
+        ini = js.index("function %s(" % nombre)
+        fin = min(k for k in (js.find("\nfunction ", ini + 1), js.find("\nasync function ", ini + 1), js.find("\n/*", ini + 1),
+                              len(js)) if k >= 0)
+        return js[ini:fin]
+    # ---- la web: las funciones, la ficha y los lugares donde se elige un patio
+    for f in ("function patioPanel(", "function patioElegido(", "function patioGuardado(", "function patioDe(", "function cajaPatio(",
+              "function atraviesa(", "function despLibre(", "function aplicarPatio(", "function quitarPatioElegido(",
+              "function soltarPatio(", "function elegidoMovible(", "function moverConFlechas(", "async function finFlechas(",
+              "function olvidarFlechas(", "function sinPatio(", "const listaPatios=", "const FLECHAS={"):
+        assert f in js, f
+    assert "#svg [data-patio]{cursor:grab}" in html
+    dibujo = cuerpo("draw")
+    assert "'data-patio':i" in dibujo and "i===selPatio" in dibujo                            # los polígonos de patio llevan su índice
+    clic = js.split("svg.addEventListener('click',e=>{", 1)[1].split("\nsvg.addEventListener('dblclick'", 1)[0]
+    assert "closest('[data-patio]')" in clic and "selPatio=+tq.getAttribute('data-patio')" in clic
+    assert clic.count("sinPatio()") >= 3                                                      # un clic en otra cosa suelta el patio
+    pantalla = cuerpo("unitPanel")
+    assert pantalla.index("corePanel()") < pantalla.index("pasilloPanel()") < pantalla.index("patioPanel()")
+    ficha = cuerpo("patioPanel")
+    for t in ('id="paAncho"', 'id="paFondo"', 'id="paX"', 'id="paY"', 'onclick="aplicarPatio()"', 'onclick="quitarPatioElegido()"',
+              "Quitar este patio", "Cerrar", "automático: al cambiar uno, todos los patios pasan a modo manual", "SCP actual",
+              "patio_min", "atraviesa(s.p)", "flechas del teclado"):
+        assert t in ficha, t
+    assert "patio" in html.split('id="pistaFicha">', 1)[1].split("</div>", 1)[0]
+    # ---- aplicar la ficha: valida, guarda el estado antes de cambiar, pasa a manual, reemplaza el polígono y recalcula
+    ap = cuerpo("aplicarPatio")
+    assert ap.index("A*F<1") < ap.index("recordar('cambiar el patio '") < ap.index("ensurePatiosManual()") < ap.index("patios[s.j]=r") \
+        < ap.index("selPatioC=centroArea(r)") < ap.index("run(lastStage")
+    assert "[[o[0],o[1]],[o[0]+A,o[1]],[o[0]+A,o[1]+F],[o[0],o[1]+F]].map(q=>b.R.W(q))" in ap and "El patio ya mide eso" in ap
+    qp = cuerpo("quitarPatioElegido")
+    assert qp.index("recordar('quitar el patio '") < qp.index("ensurePatiosManual()") < qp.index("patios.splice(s.j,1)") < qp.index("run(lastStage")
+    # ---- arrastrar: como el núcleo (se captura al moverse, la esquina cae en la grilla); al soltar se guarda, pasa a manual y recalcula
+    assert "dragPatio={i:+tpa.getAttribute('data-patio')" in js and "dragPatio&&dragPatio.moved" in cuerpo("drawOverlay")
+    mueve = js.split("svg.addEventListener('pointermove',e=>{ if(!dragPatio||!view) return;", 1)[1].split("\nsvg.addEventListener(", 1)[0]
+    assert "svg.setPointerCapture(e.pointerId)" in mueve and "ajustar(" in mueve and "despLibre(p,q)" in mueve
+    suelta = js.split("svg.addEventListener('pointerup',e=>{ if(!dragPatio) return;", 1)[1].split("\nwindow.", 1)[0]
+    assert "if(!g.moved) return" in suelta and "svg._skipClick=true" in suelta and "soltarPatio(g)" in suelta
+    sp = cuerpo("soltarPatio")
+    assert sp.index("recordar('mover el patio '") < sp.index("ensurePatiosManual()") < sp.index("patios[j]=patios[j].map(") < sp.index("run(lastStage")
+    # ---- flechas: un paso de grilla en los ejes del SCP (Shift, diez); cada pulsación cambia el estado y el recálculo es uno solo
+    mv = cuerpo("moverConFlechas")
+    assert "pasoGrilla()*(e.shiftKey?10:1)" in mv and "aMundo([v[0]*paso,v[1]*paso],{o:[0,0],a:S.a})" in mv
+    assert "if(!e.repeat) recordar('mover el '+(m.tipo==='patio'?'patio ':'núcleo ')" in mv   # cada pulsación se guarda; las repeticiones de una tecla apretada, no
+    assert mv.index("recordar(") < mv.index("ensurePatiosManual()") < mv.index("patios[f.j]=")
+    assert mv.index("recordar(") < mv.index("ensureManual()") < mv.index("coresManual[f.spec]=")
+    assert "clearTimeout(tFlechas); tFlechas=setTimeout(finFlechas,300)" in mv
+    assert "run(" not in mv and "runCirc(" not in mv                                          # recalcular es cosa de finFlechas, una vez por ráfaga
+    fin = cuerpo("finFlechas")
+    assert "await run(lastStage" in fin and "await runCirc()" in fin
+    teclas = js.split("window.addEventListener('keydown'", 1)[1].split("\n/*", 1)[0]
+    flecha = teclas.split("if(FLECHAS[e.key]", 1)[1].split("\n", 1)[0]
+    for t in ("!texto", "t.tagName!=='SELECT'", "!e.ctrlKey", "!e.metaKey", "!e.altKey", "moverConFlechas(e)", "e.preventDefault()"):
+        assert t in flecha, t                                                                  # en un campo de texto o una lista, las flechas son del campo
+    assert "selPatio!=null" in teclas.split("if(e.key==='Escape')", 1)[1]                      # Esc suelta el patio
+    assert "viewMode!=='plan'||tool||!result" in cuerpo("elegidoMovible")                      # con una herramienta activa no mueven nada
+    for f in ("volverA", "setMass", "nuevo"):                                                  # otra masa o deshacer: lo que esperaba el temporizador ya no vale
+        c = js[js.index("function %s(" % f):].split("\nfunction ", 1)[0].split("\nasync function ", 1)[0]
+        assert "sinPatio()" in c and "olvidarFlechas()" in c, f
+    foto = cuerpo("foto")
+    assert "patios," in foto and "patios_mode" in foto and "coresManual" in foto               # lo que cambia esto se deshace
+    marco_js = cuerpo("marcoPatio")                                                           # las fórmulas que se repiten abajo, en Python
+    assert "L:q=>[q[0]*c+q[1]*s,-q[0]*s+q[1]*c],W:q=>[q[0]*c-q[1]*s,q[0]*s+q[1]*c]" in marco_js
+
+    # ---- el motor, con el mismo recorrido que hace la web
+    def marco(th):                               # como marcoPatio(): L del mundo a los ejes del edificio, W de vuelta
+        c, sn = math.cos(th), math.sin(th)
+        return (lambda q: (q[0] * c + q[1] * sn, -q[0] * sn + q[1] * c)), (lambda q: (q[0] * c - q[1] * sn, q[0] * sn + q[1] * c))
+
+    def caja(p, th):                             # como cajaPatio(): (u0, v0, ancho, fondo) del rectángulo que lo contiene
+        L, _ = marco(th)
+        q = [L(a) for a in p]
+        us, vs = [a[0] for a in q], [a[1] for a in q]
+        return min(us), min(vs), max(us) - min(us), max(vs) - min(vs)
+
+    def rect(u0, v0, w, d, th):                  # como aplicarPatio(): la esquina (u0, v0) y las dos medidas, alineado con el edificio
+        _, W = marco(th)
+        return [[round(a, 3) for a in W(q)] for q in ((u0, v0), (u0 + w, v0), (u0 + w, v0 + d), (u0, v0 + d))]
+
+    def posicion(p, fp, th):                     # como esquinaPatio() con el SCP del edificio: el origen, en la esquina del rectángulo que contiene la masa
+        u0, v0, _, _ = caja(p, th)
+        L, _ = marco(th)
+        f = [L(a) for a in fp]
+        return u0 - min(a[0] for a in f), v0 - min(a[1] for a in f)
+
+    def atraviesa(p, fp, th):                    # como atraviesa(): por eje del edificio, si llega de un borde a otro de la masa
+        L, _ = marco(th)
+        q, f = [L(a) for a in p], [L(a) for a in fp]
+        return [min(a[k] for a in q) <= min(a[k] for a in f) + 0.05 and max(a[k] for a in q) >= max(a[k] for a in f) - 0.05 for k in (0, 1)]
+    muestra = lambda n: json.load(open(os.path.join(base, "samples", n + ".json"), encoding="utf-8"))
+    s = muestra("entre_medianeras_patio")
+    corre = lambda fp, **p: generate({"footprint": fp, "height": s["height"], "stage": "plans", "params": p})
+    entre = lambda **p: corre(s["footprint"], medianeras=s["medianeras"], **p)
+    bandas = lambda r: sorted((round(min(q[1] for q in b["footprint"]), 3), round(max(q[1] for q in b["footprint"]), 3)) for b in r["blocks"])
+    firma = lambda r: ([(u["id"], u["area"]) for u in r["units"]], bandas(r), r["metrics"].get("patio_area"), r["metrics"]["plate_area"])
+    auto = entre()
+    assert auto["patios_auto"] is True and len(auto["patios"]) == 1 and len(auto["blocks"]) == 2 and auto["units"]
+    # 1) «al primer cambio los patios pasan a manuales»: los automáticos, copiados tal cual, dan el mismo resultado
+    manual = entre(patios_mode="manual", patios=auto["patios"])
+    assert manual["patios_auto"] is False and manual["patios"] == auto["patios"] and firma(manual) == firma(auto)
+    # 2) trasladar el patio un paso de grilla (0,5 m) a lo largo del predio: los bloques cambian en consecuencia y sigue habiendo viviendas
+    p0 = auto["patios"][0]
+    traslada = lambda p, dx, dy: [[x + dx, y + dy] for x, y in p]
+    y0, y1 = min(q[1] for q in p0), max(q[1] for q in p0)
+    arriba = entre(patios_mode="manual", patios=[traslada(p0, 0, 0.5)])
+    assert bandas(arriba) == sorted([(0.0, y0 + 0.5), (y1 + 0.5, 40.0)]) and len(arriba["units"]) >= 2
+    assert abs(arriba["metrics"]["patio_area"] - auto["metrics"]["patio_area"]) < 1e-6        # el patio mide lo mismo
+    # 3) de costado, un patio que atraviesa el predio de medianera a medianera deja una franja de edificio y une los dos bloques:
+    # por eso la web lo corre solo a lo largo del predio (despLibre)
+    assert atraviesa(p0, s["footprint"], 0.0) == [True, False]
+    costado = entre(patios_mode="manual", patios=[traslada(p0, 0.5, 0)])
+    assert len(auto["blocks"]) == 2 and len(costado["blocks"]) == 1
+    # 4) la ficha: ancho y fondo en los ejes del edificio y la posición de su esquina de menor X y Y en el SCP; Aplicar arma el
+    # rectángulo con la misma fórmula (en un edificio de 40 × 20 m girado 30° y trasladado)
+    th = math.radians(30)
+    giro = lambda q: [round(100 + marco(th)[1](q)[0], 3), round(50 + marco(th)[1](q)[1], 3)]
+    quita = lambda p: [[a[0] - 100, a[1] - 50] for a in p]                                    # caja() y posicion() miden desde el origen del mundo
+    edificio = [giro(q) for q in ((0, 0), (40, 0), (40, 20), (0, 20))]
+    r1 = corre(edificio, patios_mode="manual", patios=[[giro(q) for q in ((12, 7), (20, 7), (20, 12), (12, 12))]])
+    assert len(r1["patios"]) == 1 and len(r1["blocks"]) == 1 and len(r1["blocks"][0]["holes"]) == 1 and r1["units"]
+    u0, v0, w, d = caja(quita(r1["patios"][0]), th)
+    assert abs(w - 8) < 2e-3 and abs(d - 5) < 2e-3                                            # lo que muestra la ficha
+    x, y = posicion(quita(r1["patios"][0]), quita(edificio), th)
+    assert abs(x - 12) < 2e-3 and abs(y - 7) < 2e-3                                           # y la posición, desde la esquina del edificio
+    r2 = corre(edificio, patios_mode="manual", patios=[[[a[0] + 100, a[1] + 50] for a in rect(u0, v0, 10, 5, th)]])   # «Ancho 10»: la esquina se queda
+    u1, v1, w1, d1 = caja(quita(r2["patios"][0]), th)
+    assert abs(w1 - 10) < 2e-3 and abs(d1 - 5) < 2e-3 and abs(u1 - u0) < 2e-3 and abs(v1 - v0) < 2e-3
+    assert abs(r2["metrics"]["patio_area"] - 50) < 0.1 and len(r2["blocks"][0]["holes"]) == 1 and r2["units"]
+    pc = muestra("patio_central")                                                             # sin girar: el patio de «Patio central» con la misma fórmula
+    rc = corre(pc["footprint"], patios_mode="manual", patios=[rect(13, 11, 14, 8, 0.0)])
+    assert rc["patios"] == corre(pc["footprint"], patios_mode="manual", patios=pc["patios"])["patios"] and len(rc["units"]) == 8
+    # 5) los patios que dibuja la planta no son uno a uno los guardados: el que queda fuera se descarta y el que asoma se recorta
+    #    (por eso la web busca el guardado por la geometría: patioGuardado)
+    barra = [[0, 0], [60, 0], [60, 16], [0, 16]]
+    guardados = [[[70, 2], [74, 2], [74, 8], [70, 8]], [[20, 5], [24, 5], [24, 11], [20, 11]], [[40, 10], [44, 10], [44, 20], [40, 20]]]
+    rb = corre(barra, patios_mode="manual", patios=guardados)
+    assert len(rb["patios"]) == 2 and any("queda fuera de la masa" in a for a in rb["warnings"])
+    area = lambda p: abs(sum(p[i][0] * p[(i + 1) % len(p)][1] - p[(i + 1) % len(p)][0] * p[i][1] for i in range(len(p)))) / 2
+    assert abs(sorted(area(p) for p in rb["patios"])[1] - 24) < 1e-6 and abs(sorted(area(p) for p in rb["patios"])[0] - 24) < 1e-6   # el asomado, recortado a 4 × 6
+
+if __name__ == "__main__":
+    test_patios_editables(); print("OK65")
+
 def test_tabla_csv():
     """R7.2: la tabla de viviendas en CSV (engine/tabla_viviendas.py y GET /api/csv), para abrirla en Excel o LibreOffice en
     español: UTF-8 con BOM, separador «;», coma decimal y CRLF; una fila por vivienda y por nivel residencial (la planta tipo
