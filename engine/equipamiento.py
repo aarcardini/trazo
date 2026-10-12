@@ -412,9 +412,15 @@ def resolver(rm, puertas, aberturas, S, fachada=(), nb=1, mesa=True, ids=None, a
     (los asientos de la mesa); mesa: si el estar lleva la mesa del comedor; ids: estancias que se amueblan juntas (el
     estar y el comedor); acc: vivienda accesible (el baño principal, para silla de ruedas); placard: un dormitorio sin
     placard (R5.10: el principal con vestidor). Devuelve (piezas en el marco de la estancia trasladada al origen, lo que
-    no entra, avisos)."""
+    no entra, avisos).
+    R5.14a: el resultado depende solo de la clave, nunca de qué se calculó antes. Las puertas, las aberturas y la fachada
+    van redondeadas a 0,1 mm y se calcula con esos valores; el ancho y el fondo van tal cual, porque la estancia se calcula
+    con ellos: en una estancia simétrica (la puerta al medio, la ventana de lado a lado), qué lado ocupan la cama o el
+    placard lo decide una diferencia de 1e-15 m entre dos posiciones iguales, y con el ancho redondeado en la clave la
+    primera estancia «igual» que se calculaba fijaba el equipamiento de todas las demás."""
     ids = tuple(ids or (rm["id"],))
     x0, v0, x1, v1 = rm["rect"]
+    ancho, fondo = x1 - x0, v1 - v0
     rel = lambda pt: (round(pt[0] - x0, 4), round(pt[1] - v0, 4))
     pts = tuple(sorted((rel(d["p"]), rel(d["q"]), round(d["ancho"], 3), d["b"] in ids)
                        for d in puertas if d["a"] in ids or d["b"] in ids))
@@ -425,7 +431,7 @@ def resolver(rm, puertas, aberturas, S, fachada=(), nb=1, mesa=True, ids=None, a
         forma = tuple(rel(p) for p in rm["poly"])
     tipo = _tipo(rm)
     mueble = tipo in MUEBLES
-    clave = (tipo, rm["id"] in ("bath1", "bed1"), round(x1 - x0, 4), round(v1 - v0, 4), pts, abre, forma,
+    clave = (tipo, rm["id"] in ("bath1", "bed1"), ancho, fondo, pts, abre, forma,
              tuple(sorted((rel(p), rel(q)) for p, q in fachada)) if mueble else (),
              nb if tipo in ("estar", "comedor") else None, mesa if tipo == "estar" else None,
              bool(acc) and tipo == "bath" and rm["id"] == "bath1",
@@ -435,7 +441,7 @@ def resolver(rm, puertas, aberturas, S, fachada=(), nb=1, mesa=True, ids=None, a
     if clave not in _memo:
         if len(_memo) > 4000:
             _memo.clear()
-        r = _estancia(x1 - x0, v1 - v0, forma)
+        r = _estancia(ancho, fondo, forma)
         _memo[clave] = _equipar_estancia(tipo, clave[1], r, pts, abre, S, clave[7], nb, mesa, clave[10], clave[12],
                                          clave[13])
     return _memo[clave]
@@ -640,9 +646,14 @@ def _rango(a, b, o, gg, n):
     return max(0, int(math.floor((a - o) / gg - 0.5 + 1e-9)) + 1), min(n - 1, int(math.ceil((b - o) / gg - 0.5 - 1e-9)) - 1)
 
 
+_BINARIO = bytes.maketrans(b"\x00\x01", b"01")
+
+
 def _grilla(r, h, g):
-    """Grilla de la estancia vacía: (nx, ny, gx, gy, celdas transitables), las que quedan a h o más de las paredes y, si
-    un muro oblicuo la recorta, dentro de su contorno y a h o más de él. Se guarda en r para las próximas consultas."""
+    """Grilla de la estancia vacía: (nx, ny, gx, gy, paso, celdas transitables), las que quedan a h o más de las paredes y,
+    si un muro oblicuo la recorta, dentro de su contorno y a h o más de él. Las celdas van en un solo entero, un bit por
+    celda: la (i, j) es el bit j * paso + i, con paso = nx + 1 (la columna de más queda siempre apagada, así un corrimiento
+    no pasa de una fila a la otra). Se guarda en r para las próximas consultas."""
     memo = getattr(r, "__dict__", {})
     if ("_grilla", h, g) in memo:
         return memo[("_grilla", h, g)]
@@ -668,7 +679,8 @@ def _grilla(r, h, g):
                     if base[j * nx + i] and (not _en_poligono((x, y), f, 0.0) or
                                              any(_dist_seg((x, y), a, c) < h - 1e-6 for a, c in lados)):
                         base[j * nx + i] = 0
-    res = (nx, ny, gx, gy, bytes(base))
+    filas = b"".join(bytes(base[j * nx:(j + 1) * nx]) + b"\x00" for j in range(ny))
+    res = (nx, ny, gx, gy, nx + 1, int(filas.translate(_BINARIO)[::-1], 2))
     if hasattr(r, "__dict__"):
         r.__dict__[("_grilla", h, g)] = res
     return res
@@ -681,22 +693,29 @@ def _dist_seg(p, a, b):
     return math.hypot(p[0] - a[0] - k * dx, p[1] - a[1] - k * dy)
 
 
+def _bloque(i0, i1, j0, j1, paso):
+    """Las celdas i0..i1 de las filas j0..j1 de la grilla (ver _grilla) como entero; 0 si el rango está vacío."""
+    if i1 < i0 or j1 < j0:
+        return 0
+    filas = ((1 << ((j1 - j0 + 1) * paso)) - 1) // ((1 << paso) - 1)          # un bit por fila, cada `paso` bits
+    return ((((1 << (i1 - i0 + 1)) - 1) << i0) * filas) << (j0 * paso)
+
+
 def _alcanza(r, cuerpos, accesos, usos, h=0.25, g=0.10):
     """¿Se llega desde las puertas y aberturas (segmentos sobre el borde de r) a todos los lugares de uso sin pisar los
     cuerpos? Grilla de g: una celda es transitable si su centro queda a h o más de las paredes y de los cuerpos (un paso
-    de unos 2 h); todos los accesos tienen que quedar comunicados entre sí."""
+    de unos 2 h); todos los accesos tienen que quedar comunicados entre sí. La grilla es un entero con un bit por celda
+    (_grilla): el relleno desde el primer acceso avanza de a una celda en las cuatro direcciones a la vez, con
+    corrimientos del entero, hasta que no crece (el mismo recorrido que celda por celda, mucho más rápido)."""
     if not accesos:
         return True
     x0, v0, x1, v1 = r
-    nx, ny, gx, gy, base = _grilla(r, h, g)
+    nx, ny, gx, gy, paso, libre = _grilla(r, h, g)
     rango = _rango
-    libre = bytearray(base)
     for a0, b0, a1, b1 in cuerpos:
         i0, i1 = rango(a0 - h + 1e-6, a1 + h - 1e-6, x0, gx, nx)
         j0, j1 = rango(b0 - h + 1e-6, b1 + h - 1e-6, v0, gy, ny)
-        if i1 >= i0:
-            for j in range(j0, j1 + 1):
-                libre[j * nx + i0:j * nx + i1 + 1] = bytes(i1 - i0 + 1)
+        libre &= ~_bloque(i0, i1, j0, j1, paso)
 
     def celdas(p, q):
         """Celdas transitables junto al acceso p-q, del lado de adentro."""
@@ -708,25 +727,20 @@ def _alcanza(r, cuerpos, accesos, usos, h=0.25, g=0.10):
         c0, c1 = (e, e + h + 1.5 * g) if e - lo < hi - e else (e - h - 1.5 * g, e)
         (i0, i1), (j0, j1) = (rango(c0, c1, x0, gx, nx), rango(a, b, v0, gy, ny)) if vert else \
             (rango(a, b, x0, gx, nx), rango(c0, c1, v0, gy, ny))
-        return [j * nx + i for j in range(j0, j1 + 1) for i in range(i0, i1 + 1) if libre[j * nx + i]]
+        return _bloque(i0, i1, j0, j1, paso) & libre
     semillas = [celdas(p, q) for p, q in accesos]
-    visto = bytearray(nx * ny)
-    pila = list(semillas[0])
-    for k in pila:
-        visto[k] = 1
-    while pila:
-        k = pila.pop()
-        i = k % nx
-        for kk in (k - 1 if i > 0 else -1, k + 1 if i < nx - 1 else -1, k - nx, k + nx):
-            if 0 <= kk < nx * ny and libre[kk] and not visto[kk]:
-                visto[kk] = 1
-                pila.append(kk)
-    if not all(any(visto[k] for k in s) for s in semillas[1:]):
+    visto = semillas[0]
+    while visto:
+        nuevo = visto | (((visto << 1) | (visto >> 1) | (visto << paso) | (visto >> paso)) & libre)
+        if nuevo == visto:
+            break
+        visto = nuevo
+    if not all(visto & s for s in semillas[1:]):
         return False
     for a0, b0, a1, b1 in usos:
         i0, i1 = rango(a0 - 1e-6, a1 + 1e-6, x0, gx, nx)
         j0, j1 = rango(b0 - 1e-6, b1 + 1e-6, v0, gy, ny)
-        if not any(visto[j * nx + i] for j in range(j0, j1 + 1) for i in range(i0, i1 + 1)):
+        if not visto & _bloque(i0, i1, j0, j1, paso):
             return False
     return True
 

@@ -3927,3 +3927,126 @@ def test_importar_dxf():
 
 if __name__ == "__main__":
     test_importar_dxf(); print("OK63")
+
+def test_equipamiento_orden():
+    """R5.14a: el equipamiento de una estancia (y el de una vivienda) no depende de qué se calculó antes en el mismo proceso.
+    La memoria de resolver tenía el ancho y el fondo redondeados en la clave, pero calculaba con los exactos: dos estancias
+    «iguales» que difieren en 1e-15 m compartían el resultado de la primera, y en una estancia simétrica (la puerta al medio,
+    la ventana de lado a lado) esa diferencia decide de qué lado van la cama o el placard."""
+    import copy, math, random
+    import regresion
+    from engine import plans as P, equipamiento as EQ, standards as ST
+    S = ST.DEFAULTS["equipamiento"]
+
+    # 1. el caso mínimo: dos dormitorios de 2,80 × 3,50 m (los de «L_polilinea» y «barra») con la puerta al medio del lado
+    #    del pasillo y la ventana de lado a lado; difieren en 1e-15 m y, calculado solo, cada uno pone el placard en una pared
+    def cuarto(x0, v0, x1, v1):
+        xm = (x0 + x1) / 2
+        rm = {"id": "bed2", "kind": "bedroom", "name": "Dormitorio 2", "rect": (x0, v0, x1, v1)}
+        puerta = {"p": (xm - 0.35, v0), "q": (xm + 0.35, v0), "a": "hallway", "b": "bed2", "ancho": 0.7}
+        return lambda: EQ.resolver(rm, [puerta], {}, S, [((x0, v1), (x1, v1))], 2)
+
+    def sola(c):
+        EQ._memo.clear()
+        return c()
+    A = cuarto(7.430600000000001, 3.0, 10.2306, 6.500000000000002)
+    B = cuarto(14.378699999999998, 3.0, 17.1787, 6.5)
+    lugares = lambda res: [(p[0], tuple(round(x, 3) for x in p[1])) for p in res[0]]
+    a, b = sola(A), sola(B)
+    assert lugares(a) != lugares(b), "este par ya no sirve de caso mínimo (el desempate no depende del ruido): elegir otro"
+    EQ._memo.clear(); A()
+    assert B() == b, "B tras A debe dar lo mismo que B sola: %s" % lugares(B())
+    EQ._memo.clear(); B()
+    assert A() == a, "A tras B debe dar lo mismo que A sola: %s" % lugares(A())
+
+    # 2. el mismo plano, el mismo equipamiento: cada vivienda de cinco ejemplos corridos uno tras otro (con la memoria como
+    #    esté) se compara con la misma vivienda calculada con la memoria vacía; son los ejemplos donde antes cambiaba
+    orig, hondo, calculadas, distintas, ej = P.layout_unit, [0], [0], [], [None]
+    huella = lambda res: ([(e["kind"], e["room"], e["poly"], e["lines"]) for e in res["equipamiento"]],
+                          [c["msg"] for c in res["checks"]])
+
+    def espiar(*args, **kw):
+        if hondo[0]:
+            return orig(*args, **kw)
+        args2, kw2 = copy.deepcopy(args), copy.deepcopy(kw)
+        hondo[0] += 1
+        try:
+            caliente = orig(*args, **kw)
+            memo, EQ._memo = EQ._memo, {}
+            try:
+                frio = orig(*args2, **kw2)
+            finally:
+                EQ._memo = memo
+        finally:
+            hondo[0] -= 1
+        calculadas[0] += 1
+        if huella(caliente) != huella(frio):
+            distintas.append(ej[0])
+        return caliente
+    P.layout_unit = espiar
+    try:
+        EQ._memo.clear()
+        for ej[0] in ("L_polilinea", "barra", "T_dos_lineas", "cruz_dos_lineas", "torre_mixta"):
+            with open(os.path.join(regresion.SAMPLES, ej[0] + ".json"), encoding="utf-8") as f:
+                regresion._edificio(json.load(f))
+    finally:
+        P.layout_unit = orig
+    assert calculadas[0] >= 50 and not distintas, (calculadas[0], distintas)
+
+    # 3. _alcanza (la grilla de la estancia es un entero con un bit por celda) da lo mismo que recorrerla celda por celda
+    def celda_por_celda(W, D, cuerpos, accesos, usos, h, g):
+        nx, ny = max(1, math.ceil(W / g - 1e-9)), max(1, math.ceil(D / g - 1e-9))
+        cx, cy = (lambda i: (i + 0.5) * W / nx), (lambda j: (j + 0.5) * D / ny)
+        entre = lambda v, lo, hi: lo < v < hi
+        libre = {(i, j) for i in range(nx) for j in range(ny)
+                 if entre(cx(i), h - 1e-6, W - h + 1e-6) and entre(cy(j), h - 1e-6, D - h + 1e-6) and
+                 not any(entre(cx(i), a0 - h + 1e-6, a1 + h - 1e-6) and entre(cy(j), b0 - h + 1e-6, b1 + h - 1e-6)
+                         for a0, b0, a1, b1 in cuerpos)}
+
+        def junto(p, q):
+            vert = abs(p[0] - q[0]) < 1e-6
+            lo, hi = sorted((p[1], q[1]) if vert else (p[0], q[0]))
+            if hi - lo > 0.4:
+                lo, hi = lo + 0.1, hi - 0.1
+            e, L = (p[0], W) if vert else (p[1], D)
+            c0, c1 = (e, e + h + 1.5 * g) if e < L - e else (e - h - 1.5 * g, e)
+            if vert:
+                return {(i, j) for i, j in libre if entre(cx(i), c0, c1) and entre(cy(j), lo, hi)}
+            return {(i, j) for i, j in libre if entre(cx(i), lo, hi) and entre(cy(j), c0, c1)}
+        if not accesos:
+            return True
+        sem = [junto(p, q) for p, q in accesos]
+        visto, pila = set(sem[0]), list(sem[0])
+        while pila:
+            i, j = pila.pop()
+            for c in ((i - 1, j), (i + 1, j), (i, j - 1), (i, j + 1)):
+                if c in libre and c not in visto:
+                    visto.add(c)
+                    pila.append(c)
+        return all(visto & s for s in sem[1:]) and all(
+            any(entre(cx(i), a0 - 1e-6, a1 + 1e-6) and entre(cy(j), b0 - 1e-6, b1 + 1e-6) for i, j in visto)
+            for a0, b0, a1, b1 in usos)
+    azar, falsos = random.Random(5), 0
+    for _ in range(500):
+        W, D = azar.uniform(1.2, 6.0), azar.uniform(1.2, 6.0)
+        cuerpos = [(a0, b0, min(W, a0 + azar.uniform(0.2, 2.5)), min(D, b0 + azar.uniform(0.2, 2.5)))
+                   for a0, b0 in ((azar.uniform(0, W), azar.uniform(0, D)) for _ in range(azar.randint(0, 5)))]
+
+        def acceso():
+            if azar.random() < 0.5:
+                x, y = azar.choice((0.0, W)), azar.uniform(0, D - 0.7)
+                return (x, y), (x, y + azar.uniform(0.5, 1.0))
+            x, y = azar.uniform(0, W - 0.7), azar.choice((0.0, D))
+            return (x, y), (x + azar.uniform(0.5, 1.0), y)
+        accesos = [acceso() for _ in range(azar.randint(0, 4))]
+        usos = [(a0, b0, min(W, a0 + azar.uniform(0.1, 1.5)), min(D, b0 + azar.uniform(0.1, 1.5)))
+                for a0, b0 in ((azar.uniform(0, W), azar.uniform(0, D)) for _ in range(azar.randint(0, 3)))]
+        h, g = azar.choice(((0.25, 0.10), (0.25, 0.05)))
+        esperado = celda_por_celda(W, D, cuerpos, accesos, usos, h, g)
+        assert EQ._alcanza(EQ._Estancia((0.0, 0.0, W, D)), cuerpos, accesos, usos, h, g) == esperado, \
+            (W, D, cuerpos, accesos, usos, h, g)
+        falsos += not esperado
+    assert 100 < falsos < 400, falsos                  # los dos resultados se prueban
+
+if __name__ == "__main__":
+    test_equipamiento_orden(); print("OK64")
