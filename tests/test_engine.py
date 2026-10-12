@@ -2824,3 +2824,83 @@ def test_proporcion_y_divisoria():
 
 if __name__ == "__main__":
     test_proporcion_y_divisoria(); print("OK57")
+
+
+def test_modo_claro_oscuro():
+    """R4.10: el tema se elige con un botón (sol o luna) en la barra superior del modo Edificio y junto al título del
+    Masterplan; en «Vista → Apariencia → Tema», Sistema (el del equipo), Claro u Oscuro. El tema va en `data-theme` de
+    <html> (sin él vale el del sistema), se recuerda en el navegador con la clave 'trazo.tema' (la misma en las dos
+    páginas) y un script mínimo del <head> lo pone antes de pintar, para que no parpadee. Los colores son variables CSS:
+    los oscuros están dos veces (el tema elegido y el del sistema, salvo que se haya elegido el claro) y tienen que ser
+    los mismos. Lo que el JS decide según el tema (los bordes de la axonometría) pregunta a `esOscuro()`, no al sistema.
+    (El comportamiento se comprobó en navegador; esta prueba evita que se pierda una de las dos copias de los colores o
+    que una página vuelva a depender solo del sistema.)"""
+    import re
+    base = os.path.join(os.path.dirname(__file__), "..", "web")
+    paginas = {n: open(os.path.join(base, n), encoding="utf-8").read() for n in ("index.html", "masterplan.html")}
+    # las llaves de la regla que sigue al selector, como lista de declaraciones
+    reglas = lambda css, sel: [d.strip() for d in css[css.index("{", css.index(sel)) + 1:].split("}", 1)[0].split(";") if d.strip()]
+    fichas = lambda ds: [d.split(":")[0] for d in ds if d.startswith("--")]
+    for nombre, html in paginas.items():
+        css = html.split("<style>", 1)[1].split("</style>", 1)[0]
+        assert "'trazo.tema'" in html and 'id="btnTema"' in html, nombre                                # la misma clave y el botón, en las dos páginas
+        assert ':root[data-theme="dark"]{' in css, nombre                                               # el tema oscuro elegido
+        assert '@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){' in css, nombre   # el del sistema, salvo el claro elegido
+        assert "(prefers-color-scheme:dark){:root{" not in css, nombre                                 # ningún color oscuro fuera de data-theme
+        claro = reglas(css, ":root{")
+        elegido = reglas(css, ':root[data-theme="dark"]')
+        sistema = reglas(css, ':root:not([data-theme="light"])')
+        assert elegido == sistema and len(fichas(elegido)) >= 6, (nombre, elegido, sistema)             # los mismos colores, en los dos lugares
+        assert {"--bg", "--pan", "--ink", "--mut", "--line", "--acc"} <= set(fichas(elegido)) <= set(fichas(claro)), nombre
+        assert "color-scheme:dark" in elegido and "color-scheme:light" in claro, nombre                # los controles del navegador siguen al tema
+        # el script del <head>: lee 'trazo.tema' dentro de try/catch y pone data-theme antes de que se pinte la página
+        assert html.index('<script id="temaInicial">') < html.index("<body"), nombre
+        ini = html.split('<script id="temaInicial">', 1)[1].split("</script>", 1)[0]
+        assert ini.index("try{") < ini.index("localStorage.getItem('trazo.tema')") < ini.index("catch(e)"), (nombre, ini)
+        assert "document.documentElement.dataset.theme=" in ini and "'claro'" in ini and "'oscuro'" in ini, (nombre, ini)
+        # el programa es el primer <script> sin atributos (las demás pruebas lo toman así): trae el botón, el tema y la clave
+        js = html.split("<script>", 1)[1]
+        for f in ("function aplicarTema(", "function esOscuro(", "function temaUI(", "function temaElegido("):
+            assert f in js, (nombre, f)
+        osc = js.split("function esOscuro(){", 1)[1].split("\n", 1)[0]
+        assert "dataset.theme" in osc and "'dark'" in osc and "'light'" in osc, (nombre, osc)
+        assert "matchMedia('(prefers-color-scheme: dark)')" in osc, (nombre, osc)                       # sin elección, el del sistema
+        aplicar = js.split("function aplicarTema(", 1)[1].split("\ntemaUI();", 1)[0]
+        for t in ("removeAttribute('data-theme')", "dataset.theme=", "catch(e){}", "temaUI()", "render()"):
+            assert t in aplicar, (nombre, t)
+        assert aplicar.index("try{") < aplicar.index("localStorage.setItem('trazo.tema',t)") < aplicar.index("catch(e)"), nombre
+        ui = js.split("function temaUI(){", 1)[1].split("\nfunction ", 1)[0]
+        assert "$('btnTema')" in ui and "'Tema '" in ui and "(clic: " in ui and ".title=" in ui, (nombre, ui)
+        assert 'id="btnTema"' in html and "aplicarTema(esOscuro()?'claro':'oscuro')" in html, nombre   # un clic elige el tema contrario
+        # el JS no pregunta por el sistema salvo en esOscuro
+        scripts = re.findall(r"<script[^>]*>(.*?)</script>", html, re.S)
+        resto = "\n".join(re.sub(r"function esOscuro\(\)\{[^\n]*\n", "", s) for s in scripts)
+        assert "prefers-color-scheme" not in resto and "matchMedia" not in resto, nombre
+    # Edificio: el botón en la barra superior junto a deshacer y rehacer; el selector en «Vista», antes de la leyenda
+    html = paginas["index.html"]
+    assert 'id="btnTema"' in html and 'id="tema"' in html, "el botón y el selector del tema"
+    assert {"--grilla", "--grilla2"} <= set(fichas(reglas(html.split("<style>", 1)[1], ':root[data-theme="dark"]')))
+    cuerpo = html.split("<body>", 1)[1].split("<script>", 1)[0]
+    hist = cuerpo.split('<header class="top">', 1)[1].split("</header>", 1)[0].split('<div class="hist">', 1)[1].split("</div>", 1)[0]
+    assert all('id="%s"' % i in hist for i in ("btnUndo", "btnRedo", "btnTema")), hist
+    vista = cuerpo.split('<div class="grupo" data-grupo="vista"', 1)[1].split("</section>", 1)[0]
+    assert 'id="tema"' in vista and vista.index('id="tema"') < vista.index('id="legendColors"'), "el selector, antes de la leyenda"
+    assert 'onchange="aplicarTema(this.value)"' in vista
+    opciones = re.search(r'<select id="tema"[^>]*>(.*?)</select>', vista, re.S).group(1)
+    assert re.findall(r'<option value="(\w+)">(\w+)</option>', opciones) == \
+        [("sistema", "Sistema"), ("claro", "Claro"), ("oscuro", "Oscuro")], opciones
+    js = html.split("<script>", 1)[1]
+    assert "dark=esOscuro()" in js.split("function drawAxo(){", 1)[1].split("\nfunction ", 1)[0]       # la axonometría sigue al tema elegido
+    # lo que la planta escribe sobre el fondo (cotas, escala, rótulos de patios y de zonas sin luz) también: sus grises, solo en su ayudante
+    assert "const TINTA=()=>esOscuro()?" in js and "HALO=()=>esOscuro()?" in js and "TENUE=()=>esOscuro()?" in js
+    assert js.count("#344054") == 1 and js.count("#5b616b") == 1, (js.count("#344054"), js.count("#5b616b"))
+    assert "fill:TINTA(),stroke:HALO()" in js.split("function cota(", 1)[1].split("\nfunction ", 1)[0]
+    assert js.count("fill:TENUE()") == 3 and js.count("fill:TINTA()") == 2, (js.count("fill:TENUE()"), js.count("fill:TINTA()"))
+    # en un teléfono el botón no recorta la pestaña «Masterplan»: cede primero el nombre de la masa
+    assert ".masaTop{flex-shrink:200}" in html.split("@media(max-width:900px)", 1)[1].split("\n.hint{", 1)[0]
+    # Masterplan: el botón junto al título (no hay un panel de vista donde poner el selector)
+    mp = paginas["masterplan.html"].split("<body>", 1)[1]
+    assert 'id="btnTema"' in mp.split("<h2>", 1)[0] and 'id="tema"' not in mp
+
+if __name__ == "__main__":
+    test_modo_claro_oscuro(); print("OK58")
