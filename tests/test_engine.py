@@ -2264,3 +2264,48 @@ def test_vivienda_elegida_otra_etapa():
 
 if __name__ == "__main__":
     test_vivienda_elegida_otra_etapa(); print("OK51")
+
+
+def test_grilla_y_snap():
+    """R4.7: grilla que se adapta al zoom (10, 5, 1, 0,5, 0,1 y 0,05 m: la más fina que se ve) y sigue al SCP (el del
+    edificio por defecto: su fachada principal; un borde de la masa, como «SCP objeto»; o el del mundo). Todos los
+    puntos que se marcan o se arrastran pasan por el mismo ajuste (`ajustar`, `ajustarDesp`): vértices de la masa,
+    paso de la grilla y Orto en el SCP; Alt deja el punto libre. F7, F8 y F9 alternan grilla, Orto y snap."""
+    import re
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    cuerpo = html[html.index("<body"):html.index("<script>")]
+    dibujo = cuerpo.split('<div class="dibujo"')[1].split("</div>")[0]
+    for t in ('id="grilla" checked', 'id="snap" checked', 'id="orto" checked', 'id="btnScp" data-tool="scp"', 'id="pasoTxt"',
+              "F7", "F8", "F9"):
+        assert t in dibujo, t
+    js = html[html.index("<script>"):]
+    for f in ("pasoGrilla", "dibujarGrilla", "ajustar", "ajustarDesp", "scpActual", "scpDefecto", "scpObjeto", "scpEdificio",
+              "scpMundo", "aLocal", "aMundo", "preferencia", "alternar"):
+        assert re.search(r"(function %s\(|const %s=)" % (f, f), js), f
+    # no queda el redondeo fijo a 0,10 m del mundo: todo pasa por el ajuste
+    assert "function snap(" not in js and not re.search(r"[^.\w]snap\(", js)
+    assert "Math.round(w[0]*10)/10" not in js and "*10)/10,Math.round((k.center" not in js
+    for t in ("dibujarGrilla(gb); const sw=1.2;", "curLine.push(ajustar(w,curLine[curLine.length-1],e))",
+              "curPatio.push(ajustar(w,null,e))", "coresManual.push(ajustar(w,null,e,{vertices:false}))",
+              "mouse=ajustar(w,null,e)", "pl[drag.vi]=ajustar(toWorld(e),null,e)", "dragTab.d=ajustarDesp(mitad(t.seg),t.dir,",
+              "dragIn.d=ajustarDesp(", "const c=ajustar([k.center[0]+dragCore.d[0]", "e.altKey", "else if(tool==='scp')",
+              "e.key==='F7'", "e.key==='F8'", "e.key==='F9'", "localStorage.getItem('trazo.'+id)", "'trazo.'+c.id",
+              "if(scp) p.scp=scp;", "scp:p.scp}", "scp=m.scp&&", "terreno=null; scp=null;", "ESCALA_MAX/s0"):
+        assert t in js, t
+    g = js[js.index("function dibujarGrilla("):js.index("function scpObjeto(")]
+    assert "'pointer-events':'none'" in g and "scpActual()" in g
+    assert "Math.min(12,zoom*f)" not in js
+    # «Hecho cuando»: en quiebre_45 (de 8,1 a 19,5 px/m sin zoom según la pantalla y el panel) el zoom llega a 1 m,
+    # 0,10 m y 0,05 m
+    pasos = [float(x) for x in re.search(r"const PASOS=\[([^\]]+)\]", js).group(1).split(",")]
+    px = float(re.search(r"PX_GRILLA=([\d.]+)", js).group(1))
+    emax = float(re.search(r"ESCALA_MAX=([\d.]+)", js).group(1))
+    assert pasos == [0.05, 0.1, 0.5, 1, 5, 10]
+    paso = lambda esc: next((p_ for p_ in pasos if p_ * esc >= px), pasos[-1])
+    for s0 in (8.1, 13.0, 19.5):
+        zooms = [0.5 * 1.15 ** i for i in range(80) if 0.5 * 1.15 ** i <= max(12, emax / s0)]
+        vistos = {paso(s0 * z) for z in zooms}
+        assert {1, 0.1, 0.05} <= vistos, (s0, sorted(vistos))
+
+if __name__ == "__main__":
+    test_grilla_y_snap(); print("OK52")

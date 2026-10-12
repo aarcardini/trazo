@@ -85,7 +85,7 @@ Desde entonces basta con escribir `trazo` en Rhino.
      - **Arriba:** el nombre de lo que está abierto, su etapa, y deshacer y rehacer.
      - **Riel de la izquierda:** Proyecto (nuevo, abrir, guardar, ejemplos, variantes, exportar), Masa, Circulación, Viviendas, Normativa (medidas) y Vista (colores y leyenda).
      - **Sobre la planta:** la vista 2D o 3D, el nivel y el menú **Capas** (conexiones, equipamiento, cotas, evacuación y datos al pasar el mouse).
-     - **Abajo, la barra de dibujo:** **Línea**, **Núcleo**, **Medianera** y **Patio**, más **Orto** (F8). Mientras una herramienta está activa, arriba de la barra aparecen qué hacer y sus botones (Terminar, Borrar última, Quitar núcleo…).
+     - **Abajo, la barra de dibujo:** **Línea**, **Núcleo**, **Medianera** y **Patio**, más **SCP**, **Grilla** (F7), **Orto** (F8) y **Snap** (F9; con Alt, el punto queda libre). Mientras una herramienta está activa, arriba de la barra aparecen qué hacer y sus botones (Terminar, Borrar última, Quitar núcleo…).
      - **A la derecha:** el resumen (unidades, NSA, eficiencia, calidad de planos, núcleos, ascensores), los avisos y la ficha de la vivienda o del núcleo que elijas. **Ver todo** suma los programas, todas las métricas y la tabla de unidades.
    - **Patios** (Masa → Patios): en modo automático, Trazo abre patios donde un predio entre medianeras es demasiado profundo para tener luz; cada bloque lleva su núcleo. Con **Patio**, en la barra de dibujo, haces clic en dos esquinas opuestas (el patio se alinea con el edificio y se recorta a la masa); la × de la lista lo quita. Dibujar o quitar un patio pasa a modo manual. Las estancias que dan a un patio de al menos 3 m (editable en «Normativa → Predio») tienen luz.
    - Un patio **dentro** de la masa (sin tocar el borde) la convierte en un anillo: alas alrededor del patio y un pasillo que da la vuelta (U cerrada o claustro). Ejemplos: «Edificio con patio central 40 × 30» y «Entre medianeras 30 × 45 con patio central (U cerrada)».
@@ -148,6 +148,13 @@ Si algo falla en Rhino, ejecuta el script y elige **Diagnostico**. Si no se resu
 - **Mix**: tipos con m² objetivo y %, ancho mínimo, muro medianero; métricas Match Score, Fit y Unidades únicas.
 - **Planos**: distribución día/noche con pasillo interno, puertas y grafo de conexiones verificado.
 
+## Novedades v2.40
+- **Grilla y snap (R4.7):** la planta tiene una grilla que se adapta al zoom: la más fina de 10 m, 5 m, 1 m, 0,50 m, 0,10 m y 0,05 m cuyas líneas quedan separadas al menos 12 píxeles. Las líneas marcadas quedan siempre cada 50 m, 5 m o 0,50 m. La barra de dibujo dice qué paso se ve («GRILLA 1 m»), y el zoom llega hasta que 0,05 m se ven bien.
+  - **Snap:** todo lo que dibujas o arrastras se pega al paso que se ve: los vértices de las líneas de pasillo, las esquinas de los patios, los núcleos (su centro), los tabiques entre viviendas, los tabiques interiores y las puertas. A menos de 10 píxeles de un vértice de la masa, el punto va al vértice.
+  - **SCP:** la grilla y el Orto siguen al edificio, alineados con su fachada principal y con el origen en la esquina de la masa. Con el botón **SCP**, un clic en un borde de la masa los alinea con ese borde (el extremo más cercano al clic es el origen, como «SCP objeto» de AutoCAD); en la barra que aparece, «Edificio» vuelve al de la masa y «Mundo» a los ejes x, y del plano. El SCP se guarda en el proyecto.
+  - **Teclas:** F7 grilla, F8 Orto y F9 snap, como en AutoCAD (en Mac, fn+F7…); con **Alt** apretada, el punto queda libre (sin grilla ni vértices). Trazo recuerda en el navegador si las dejaste prendidas o apagadas.
+  - Las medianeras se siguen marcando por borde entero: el snap les llega con su edición en la web (resto de R11.6). Los patios se siguen alineando con la fachada principal de la masa: un patio rodeado de edificio y girado respecto de ella el motor no lo usa.
+
 ## Novedades v2.39
 - **Ancho del pasillo común tramo por tramo (R10.8):** el ancho general sigue en Circulación → «Ancho pasillo» (2,00 m). Ahora, además, cada tramo puede tener el suyo:
   - **En la web:** haz clic en un tramo de pasillo de la planta. Su ficha muestra el largo del tramo recto, cuántas viviendas sirve por planta y el mínimo de la norma. Escribe el ancho y pulsa «Aplicar»; «Como los demás» lo devuelve al general. Los tramos con ancho propio muestran su medida en la planta, y Circulación dice cuántos hay, con «Quitar». Se guarda en el proyecto y se deshace con Ctrl+Z.
@@ -173,13 +180,13 @@ Si algo falla en Rhino, ejecuta el script y elige **Diagnostico**. Si no se resu
 - **Interfaz por grupos (R4.6, la opción B, «Riel», que elegiste en la maqueta):**
   - **Riel de la izquierda:** Proyecto, Masa, Circulación, Viviendas, Normativa y Vista. Cada uno abre su panel al lado, de a uno, con su botón de generar al pie. La planta usa el resto de la pantalla y Trazo recuerda qué grupo estaba abierto.
   - **Sobre la planta:** 2D o 3D, el nivel y el menú **Capas**.
-  - **Abajo, una barra de dibujo como la de AutoCAD:** Línea, Núcleo, Medianera, Patio y **Orto (F8)**. La herramienta activa muestra qué hacer y sus botones (Terminar, Borrar última, Quitar núcleo…), y Esc la cierra.
+  - **Abajo, una barra de dibujo como la de AutoCAD:** Línea, Núcleo, Medianera, Patio, **SCP**, **Grilla (F7)**, **Orto (F8)** y **Snap (F9)**. La herramienta activa muestra qué hacer y sus botones (Terminar, Borrar última, Quitar núcleo…), y Esc la cierra.
   - **Arriba:** lo que está abierto, su etapa, y deshacer y rehacer.
   - **A la derecha:** el resumen (unidades, NSA, eficiencia, calidad de planos, núcleos, ascensores), los avisos y la ficha. **Ver todo** suma programas, métricas y unidades.
   - «Muro medianero» pasa a llamarse **«Muro entre viviendas»**, para no confundirlo con las medianeras del predio.
   - Cada control conserva su id: los proyectos y las variantes guardados se abren igual.
   - En el teléfono, el riel va arriba y el resumen debajo de la planta.
-  - La grilla y el snap con F7 y F9 llegan con R4.7.
+  - La grilla y el snap con F7 y F9 llegaron con R4.7 (v2.40).
 
 ## Novedades v2.36
 - **Datos al pasar el mouse:** sobre la planta aparece, sin hacer clic, un recuadro con el nombre y la superficie de lo que está debajo. Muestra la estancia y su vivienda («Dormitorio principal · 11.2 m²», «U03 · 2 dorm · 84.1 m²»), lo sin uso, cada parte de un núcleo (escalera, ascensor) con sus ascensores, el pasillo común, las zonas sin luz y los patios. En los niveles de oficinas, comercio o estacionamiento muestra sus partes, por ejemplo una plaza. Se apaga con «Datos al pasar», en la barra de la planta, y no aparece mientras se dibuja o se arrastra. El clic sigue abriendo la ficha.
