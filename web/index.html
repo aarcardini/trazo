@@ -46,6 +46,7 @@ main{grid-area:main;position:relative;overflow:hidden;min-width:0}main>svg{width
 .toggle{display:inline-flex!important;align-items:center;gap:5px;margin:0!important;padding:6px 9px;border-radius:7px;font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--mut);cursor:pointer;user-select:none}.toggle input{display:none}
 .toggle.on{background:rgba(47,111,237,.12);color:var(--acc)}.toggle small{font-weight:500;letter-spacing:0;display:inline-block;min-width:4.2em}.grilla{fill:none;stroke:var(--grilla);stroke-width:1}.grilla.mayor{stroke:var(--grilla2)}.toggle kbd,.herr kbd{font:10px ui-monospace,monospace;border:1px solid var(--line);border-radius:4px;padding:0 3px;color:var(--mut)}
 .herr{position:absolute;left:50%;transform:translateX(-50%);bottom:64px;align-items:center;gap:6px;background:var(--pan);border:1px solid var(--line);border-radius:8px;padding:4px 6px 4px 10px;z-index:3;font-size:12px;max-width:calc(100% - 20px);white-space:nowrap}.herr button{margin:0;padding:3px 8px;font-size:12px}.herr .esc{color:var(--mut);margin-left:4px}.herr{width:max-content}.herr>span:first-child{white-space:normal;min-width:0}
+.herr label{display:inline-flex;align-items:center;gap:4px;margin:0;color:var(--mut)}.herr input{width:64px;padding:2px 6px;font-size:12px;text-align:right}.herr input.mal{border-color:var(--bad);outline:0}
 aside.r{grid-area:right;background:var(--pan);overflow:auto;padding:12px 14px;border-left:1px solid var(--line)}aside.r h2:first-child{margin-top:4px}
 .resTit{display:flex;justify-content:space-between;align-items:baseline}.resTit h2{margin:4px 0 6px}
 .res{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin:4px 0 10px}.res>div{padding:7px 10px}.res>div:nth-child(-n+2){border-bottom:1px solid var(--line)}.res>div:nth-child(odd){border-right:1px solid var(--line)}
@@ -124,7 +125,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}
    <button class="s" onclick="quitarMedianeras()">Quitar todas</button>
    <div id="medList"></div>
    <h2>Patios</h2>
-   <div class="hint">Patios de aire y luz: separan la masa en bloques, cada uno con su núcleo. Las estancias que dan a un patio de al menos <span id="pminTxt">3</span> m de ancho tienen luz. Se dibujan con <b>Patio</b> en la barra de dibujo.</div>
+   <div class="hint">Patios de aire y luz: separan la masa en bloques, cada uno con su núcleo. Las estancias que dan a un patio de al menos <span id="pminTxt">3</span> m de ancho tienen luz. Se dibujan con <b>Patio</b> en la barra de dibujo: clic en una esquina y, para la opuesta, otro clic o escribe el ancho y el fondo y pulsa Enter.</div>
    <label>Modo <select id="patios_mode" onchange="patiosModeChanged()"><option value="auto">automático</option><option value="manual">manual</option></select></label>
    <button class="s" onclick="quitarPatios()">Quitar todos</button>
    <div id="patioList"></div><div class="hint" id="patioInfo"></div>
@@ -139,7 +140,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}
    <label>Ancho pasillo <input type="number" id="corridor_width" value="2" step="0.1"></label>
    <div class="hint" id="anchosInfo">Clic en un tramo de pasillo de la planta para darle su propio ancho.</div>
    <h2>Líneas centrales (polilíneas)</h2>
-   <div class="hint">Se dibujan con <b>Línea</b> en la barra de dibujo: clic para cada vértice; doble clic, Enter o «Terminar» cierran la línea. Arrastra los vértices para editarlos; clic derecho sobre un vértice lo borra. Sin líneas dibujadas, el pasillo es automático.</div>
+   <div class="hint">Se dibujan con <b>Línea</b> en la barra de dibujo: clic para cada vértice, o escribe el largo (y el ángulo) del tramo y pulsa Enter (el puntero solo elige la dirección); doble clic, Enter o «Terminar» cierran la línea. Arrastra los vértices para editarlos; clic derecho sobre un vértice lo borra. Sin líneas dibujadas, el pasillo es automático.</div>
    <label><span class="hint" id="lineInfo" style="margin:0">Pasillo automático</span><button class="s" onclick="clearLines()" title="Borra las líneas dibujadas y vuelve al pasillo automático">Auto</button></label>
    <div class="hint">Para mover o quitar un tramo del pasillo automático, pásalo a líneas: los núcleos quedan donde están (también desde la ficha de un tramo). Con un patio interior no se puede: el pasillo se traza solo alrededor del patio.</div>
    <button class="s" onclick="pasarALineas()" title="Los pasillos pasan a polilíneas, una por tramo, y los núcleos a modo manual donde están">Pasar a líneas</button>
@@ -275,6 +276,7 @@ const COL=new Proxy({},{get:(t,k)=>roomColor(k)});
 const KLABEL={bedroom:'Dormitorio',living:'Estar',dining:'Comedor',kitchen:'Cocina',bath:'Baño',hall:'Hall',hallway:'Pasillo',laundry:'Lavadero',storage:'Depósito',study:'Estudio',vestidor:'Vestidor'};
 let anchosPasillo=[], anchosRes=null, selPas=null, selPasP=null, selPasK=null;   // R10.8: anchos propios de algunos tramos [{p|seg, ancho}]; tramo elegido (índice en result.pasillos), su punto y su pedido, para volver a elegirlo al recalcular
 let selUnit=null, selCore=null, selSpec=null, showGraph=true, showDims=true, showEvac=true, showEquip=true, showTip=true;
+let ptr=null, ptrAlt=false, medModo='', herrTxt='', selTab=null, frenteBusy=false;   // R4.13b: dónde está el puntero (mundo, sin ajustar) y si Alt estaba apretada; qué campos de medida trae la barra ('linea', 'patio', 'tab|a|b' o ''); el texto de la herramienta en la barra; el tabique elegido {a, b, u: la vivienda elegida}
 const EVAC={ok:'#1a9d5b',saco:'#e8890c',fail:'#d63b3b'};   // puerta de cada vivienda: cumple, fondo de saco largo, recorrido largo
 
 /* ---------- paneles de entrada ---------- */
@@ -402,7 +404,7 @@ function draw(){ const gb=$('gb'); gb.innerHTML='';
   (result.cores||[]).forEach((c,i)=>{ if(i===selCore) gb.appendChild(el('polygon',{points:pts(c.poly),fill:'none',stroke:'#2f6fed','stroke-width':3,'pointer-events':'none'}));
    const t=el('polygon',{points:pts(c.poly),fill:'transparent','data-core':i,style:'cursor:move'}); t.appendChild(el('title',{},'Núcleo '+(i+1)+': arrástralo para moverlo; clic para cambiar sus medidas o girarlo')); gb.appendChild(t); });
   if(selUnit) (result.tabiques||[]).forEach((t,k)=>{ if(t.a!==selUnit&&t.b!==selUnit) return;   // R4.4: los tabiques de la vivienda elegida se arrastran
-   const l=el('line',{x1:X(t.seg[0]),y1:Y(t.seg[0]),x2:X(t.seg[1]),y2:Y(t.seg[1]),stroke:'#2f6fed','stroke-width':6,'stroke-linecap':'round',opacity:.85,'data-tab':k,'data-unit':selUnit,style:Math.abs(t.dir[0])>=Math.abs(t.dir[1])?'cursor:ew-resize':'cursor:ns-resize'});
+   const l=el('line',{x1:X(t.seg[0]),y1:Y(t.seg[0]),x2:X(t.seg[1]),y2:Y(t.seg[1]),stroke:'#2f6fed','stroke-width':selTab&&selTab.a===t.a&&selTab.b===t.b?9:6,'stroke-linecap':'round',opacity:.85,'data-tab':k,'data-unit':selUnit,style:Math.abs(t.dir[0])>=Math.abs(t.dir[1])?'cursor:ew-resize':'cursor:ns-resize'});
    l.appendChild(el('title',{},'Tabique entre '+t.a+' y '+t.b+': arrástralo para moverlo')); gb.appendChild(l); });
   const ue=selUnit&&result.units.find(x=>x.id===selUnit);   // R5.7: sus tabiques interiores (verdes) y sus puertas se arrastran
   if(ue&&ue.paredes){ ue.paredes.forEach((t,k)=>{ const l=el('line',{x1:X(t.seg[0]),y1:Y(t.seg[0]),x2:X(t.seg[1]),y2:Y(t.seg[1]),stroke:'#0f9d76','stroke-width':5,'stroke-linecap':'round',opacity:.85,'data-pared':k,style:Math.abs(t.dir[0])>=Math.abs(t.dir[1])?'cursor:ew-resize':'cursor:ns-resize'});
@@ -440,7 +442,7 @@ function drawDims(g){ if(!showDims||!view||!footprint.length) return;
  const px=m*view.s, x=Wd-px-24, y=Hd-22;
  [0,1].forEach(i=>g.appendChild(el('rect',{x:x+i*px/2,y:y-5,width:px/2,height:5,fill:i?HALO():TINTA(),stroke:TINTA(),'stroke-width':1,'pointer-events':'none'})));
  [[0,'0'],[px/2,String(m/2)],[px,m+' m']].forEach(([dx,t])=>g.appendChild(el('text',{x:x+dx,y:y-9,'text-anchor':'middle','font-size':10,fill:TINTA(),'pointer-events':'none'},t))); }
-function drawOverlay(){ const go=$('go'); go.innerHTML=''; if(!view) return; drawMeds(go); iconoScp(go);
+function drawOverlay(){ const go=$('go'); go.innerHTML=''; if(!view) return; if(medidaModo()!==medModo) herramientaBar(true); drawMeds(go); iconoScp(go);
  if(result&&viewMode==='plan'&&(!result.stories||planStory==null||(result.stories[planStory]||{}).program==='Residential'))
   (result.pasillos||[]).forEach(ps=>{ if(!ps.propio) return; const a=ps.eje[0], b=ps.eje[1], m=[(a[0]+b[0])/2,(a[1]+b[1])/2];   // R10.8: la medida de los tramos con ancho propio, a lo largo del pasillo
    let g=Math.atan2(Y(b)-Y(a),X(b)-X(a))*180/Math.PI; if(g>90) g-=180; if(g<-90) g+=180;
@@ -457,12 +459,14 @@ function drawOverlay(){ const go=$('go'); go.innerHTML=''; if(!view) return; dra
    c.addEventListener('pointerdown',e=>{ if(tool||e.button!==0||e.ctrlKey) return; e.stopPropagation(); drag={li,vi,moved:false,x:e.clientX,y:e.clientY}; $('svg').setPointerCapture(e.pointerId); });   // el clic derecho (o Ctrl+clic en Mac) no arrastra: lo borra
    c.addEventListener('contextmenu',e=>{ e.preventDefault(); recordar('borrar vértice'); if(pl.length>2) pl.splice(vi,1); else centerlines.splice(li,1); lineInfo(); drawOverlay(); if(lastStage) runCirc(); });
    go.appendChild(c); }); });
+ const nx=curLine.length&&ptr?puntoLinea(ptr,{altKey:ptrAlt}):mouse, np=tool==='patio'&&curPatio.length&&ptr?puntoPatio(ptr,{altKey:ptrAlt}):mouse;   // R4.13b: el punto que va a quedar (con medidas tipeadas, no el del puntero)
+ medidasVivas(nx,np);
  if(curLine.length){ for(let i=0;i<curLine.length-1;i++) line(curLine[i],curLine[i+1]);
-  if(mouse) line(curLine[curLine.length-1],mouse,'2 3'); curLine.forEach(p=>go.appendChild(el('circle',{cx:X(p),cy:Y(p),r:4,fill:'#2f6fed'}))); }
- if(tool==='patio'&&curPatio.length&&mouse){ go.appendChild(el('polygon',{points:pts(rectAlign(curPatio[0],mouse)),fill:'url(#hatch)',stroke:'#2f6fed','stroke-dasharray':'5 3','pointer-events':'none'}));
+  if(nx) line(curLine[curLine.length-1],nx,'2 3'); curLine.forEach(p=>go.appendChild(el('circle',{cx:X(p),cy:Y(p),r:4,fill:'#2f6fed'}))); }
+ if(tool==='patio'&&curPatio.length&&np){ go.appendChild(el('polygon',{points:pts(rectAlign(curPatio[0],np)),fill:'url(#hatch)',stroke:'#2f6fed','stroke-dasharray':'5 3','pointer-events':'none'}));
   curPatio.forEach(v=>go.appendChild(el('circle',{cx:X(v),cy:Y(v),r:4,fill:'#2f6fed','pointer-events':'none'}))); }
  if(tool==='addcore'&&mouse){ go.appendChild(el('rect',{x:X(mouse)-8,y:Y(mouse)-8,width:16,height:16,fill:circColor('core'),'fill-opacity':.6,stroke:circStroke()})); }
- if((tool==='line'||tool==='patio')&&mouse){ const x=X(mouse), y=Y(mouse); go.appendChild(el('path',{d:`M${x-6} ${y}H${x+6}M${x} ${y-6}V${y+6}`,stroke:'#2f6fed','stroke-width':1.5,'pointer-events':'none'})); } }   // R4.7: dónde cae el punto (la grilla no se ve dentro de las viviendas)
+ const cz=tool==='line'?nx:np; if((tool==='line'||tool==='patio')&&cz){ const x=X(cz), y=Y(cz); go.appendChild(el('path',{d:`M${x-6} ${y}H${x+6}M${x} ${y-6}V${y+6}`,stroke:'#2f6fed','stroke-width':1.5,'pointer-events':'none'})); } }   // R4.7: dónde cae el punto (la grilla no se ve dentro de las viviendas)
 
 /* ---------- medidas y normativa ---------- */
 const STD_LABELS={predio:'Predio',retiro_ventanas:'Retiro de medianera para ventanas (m)',patio_min:'Ancho mínimo de patio para iluminar (m)',retiro_divisoria:'Retiro mínimo si se separa de la divisoria (art. 53 e, m)',vivienda:'Vivienda',nucleo:'Núcleo',oficinas:'Oficinas',comercial:'Comercial',estacionamiento:'Estacionamiento',equipamiento:'Equipamiento y muebles',ventanas:'Ventanas',
@@ -543,7 +547,7 @@ function unitPanel(){ const c=$('ctx'); if(selCore!=null&&result&&result.cores&&
   <div class="hint">${(u.graph?u.graph.edges:[]).map(e=>{const na=(u.rooms.find(r=>r.id===e.a)||{}).name||e.a, nb=(u.rooms.find(r=>r.id===e.b)||{}).name||e.b; return `${e.ok?'✓':'✗'} ${na} ${e.type==='abierto'?'↔':'⇢'} ${nb} <i>(${e.type})</i>`;}).join('<br>')}</div>
   <h2 style="margin:10px 0 4px">Comprobaciones (${ok}/${n})</h2>
   ${(u.checks||[]).map(x=>`<div class="${x.ok?'hint':'w'}">${x.info?'ℹ':x.ok?'✓':'⚠'} ${x.msg}</div>`).join('')}
-  <h2 style="margin:10px 0 4px">Editar vivienda${u.editada?' (editada)':''}${u.editada_dentro?' · cambiada por dentro':''}</h2><div class="hint">Arrastra sus tabiques con las vecinas (azules) para cambiar su ancho; sus tabiques interiores (verdes) y sus puertas, para ajustarla por dentro.</div>
+  <h2 style="margin:10px 0 4px">Editar vivienda${u.editada?' (editada)':''}${u.editada_dentro?' · cambiada por dentro':''}</h2><div class="hint">Arrastra sus tabiques con las vecinas (azules) para cambiar su ancho, o haz clic en uno y escribe el frente exacto de una de las dos; sus tabiques interiores (verdes) y sus puertas, para ajustarla por dentro.</div>
   <button class="s" onclick="dividirVivienda()">Dividir en dos</button>${(result.tabiques||[]).map((t,k)=>t.a===u.id||t.b===u.id?`<button class="s" onclick="unirViviendas(${k})">Unir con ${t.a===u.id?t.b:t.a}</button>`:'').join('')}${puertasPanel(u)}
   <button class="s" onclick="selUnit=null;draw();unitPanel()">Cerrar</button>`;
  c.style.display='block'; }
@@ -654,7 +658,9 @@ async function quitarTramo(){ const ps=result&&result.pasillos&&result.pasillos[
  if(result!==antes) $('tag').textContent='Quitado '+juntos.map(q=>q.id).join(', '); }
 
 /* ---------- patios ---------- */
-function rectAlign(p0,p1){ const th=domAngle(footprint.length?footprint:[p0,p1]), c=Math.cos(th), s=Math.sin(th), L=q=>[q[0]*c+q[1]*s,-q[0]*s+q[1]*c], W=q=>[q[0]*c-q[1]*s,q[0]*s+q[1]*c], a=L(p0), b=L(p1);
+function marcoPatio(p0,p1){ const th=domAngle(footprint.length?footprint:[p0,p1]), c=Math.cos(th), s=Math.sin(th);   // los ejes del patio son los del edificio (L: del mundo al marco del patio; W: de vuelta)
+ return {L:q=>[q[0]*c+q[1]*s,-q[0]*s+q[1]*c],W:q=>[q[0]*c-q[1]*s,q[0]*s+q[1]*c]}; }
+function rectAlign(p0,p1){ const {L,W}=marcoPatio(p0,p1), a=L(p0), b=L(p1);
  return [W(a),W([b[0],a[1]]),W(b),W([a[0],b[1]])]; }   // rectángulo alineado con el edificio a partir de dos esquinas
 function patioDims(p){ const f=footprint.length?footprint:p, th=domAngle(f), c=Math.cos(th), s=Math.sin(th), L=q=>[q[0]*c+q[1]*s,-q[0]*s+q[1]*c], a=p.map(L), b=f.map(L);
  const r=k=>Math.max(0,Math.min(Math.max(...a.map(q=>q[k])),Math.max(...b.map(q=>q[k])))-Math.max(Math.min(...a.map(q=>q[k])),Math.min(...b.map(q=>q[k])))); return [r(0),r(1)]; }   // medidas dentro de la masa
@@ -670,7 +676,7 @@ function quitarPatios(){ recordar('quitar los patios'); ensurePatiosManual(); pa
 function renderPatios(){ const man=$('patios_mode').value==='manual', list=man?patios:(result&&result.patios)||[];
  $('pminTxt').textContent=STD&&STD.predio&&STD.predio.patio_min!=null?STD.predio.patio_min:3;
  $('patioList').innerHTML=list.map((p,i)=>{ const d=patioDims(p); return `<div class="prow" style="grid-template-columns:12px 1fr auto;cursor:default"><span class="sw" style="background:#e4e6ea;border:1px dashed #8a8f99"></span><span>Patio ${i+1} · ${d[0].toFixed(1)} × ${d[1].toFixed(1)} m${man?'':' (automático)'}</span><button class="s" style="padding:0 6px" title="Quitar este patio (pasa a modo manual)" onclick="quitarPatio(${i})">×</button></div>`; }).join('');
- $('patioInfo').textContent=man?'Dibujar: clic en dos esquinas opuestas; el patio se alinea con el edificio y se recorta a la masa (puedes empezar fuera de la planta). Para un patio en L, dibuja dos rectángulos.':'Trazo abre patios donde un predio entre medianeras es demasiado profundo para tener luz. Al dibujar o quitar un patio se pasa a modo manual.'; }
+ $('patioInfo').textContent=man?'Dibujar: clic en una esquina y, para la opuesta, otro clic o escribe el ancho y el fondo y pulsa Enter; el patio se alinea con el edificio y se recorta a la masa (puedes empezar fuera de la planta). Para un patio en L, dibuja dos rectángulos.':'Trazo abre patios donde un predio entre medianeras es demasiado profundo para tener luz. Al dibujar o quitar un patio se pasa a modo manual.'; }
 /* ---------- medianeras ---------- */
 const MED='#d63b3b';
 const sameSeg=(m,a,b)=>{ const eq=(p,q)=>Math.hypot(p[0]-q[0],p[1]-q[1])<0.05; return (eq(m.a,a)&&eq(m.b,b))||(eq(m.a,b)&&eq(m.b,a)); };
@@ -725,7 +731,7 @@ function puertasPanel(u){ if(!(u.doors||[]).length) return ''; const nom=i=>i===
 function anchoPuerta(k,v){ const u=result.units.find(x=>x.id===selUnit), d=u&&u.doors[k]; if(d&&v>0) editarInterior({op:'puerta',p:mitad([d.p,d.q]),entre:[d.a,d.b],ancho:v},'cambiar el ancho de una puerta de '+u.id); }
 function invertirPuerta(k){ const u=result.units.find(x=>x.id===selUnit), d=u&&u.doors[k]; if(d) editarInterior({op:'puerta',p:mitad([d.p,d.q]),entre:[d.a,d.b],abre:true},'invertir una puerta de '+u.id); }
 function descartarInteriores(){ const u=result&&result.units.find(x=>x.id===selUnit); if(!u) return; recordar('descartar los cambios por dentro de '+u.id); interiores=interiores.filter(e=>!enPoli(e.p,u.poly)); run('plans',{keepView:true}); }
-function edInfo(){ $('edInfo').innerHTML=ediciones.length?`${ediciones.length} cambio(s) en las viviendas (✎) · <button class="s" style="padding:0 6px" onclick="descartarEdiciones()">Descartar cambios</button>`:'Para editar una vivienda: clic en ella; arrastra sus tabiques (líneas azules) o usa «Dividir» y «Unir» en su ficha.'; }
+function edInfo(){ $('edInfo').innerHTML=ediciones.length?`${ediciones.length} cambio(s) en las viviendas (✎) · <button class="s" style="padding:0 6px" onclick="descartarEdiciones()">Descartar cambios</button>`:'Para editar una vivienda: clic en ella; arrastra sus tabiques (líneas azules) o haz clic en uno y escribe el frente exacto; «Dividir» y «Unir» están en su ficha.'; }
 
 /* ---------- herramientas ---------- */
 function setTool(t){ if(viewMode!=='plan') setView('plan'); if(tool==='line'&&t!=='line') finishLine(); curPatio=[]; tool=(tool===t)?null:t;
@@ -740,14 +746,77 @@ function coresModeChanged(){ recordar('modo de núcleos',{cores_mode:$('cores_mo
 function coreInfo(){ $('coreInfo').textContent=$('cores_mode').value==='manual'?coresManual.length+' núcleo(s) manual(es)':'Al añadir, quitar o arrastrar un núcleo se pasa a modo manual. Se ajusta al pasillo más cercano y se coloca en el lado donde haces clic o lo sueltas.'; }
 function ensureManual(){ if($('cores_mode').value!=='manual'){ $('cores_mode').value='manual'; coresManual=(result&&result.cores?result.cores.map(c=>c.center):[]); } }
 
+/* ---------- medidas tipeadas (R4.13b): lo tipeado manda; el puntero solo elige la dirección (y la medida que no se tipeó) ---------- */
+function numTipeado(s){ s=String(s==null?'':s).trim().replace(',','.'); return /^-?(\d+\.?\d*|\.\d+)$/.test(s)?+s:NaN; }   // «3,20» y «3.20»; vacío o con letras: no es una medida (NaN)
+const medidaCampo=k=>document.querySelector('#herr [data-medida="'+k+'"]');   // los campos de la barra: largo y angulo (línea), ancho y fondo (patio) y el frente de cada vivienda de un tabique (por su número)
+const medidaTexto=k=>{ const f=medidaCampo(k); return f?f.value.trim():''; }, medidaNum=k=>numTipeado(medidaTexto(k));
+function medidaModo(){ if(viewMode!=='plan') return '';   // qué campos corresponden ahora: la línea con un vértice, el patio con su primera esquina o el tabique elegido
+ if(tool==='line') return curLine.length?'linea':''; if(tool==='patio') return curPatio.length===1?'patio':''; if(tool) return '';
+ const s=tabiqueSel(); return s?'tab|'+s.t.a+'|'+s.t.b:''; }
+function avisoMedida(txt){ $('tag').textContent=txt; const h=$('herr'), s=h.style.display==='flex'&&h.firstElementChild; if(s) s.textContent=txt; }   // en la etiqueta de abajo y, si la barra está a la vista, en su texto
+function puntoLinea(w,e){ const prev=curLine[curLine.length-1], L=medidaNum('largo'), A=medidaNum('angulo'), tL=L>0, tA=!isNaN(A);   // el punto que va a quedar: sin medidas, el del puntero (grilla, vértices y Orto)
+ if(!prev||(!tL&&!tA)) return ajustar(w,prev,e);
+ const S=scpActual(), P=aLocal(prev,S), q=aLocal(w,S), dx=q[0]-P[0], dy=q[1]-P[1]; let u;   // todo en el SCP: 0° es su eje x, antihorario
+ if(tA) u=[Math.cos(A*Math.PI/180),Math.sin(A*Math.PI/180)];   // el ángulo tipeado manda sobre el Orto
+ else if($('orto').checked) u=Math.abs(dx)>=Math.abs(dy)?[dx<0?-1:1,0]:[0,dy<0?-1:1];   // el puntero elige hacia qué eje del SCP va
+ else { const n=Math.hypot(dx,dy); u=n>1e-9?[dx/n,dy/n]:[1,0]; }   // o hacia dónde está
+ let d=L; if(!tL){ const c=Math.cos(S.a), s=Math.sin(S.a); d=ajustarDesp(prev,[u[0]*c-u[1]*s,u[0]*s+u[1]*c],dx*u[0]+dy*u[1],e); if(d<0.001) return null; }   // solo el ángulo: el largo lo da el puntero (su proyección sobre esa dirección, al paso de la grilla)
+ const r=aMundo([P[0]+u[0]*d,P[1]+u[1]*d],S); return [+r[0].toFixed(3),+r[1].toFixed(3)]; }   // lo tipeado no se redondea a la grilla
+function puntoPatio(w,e){ const p0=curPatio[0], m=ajustar(w,null,e), A=medidaNum('ancho'), F=medidaNum('fondo'), tA=A>0, tF=F>0;   // la esquina opuesta: sin medidas, la del puntero
+ if(!tA&&!tF) return m;
+ const R=marcoPatio(p0,m), a=R.L(p0), r=R.L(w), b=R.L(m), q=R.W([tA?a[0]+(r[0]<a[0]?-A:A):b[0],tF?a[1]+(r[1]<a[1]?-F:F):b[1]]);   // en los ejes del patio; el puntero elige hacia qué lado va cada medida tipeada
+ return [+q[0].toFixed(3),+q[1].toFixed(3)]; }
+function ponerVertice(q){ if(!q) return avisoMedida('Con solo el ángulo, lleva el puntero hacia ese lado (da el largo) o escribe también el largo');   // el vértice tipeado (Enter, o un clic con medidas escritas): los campos quedan vacíos
+ curLine.push(q); herramientaBar(true); drawOverlay(); }
+function tabiqueSel(){ if(!selTab||tool||!result||!result.tabiques) return null;   // el tabique elegido, si sigue ahí y la vivienda elegida es una de sus dos
+ const st=result.stories&&planStory!=null?result.stories[planStory]:null, k=result.tabiques.findIndex(t=>t.a===selTab.a&&t.b===selTab.b);
+ if(k<0||selUnit!==selTab.u||(st&&st.program!=='Residential')){ selTab=null; return null; }
+ return {k,t:result.tabiques[k]}; }
+function frentesTab(t){ const A=result.units.find(u=>u.id===t.a), B=result.units.find(u=>u.id===t.b); if(!A||!B) return null;   // el frente de cada vecina, a lo largo del pasillo: el de la geometría (más fino que el u.width redondeado a cm) si la figura llena su franja
+ const d=t.dir, pw=+$('party_wall').value, dot=p=>p[0]*d[0]+p[1]*d[1], s=(dot(t.seg[0])+dot(t.seg[1]))/2;
+ let wA=s-pw/2-Math.min(...A.poly.map(dot)), wB=Math.max(...B.poly.map(dot))-s-pw/2;
+ if(Math.abs(wA-A.width)>0.006) wA=A.width; if(Math.abs(wB-B.width)>0.006) wB=B.width;   // no llena su franja (muro oblicuo, recorte): vale el del reparto
+ return {wA,wB}; }
+async function frenteTipeado(id,v){ if(frenteBusy) return; const s=tabiqueSel(), f=s&&frentesTab(s.t); if(!f) return; const t=s.t, esA=id===t.a, w=esA?f.wA:f.wB, tot=f.wA+f.wB, mn=0.5*(+$('min_unit_width').value);   // el frente de una vecina queda como se tipeó y la otra toma el resto
+ if(v<mn-1e-9||v>tot-mn+1e-9) return avisoMedida('El frente de '+id+' puede ir de '+mn.toFixed(2)+' a '+(tot-mn).toFixed(2)+' m ('+t.a+' y '+t.b+' suman '+tot.toFixed(2)+' m)');
+ const d=esA?v-w:w-v; if(Math.abs(d)<5e-4) return avisoMedida(id+' ya mide '+v.toFixed(2)+' m de frente');   // d: cuánto se corre el tabique, hacia la vivienda b si es positivo
+ const m=[(t.seg[0][0]+t.seg[1][0])/2,(t.seg[0][1]+t.seg[1][1])/2];
+ frenteBusy=true; try{ await editar({op:'tabique',p:mitad(t.seg),a:[+(m[0]+t.dir[0]*d).toFixed(3),+(m[1]+t.dir[1]*d).toFixed(3)]},'fijar el frente de '+id+' en '+v.toFixed(2)+' m'); } finally{ frenteBusy=false; }   // el motor recalcula: otro Enter mientras tanto no cuenta
+ const u=result.units.find(x=>x.id===id); herramientaBar(true); drawOverlay();
+ avisoMedida(u&&Math.abs(u.width-v)<0.015?id+' mide ahora '+u.width.toFixed(2)+' m de frente':'No se pudo dejar '+id+' en '+v.toFixed(2)+' m: deshaz con ↶'); }
+function medidasVivas(nx,np){ const k=medModo.split('|')[0], poner=(c,v)=>{ const f=medidaCampo(c); if(f) f.placeholder=v; };   // lo que da el puntero, en gris dentro de los campos vacíos
+ if(k==='linea'&&nx){ const S=scpActual(), P=aLocal(curLine[curLine.length-1],S), Q=aLocal(nx,S); poner('largo',Math.hypot(Q[0]-P[0],Q[1]-P[1]).toFixed(2)); poner('angulo',String(+((Math.atan2(Q[1]-P[1],Q[0]-P[0])*180/Math.PI+360)%360).toFixed(1))); }
+ else if(k==='patio'&&np){ const R=marcoPatio(curPatio[0],np), a=R.L(curPatio[0]), b=R.L(np); poner('ancho',Math.abs(b[0]-a[0]).toFixed(2)); poner('fondo',Math.abs(b[1]-a[1]).toFixed(2)); }
+ else if(k==='tab'){ const s=tabiqueSel(), f=s&&frentesTab(s.t), d=dragTab&&dragTab.moved?dragTab.d:0;   // los frentes de ahora (con el tabique en el aire, los de ese momento), salvo en un campo que se está escribiendo
+  if(f) [[s.t.a,f.wA+d],[s.t.b,f.wB-d]].forEach(([i,w])=>{ const c=medidaCampo(i); if(c&&!c.dataset.sucio) c.value=c.dataset.ini=w.toFixed(2); }); } }
+function medidaInput(f){ const t=f.value.trim(); f.dataset.sucio='1'; f.classList.toggle('mal',t!==''&&!(numTipeado(t)>(f.dataset.medida==='angulo'?-Infinity:0))); if(tool) drawOverlay(); }   // en rojo si no es una medida; la vista previa sigue lo que se escribe
+function medidaTecla(e){ if(e.key!=='Enter') return; e.preventDefault(); e.stopPropagation(); medidaEnter(e.target); }   // Enter coloca lo tipeado (y no llega al Enter que termina la línea)
+function medidaEnter(f){ const k=medModo.split('|')[0];
+ if(k==='linea'){ const tl=medidaTexto('largo'), ta=medidaTexto('angulo');
+  if(!tl&&!ta) return finishLine();   // sin nada escrito, Enter termina la línea como siempre
+  if(tl&&!(medidaNum('largo')>0)) return avisoMedida('El largo es un número mayor que 0, por ejemplo 12 o 3,20');
+  if(ta&&isNaN(medidaNum('angulo'))) return avisoMedida('El ángulo es un número en grados, por ejemplo 45');
+  return ponerVertice(puntoLinea(ptr||curLine[curLine.length-1],{altKey:ptrAlt})); }
+ if(k==='patio'){ const ta=medidaTexto('ancho'), tf=medidaTexto('fondo');
+  if(!ta&&!tf) return avisoMedida('Escribe el ancho y el fondo del patio, o haz clic en la esquina opuesta');
+  if((ta&&!(medidaNum('ancho')>0))||(tf&&!(medidaNum('fondo')>0))) return avisoMedida('El ancho y el fondo son números mayores que 0, por ejemplo 6 o 3,5');
+  const n=patios.length; curPatio.push(puntoPatio(ptr||curPatio[0],{altKey:ptrAlt})); finishPatio(); herramientaBar(true);
+  if(patios.length===n) avisoMedida('Un patio de menos de 1 m² no se crea: escribe también la otra medida'); return; }
+ if(k==='tab'){ const id=f&&f.dataset.medida, t=f?f.value.trim():'';
+  if(!id||!t) return avisoMedida('Escribe el frente que quieres para '+(id||'una vivienda')+' y pulsa Enter');
+  if(t===f.dataset.ini) return avisoMedida(id+' ya mide '+t+' m de frente: escribe otro');
+  const v=numTipeado(t); if(!(v>0)) return avisoMedida('El frente es un número mayor que 0, por ejemplo 4,50');
+  return frenteTipeado(id,v); } }
+
 const svg=$('svg');
 svg.addEventListener('click',e=>{ if(!view||svg._skipClick) return;
- if(!tool){ const tc=e.target.closest&&e.target.closest('[data-core]'); if(tc){ selCore=+tc.getAttribute('data-core'); selUnit=null; selPas=null; draw(); unitPanel(); return; }
+ if(!tool){ if(!(e.target.closest&&e.target.closest('[data-tab]'))) selTab=null;   // R4.13b: el tabique elegido se suelta con un clic en otra cosa
+  const tc=e.target.closest&&e.target.closest('[data-core]'); if(tc){ selCore=+tc.getAttribute('data-core'); selUnit=null; selPas=null; draw(); unitPanel(); return; }
   const tp=e.target.closest&&e.target.closest('[data-pas]'); if(tp&&tp.getAttribute('data-pas')!==''){ selPas=+tp.getAttribute('data-pas'); selUnit=null; selCore=null; draw(); unitPanel(); return; }   // R10.8: un tramo de pasillo
   const t=e.target.closest&&e.target.closest('[data-unit]'); selUnit=t?t.getAttribute('data-unit'):null; selCore=null; selPas=null; draw(); unitPanel(); return; }
- const w=toWorld(e);
- if(tool==='line'){ if(e.detail>1) return; curLine.push(ajustar(w,curLine[curLine.length-1],e)); drawOverlay(); }
- else if(tool==='patio'){ curPatio.push(ajustar(w,null,e)); if(curPatio.length===2) finishPatio(); else drawOverlay(); }
+ const w=toWorld(e); ptr=w; ptrAlt=!!e.altKey;
+ if(tool==='line'){ if(e.detail>1) return; if(medidaTexto('largo')||medidaTexto('angulo')) return medidaEnter(); curLine.push(ajustar(w,curLine[curLine.length-1],e)); drawOverlay(); }   // R4.13b: con medidas escritas, el clic es un Enter (el puntero da la dirección)
+ else if(tool==='patio'){ if(curPatio.length&&(medidaTexto('ancho')||medidaTexto('fondo'))) return medidaEnter(); curPatio.push(ajustar(w,null,e)); if(curPatio.length===2) finishPatio(); else drawOverlay(); }
  else if(tool==='addcore'){ recordar('añadir núcleo'); ensureManual(); coresManual.push(ajustar(w,null,e,{vertices:false})); coreInfo(); runCirc(); }
  else if(tool==='scp'){ const i=edgeAt(e); if(i!=null) scpObjeto(i,w); }
  else if(tool==='medianera'){ const i=edgeAt(e); if(i==null) return; const a=footprint[i], b=footprint[(i+1)%footprint.length];
@@ -765,12 +834,12 @@ let panDrag=null, dragCore=null, dragTab=null, dragIn=null;
 svg.addEventListener('pointerdown',e=>{ if(tool||drag) return; if(e.target.closest&&e.target.closest('circle')) return;
  const ti=e.target.closest&&e.target.closest('[data-pared],[data-puerta]'); if(ti&&result&&selUnit){ const pa=ti.hasAttribute('data-pared');   // R5.7: un tabique interior o una puerta
   dragIn={u:selUnit,tipo:pa?'pared':'puerta',k:+ti.getAttribute(pa?'data-pared':'data-puerta'),x:e.clientX,y:e.clientY,w:toWorld(e),d:0,moved:false}; return; }
- const tt=e.target.closest&&e.target.closest('[data-tab]'); if(tt&&result&&result.tabiques){ dragTab={k:+tt.getAttribute('data-tab'),x:e.clientX,y:e.clientY,w:toWorld(e),d:0,moved:false}; return; }   // R4.4: arrastrar un tabique
+ const tt=e.target.closest&&e.target.closest('[data-tab]'); if(tt&&result&&result.tabiques){ dragTab={k:+tt.getAttribute('data-tab'),x:e.clientX,y:e.clientY,w:toWorld(e),d:0,moved:false}; const t0=result.tabiques[dragTab.k]; if(t0){ selTab={a:t0.a,b:t0.b,u:selUnit}; herramientaBar(true); drawOverlay(); } return; }   // R4.4: arrastrar un tabique (R4.13b: queda elegido; la barra trae el frente de sus dos viviendas)
  const tc=e.target.closest&&e.target.closest('[data-core]'); if(tc&&result&&result.cores){ dragCore={i:+tc.getAttribute('data-core'),x:e.clientX,y:e.clientY,w:toWorld(e),d:[0,0],moved:false}; return; }   // R4.3: arrastrar un núcleo
  panDrag={x:e.clientX,y:e.clientY,p:pan.slice(),moved:false}; });
 window.addEventListener('pointermove',e=>{ if(!panDrag) return; const dx=e.clientX-panDrag.x, dy=e.clientY-panDrag.y; if(Math.abs(dx)+Math.abs(dy)>4) panDrag.moved=true; if(panDrag.moved){ pan=[panDrag.p[0]+dx,panDrag.p[1]+dy]; draw(); } });
 window.addEventListener('pointerup',e=>{ if(panDrag&&panDrag.moved){ svg._skipClick=true; setTimeout(()=>svg._skipClick=false,0); } panDrag=null; });
-svg.addEventListener('mousemove',e=>{ if(!view) return; const w=toWorld(e);
+svg.addEventListener('mousemove',e=>{ if(!view) return; const w=toWorld(e); ptr=w; ptrAlt=!!e.altKey;
  if(tool==='medianera'||tool==='scp'){ const h=edgeAt(e); if(h!==medHover){ medHover=h; drawOverlay(); } return; }
  if(tool==='patio'){ mouse=ajustar(w,null,e); drawOverlay(); return; }
  if(tool==='line'||tool==='addcore') { mouse=tool==='line'?ajustar(w,curLine[curLine.length-1],e):ajustar(w,null,e,{vertices:false}); drawOverlay(); } });
@@ -832,7 +901,8 @@ svg.addEventListener('pointerup',e=>{ if(!dragCore) return; const g=dragCore; dr
 window.addEventListener('keydown',e=>{ const t=e.target, texto=t.tagName==='TEXTAREA'||(t.tagName==='INPUT'&&!/^(checkbox|radio|button|file|range|color)$/.test(t.type));   // en un campo de texto, su propio deshacer
  if((e.ctrlKey||e.metaKey)&&!texto){ const k=e.key.toLowerCase();
   if(k==='z'&&!e.shiftKey){ e.preventDefault(); deshacer(); return; } if((k==='z'&&e.shiftKey)||k==='y'){ e.preventDefault(); rehacer(); return; } }
- if(e.key==='Enter'&&tool==='line') finishLine(); if(e.key==='Escape'){ if(!tool&&!curLine.length&&!$('panel').hidden&&!texto) grupo(null); curLine=[]; curPatio=[]; if(tool) setTool(tool); drawOverlay(); }
+ if(!texto&&t.tagName!=='SELECT'&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&/^[0-9.,]$/.test(e.key)){ const f=document.querySelector('#herr [data-medida]'); if(f&&$('herr').style.display!=='none') f.focus(); }   // R4.13b: un número, con la barra con campos, va al primero (el carácter se escribe ahí)
+ if(e.key==='Enter'&&tool==='line') finishLine(); if(e.key==='Escape'){ if(!tool&&selTab){ selTab=null; drawOverlay(); return; } if(!tool&&!curLine.length&&!$('panel').hidden&&!texto) grupo(null); curLine=[]; curPatio=[]; if(tool) setTool(tool); drawOverlay(); }
  if(e.key==='F7'||e.key==='F8'||e.key==='F9'){ e.preventDefault(); alternar({F7:'grilla',F8:'orto',F9:'snap'}[e.key]); } });   // F7 grilla, F8 Orto y F9 snap, como en AutoCAD (R4.6, R4.7)
 
 /* ---------- programas ---------- */
@@ -883,11 +953,17 @@ temaUI();
 function grupo(k){ const p=$('panel'), ab=k&&!(p.dataset.g===k&&!p.hidden)?k:null;   // un grupo a la vez; otro clic en el mismo lo cierra
  document.querySelectorAll('.grupo').forEach(g=>{ g.hidden=g.dataset.grupo!==ab; }); document.querySelectorAll('.rail button').forEach(b=>b.classList.toggle('on',b.dataset.grupo===ab));
  p.hidden=!ab; p.dataset.g=ab||''; try{ localStorage.setItem('trazo.grupo',ab||''); }catch(e){} render(); }
-function herramientaBar(){ const h=$('herr'); $('tag').style.visibility=tool?'hidden':''; if(!tool){ h.style.display='none'; return; }   // la herramienta activa: qué hacer y sus botones
- const b=(t,f,tt)=>`<button class="s" onclick="${f}"${tt?' title="'+tt+'"':''}>${t}</button>`;
- h.innerHTML='<span>'+esc($('tag').textContent)+'</span>'+(tool==='line'?b('Terminar','finishLine()')+b('Borrar última','undoLine()','La última línea o el último vértice'):
+function herramientaBar(auto){ const h=$('herr'); $('tag').style.visibility=tool?'hidden':''; medModo=medidaModo(); if(!tool&&!medModo){ h.style.display='none'; return; }   // la herramienta activa (o el tabique elegido): qué hacer, sus campos de medida (R4.13b) y sus botones
+ if(!auto) herrTxt=$('tag').textContent;   // auto: se rearma por un cambio de campos y conserva el texto de la herramienta (la etiqueta ya dice otra cosa)
+ const b=(t,f,tt)=>`<button class="s" onclick="${f}"${tt?' title="'+tt+'"':''}>${t}</button>`, modo=medModo.split('|')[0], ts=modo==='tab'?tabiqueSel():null, fr=ts&&frentesTab(ts.t);
+ const c=(rot,k,tt,u,v)=>`<label title="${tt}">${rot} <input type="text" inputmode="decimal" autocomplete="off" spellcheck="false" data-medida="${k}"${v==null?'':' value="'+v+'" data-ini="'+v+'" onfocus="this.select()" onmouseup="event.preventDefault()"'} oninput="medidaInput(this)" onkeydown="medidaTecla(event)"> ${u||'m'}</label>`;   // un campo de medida: acepta coma o punto decimal; con valor de partida, se elige entero al tomar el foco
+ const campos=modo==='linea'?c('Largo','largo','Largo del tramo, en metros. Lo que escribas manda: el puntero solo elige la dirección (coma o punto decimal)')+c('Ángulo','angulo','Ángulo en grados, en el SCP: 0° es su eje x y crece en sentido antihorario. Sin ángulo, el puntero elige la dirección','°'):
+  modo==='patio'?c('Ancho','ancho','Medida a lo largo del edificio, en metros. Lo que escribas manda: el puntero elige hacia qué lado va')+c('Fondo','fondo','Medida transversal, en metros. Lo que escribas manda: el puntero elige hacia qué lado va'):
+  ts?(ts.t.b===selUnit?[ts.t.b,ts.t.a]:[ts.t.a,ts.t.b]).map(i=>c(i,i,'Frente de '+i+' a lo largo del pasillo, en metros: escribe el que quieres y Enter; la otra vivienda toma el resto','m',fr?(i===ts.t.a?fr.wA:fr.wB).toFixed(2):'')).join('')+(fr?'<span class="esc">entre las dos: '+(fr.wA+fr.wB).toFixed(2)+' m</span>':''):'';
+ const txt=modo==='linea'||modo==='patio'?'Clic o escribe medidas y Enter':ts?'Tabique: escribe un frente y Enter':esc(herrTxt);
+ h.innerHTML='<span>'+txt+'</span>'+campos+(tool==='line'?b('Terminar','finishLine()')+b('Borrar última','undoLine()','La última línea o el último vértice'):
   tool==='addcore'?b('Quitar núcleo',"setTool('delcore')"):tool==='delcore'?b('Añadir núcleo',"setTool('addcore')"):tool==='medianera'?b('Quitar todas','quitarMedianeras()'):tool==='patio'?b('Quitar todos','quitarPatios()'):tool==='scp'?b('Edificio','scpEdificio()','Origen en la esquina del rectángulo que contiene la masa, alineado con su fachada principal')+b('Mundo','scpMundo()','Los ejes x, y del plano (de Rhino)'):'')+
-  '<span class="esc"><kbd>Esc</kbd> salir</span>'; h.style.display='flex'; }
+  '<span class="esc"><kbd>Esc</kbd> '+(tool?'salir':'cerrar')+'</span>'; h.style.display='flex'; }
 function quitarMedianeras(){ if(medianeras.length) recordar('quitar las medianeras'); medianeras=[]; renderMeds(); draw(); if(lastStage) run(lastStage,{keepView:true}); }
 function capas(){ const ks=['showGraph','showEquip','showDims','showEvac','showTip']; $('nCapas').textContent=ks.filter(k=>$(k).checked).length+' de '+ks.length; }
 function verTodo(v){ const t=$('todo'); t.hidden=v!=null?!v:!t.hidden; $('btnTodo').textContent=t.hidden?'Ver todo ›':'Ver menos ‹'; }
@@ -904,7 +980,7 @@ let viewMode='plan', planStory=null, sel=new Set(), anchor=null;
 let view3={az:-0.65, el:0.62, explode:0, plans:true, isolate:false, wire:false};
 function setView(m,silent){ viewMode=m; $('svg').style.display=m==='plan'?'block':'none'; $('axo').style.display=m==='axo'?'block':'none';
  $('vPlan').classList.toggle('on',m==='plan'); $('vAxo').classList.toggle('on',m==='axo'); $('axoCtl').style.display=m==='axo'?'inline-flex':'none'; $('lvlGrp').style.display=m==='plan'?'inline-flex':'none';
- ['dibujo','capas'].forEach(k=>{ $(k).style.display=m==='plan'?'':'none'; }); document.querySelector('.encuadre').style.display=m==='plan'?'':'none'; if(m!=='plan') $('herr').style.display='none';   // R4.6: lo de la planta, solo en 2D
+ ['dibujo','capas'].forEach(k=>{ $(k).style.display=m==='plan'?'':'none'; }); document.querySelector('.encuadre').style.display=m==='plan'?'':'none'; if(m!=='plan'){ $('herr').style.display='none'; medModo=null; }   // R4.6: lo de la planta, solo en 2D
  if(m==='plan'&&tool==null) $('svg').style.cursor='default'; if(!silent){ render(); ctxPanel(); } }
 function fillLevels(){ if(!result||!result.stories) return; const s=$('lvl'); if(planStory==null||planStory>=result.stories.length){ const r=result.stories.find(x=>x.program==='Residential'); planStory=r?r.index:0; }
  s.innerHTML=result.stories.map(st=>`<option value="${st.index}" ${st.index===planStory?'selected':''}>${st.index} · ${progLabel(st.program)}</option>`).join(''); }
