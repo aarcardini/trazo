@@ -4989,3 +4989,123 @@ console.log(JSON.stringify(salida));
 
 if __name__ == "__main__":
     test_atajos_y_cotas(); print("OK70")
+
+
+def test_galeria():
+    """R3.8: galería, el pasillo de borde dentro del patio (pedido del usuario: «a veces los patios pueden ser muy grandes
+    y albergar las circulaciones generales, para que el espacio útil sea únicamente para las viviendas»). Por patio
+    manual, params.patios_galeria (alineado con patios) marca que el ala cuyo pasillo de borde da a ese patio lo corre
+    al patio: la banda del ancho del pasillo queda del otro lado del muro, pegada al edificio, y toda el ala es de las
+    viviendas (la tira con el pasillo contra la medianera no cambia: se descartó para esta versión, sus viviendas solo
+    tendrían luz por la galería). Planta del usuario: 30 × 45 entre medianeras, patio de 20 × 17 abierto a la
+    medianera izquierda, pasillo de 2 m, 4 núcleos manuales."""
+    import copy, re
+    fp = [[0, 0], [30, 0], [30, 45], [0, 45]]
+    mix = [{"name": "2 dorm", "area": 75, "percent": 25, "dorms": 2}, {"name": "3 dorm", "area": 95, "percent": 25, "dorms": 3, "vestidor": True},
+           {"name": "1 dorm", "area": 60, "percent": 25, "dorms": 1}, {"name": "Mono", "area": 32, "percent": 25, "dorms": 0}]
+    std = {"vivienda": {"dorm_principal": {"min_area": 8, "min_side": 2.6, "typ_area": 11.5, "typ": [3.2, 3.6]},
+                        "estudio": {"min_area": 0, "min_side": 0, "typ_area": 0, "typ": [0, 0]}}}
+    base = dict(corridor_width=2, core_width=5.45, core_depth=7.02, core_count=2, egress_single=18, egress_multi=30,
+                min_unit_width=5, party_wall=0.3, max_unit_depth=14, outer_wall=0.35, unit_mix=mix, standards=std,
+                medianeras=[{"a": [30, 0], "b": [30, 45], "retiro": 0}, {"a": [0, 45], "b": [0, 0], "retiro": 0}],
+                cores_mode="manual", cores=[[3, 11], [3.075, 39.325], [25, 3.075], [25, 31.125]],
+                patios_mode="manual", patios=[[[0, 8], [20, 8], [20, 25], [0, 25]]],
+                stories=[{"program": "Residential", "height": 3}] * 5)
+    corre = lambda **k: run(fp, **dict(copy.deepcopy(base), **k))
+    patio = base["patios"][0]
+    dentro = lambda p: all(0 - 1e-6 <= x <= 20 + 1e-6 and 8 - 1e-6 <= y <= 25 + 1e-6 for x, y in p)
+    ejes = lambda r: {ps["id"]: ps["eje"] for ps in r["pasillos"]}
+    viv = lambda r: [(u["id"], u["type"], u["area"], u["width"], u["depth"], u["pasillo"]) for u in r["units"]]
+    # (a) sin marca (o con la marca apagada, o la clave ausente), el resultado es el de siempre
+    r0 = corre()
+    assert r0["galerias"] == [] and "galeria_area" not in r0["metrics"] and not any(ps.get("galeria") for ps in r0["pasillos"])
+    r0b = corre(patios_galeria=[False])
+    assert ejes(r0b) == ejes(r0) and viv(r0b) == viv(r0) and r0b["metrics"] == r0["metrics"]
+    p1 = next(ps for ps in r0["pasillos"] if abs(ps["eje"][0][1] - ps["eje"][1][1]) < 1e-6 and ps["eje"][0][1] < 8)   # el brazo de abajo
+    assert abs(p1["eje"][0][1] - 6.65) < 0.01 and r0["metrics"]["patio_area"] == 340.0
+    u_p1 = [u for u in r0["units"] if u["pasillo"] == p1["id"]]
+    assert u_p1 and all(u["depth"] < 5.3 for u in u_p1)                   # 7,3 m de ala menos el pasillo
+    # (b) con la marca: el pasillo del brazo de abajo va por el patio y el ala entera es de las viviendas
+    r1 = corre(patios_galeria=[True])
+    gal = [ps for ps in r1["pasillos"] if ps.get("galeria")]
+    assert len(gal) == 1 and gal[0]["id"] == p1["id"], gal
+    assert abs(gal[0]["eje"][0][1] - 9.0) < 0.01 and abs(gal[0]["eje"][1][1] - 9.0) < 0.01     # el eje, 1 m dentro del patio
+    partes = [r1["corridors"][k] for k in gal[0]["partes"]]
+    banda = next(c for c in partes if min(x for x, _ in c) < 1)
+    assert dentro([(min(x, 20), y) for x, y in banda]), banda                # la banda, en el patio (x < 20)
+    assert any(max(x for x, _ in c) > 29 for c in partes)                   # y sigue hasta el pasillo de la tira (P1 unido a P3)
+    assert len(r1["galerias"]) == 1 and dentro(r1["galerias"][0])
+    g = r1["metrics"]["galeria_area"]
+    assert 36 <= g <= 40 and abs(r1["metrics"]["patio_area"] - (340 - g)) < 0.11, r1["metrics"]
+    assert r1["metrics"]["plate_area"] == r0["metrics"]["plate_area"] and r1["metrics"]["gfa"] == r0["metrics"]["gfa"]   # la galería no es planta
+    u1 = [u for u in r1["units"] if u["pasillo"] == p1["id"]]
+    assert u1 and all(abs(u["depth"] - 7.3) < 0.05 for u in u1), [u["depth"] for u in u1]     # el fondo entero del ala
+    assert all(abs(u["door"][1] - 7.65) < 0.01 for u in u1)                 # la puerta, en el borde de la planta sobre la galería
+    assert r1["metrics"]["mix"]["nsa"] > r0["metrics"]["mix"]["nsa"] + 10 and r1["metrics"]["efficiency"] > r0["metrics"]["efficiency"]
+    assert all(u["egress_status"] == "ok" for u in r1["units"]), [(u["id"], u["egress_status"]) for u in r1["units"]]
+    assert all(u["rooms"] and u["ventanas"] for u in u1)                    # con luz: la fachada del fondo
+    assert not any(abs(w["seg"][0][1] - 7.65) < 0.05 and abs(w["seg"][1][1] - 7.65) < 0.05 for u in u1 for w in u["ventanas"])   # sin ventanas a la galería
+    e0, e1 = ejes(r0), ejes(r1)
+    otros = [k for k in e0 if k != p1["id"]]
+    assert all(e1[k] == e0[k] for k in otros), (e0, e1)                     # la tira y el brazo de arriba, con su pasillo
+    assert 40 <= r1["metrics"]["circulation_pct"] <= 42 and r1["metrics"]["unused_area"] < 5
+    # (d) el núcleo manual en (3, 11), dentro del patio, se apoya en la galería del brazo de abajo
+    c0 = next(c for c in r1["cores"] if c["spec"] == 0)
+    assert abs(c0["center"][0] - 3.075) < 0.05 and abs(max(y for _, y in c0["poly"]) - 10) < 0.01 and min(y for _, y in c0["poly"]) < 1
+    assert any(p_["kind"] == "stair" for p_ in c0["parts"])
+    # (e) un patio automático o un patio sin marca no cambia nada
+    ra = run(fp, **dict(copy.deepcopy(base), patios_mode="auto", patios=None))
+    rb = run(fp, **dict(copy.deepcopy(base), patios_mode="auto", patios=None, patios_galeria=[True]))
+    assert ejes(ra) == ejes(rb) and viv(ra) == viv(rb) and rb["galerias"] == []
+    rc = corre(patios_galeria=[False, True])                                 # una marca de más (sin patio) no hace nada
+    assert ejes(rc) == ejes(r0) and viv(rc) == viv(r0)
+    # el patio del otro lado (espejado): la galería no depende de la orientación
+    M = lambda p: [30 - p[0], p[1]]
+    esp = dict(copy.deepcopy(base), medianeras=[{"a": M(m["a"]), "b": M(m["b"]), "retiro": 0} for m in base["medianeras"]],
+               cores=[M(c) for c in base["cores"]], patios=[[M(p) for p in patio][::-1]], patios_galeria=[True])
+    re_ = run([M(p) for p in fp][::-1], **esp)
+    gal3 = [ps for ps in re_["pasillos"] if ps.get("galeria")]
+    assert len(gal3) == 1 and abs(gal3[0]["eje"][0][1] - 9.0) < 0.01 and 36 <= re_["metrics"]["galeria_area"] <= 40
+    assert len(re_["galerias"]) == 1 and all(10 - 1e-6 <= x <= 30 + 1e-6 and 8 - 1e-6 <= y <= 10 + 1e-6 for x, y in re_["galerias"][0])
+    ue = [u for u in re_["units"] if u["pasillo"] == gal3[0]["id"]]
+    assert ue and all(abs(u["depth"] - 7.3) < 0.05 for u in ue)
+    # el proyecto guardado por la web lleva los dos parámetros; el motor los lee tal cual (compatibilidad del JSON)
+    from engine.layout import DEFAULT_PARAMS
+    assert DEFAULT_PARAMS["patios_galeria"] is None and "galeria_ventanas" not in DEFAULT_PARAMS
+    # ---- la web (el comportamiento se comprobó en navegador; acá se vigila el código): la casilla por patio en la ficha
+    # del patio, el proyecto, deshacer, el dibujo de la banda, la ficha del tramo y el resumen
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    js = html.split("<script>", 1)[1].split("</script>", 1)[0]
+    cuerpo = lambda f: js.split(f, 1)[1].split("\nfunction ", 1)[0].split("\nasync function ", 1)[0]
+    assert "galeria_ventanas" not in html                      # la regla 2 (ventanas a la galería) se descartó: sin casilla
+    assert 'id="paGaleria"' in cuerpo("function patioPanel(") and "galeriaPatio(this.checked)" in cuerpo("function patioPanel(")
+    gp = cuerpo("function galeriaPatio(")
+    assert "recordar(" in gp and "ensurePatiosManual()" in gp and "patiosGaleria=" in gp
+    obj = cuerpo("function params(){")
+    assert "patios_galeria:" in obj
+    assert "P.patios_galeria" in cuerpo("function abrirProyecto(") and "m.patios_galeria" in cuerpo("function setMass(")
+    assert "patiosGaleria" in cuerpo("function foto(") and "patiosGaleria=s.patiosGaleria||[]" in cuerpo("function volverA(")
+    assert "patiosGaleria=[]" in cuerpo("async function nuevo(") and "patiosGaleria=[]" in cuerpo("function ensurePatiosManual(")
+    for f in ("function quitarPatio(", "function quitarPatioElegido("):
+        assert "patiosGaleria.splice(" in cuerpo(f), f
+    assert "function conGaleria(" in js and all("conGaleria(" in cuerpo(f) for f in ("function lineasPanel(", "function tramosAuto(", "async function quitarTramo(", "function sinAuto("))
+    assert "result.galerias" in cuerpo("function draw(){") and "'class':'galeria'" in cuerpo("function draw(){") and "function patronGaleria(" in js
+    assert "result.galerias" in cuerpo("function drawAxo(){") and "'class':'galeria'" in cuerpo("function drawAxo(){")
+    assert "'Galería · '" in cuerpo("function datoEn(") and "ps.galeria" in cuerpo("function pasilloPanel(")
+    assert "galeria_area" in cuerpo("function resumenPanel(") and "galeria_area" in cuerpo("function panels(")
+    # cada lugar que cambia las marcas registra antes el estado (como test_deshacer con los patios)
+    bloques = re.compile(r"\nfunction |\nasync function |addEventListener\(|onclick=\"|onchange=\"")
+    exentas = ("function volverA", "function setMass", "async function nuevo", "function ensurePatiosManual")
+    sin = []
+    for m in re.finditer(r"\bpatiosGaleria(\[[^\]]*\])?(=(?![=>])|\.(push|pop|splice)\()", js):
+        linea = js[js.rfind("\n", 0, m.start()) + 1:m.start()]
+        if linea.startswith("let "):
+            continue
+        ini = max([0] + [b.start() for b in bloques.finditer(js, 0, m.start())])
+        bloque = js[ini:m.start()].lstrip("\n")
+        if not bloque.startswith(exentas) and "recordar(" not in bloque:
+            sin.append(js[m.start() - 60:m.end() + 20])
+    assert not sin, sin
+
+if __name__ == "__main__":
+    test_galeria(); print("OK71")

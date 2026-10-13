@@ -225,14 +225,14 @@ def build_pieces(plate, params):
             o, a, xa, xb = _single_frame(plate, a, pa, G.centroid(plate))
             pc = _make_piece(plate, o, a, xa, xb, an)
             pc["single"] = True
-        return [pc]
+        return _galeria([pc], plate, params)
     if dec and len(cands) > 1:
         # las dos direcciones de corte dejan alas: la que deja los pasillos unidos entre sí (la punta de uno entra en
         # otra ala, como lo ve _connect) y, a igual cantidad de grupos, la de mejor puntaje. Si no, en una planta en C
         # o en U el corte a lo largo deja tres tiras paralelas cuyos pasillos no se tocan: cada uno es una isla con
         # sus dos puntas libres, con un núcleo en cada una (seis núcleos y seis ascensores en una planta de 15 × 30)
         opciones = [_piezas_de([(p, th) for p in polys], plate, holes, pedidos, params) for _, th, polys in cands]
-        return min(opciones, key=_componentes)
+        return _galeria(min(opciones, key=_componentes), plate, params)
     alas = [(p, dec[0]) for p in dec[1]] if dec else alas
     pieces = _piezas_de(alas, plate, holes, pedidos, params)
     if not dec:
@@ -240,7 +240,7 @@ def build_pieces(plate, params):
             ivs = G.line_intervals(pc["loc_plate"], 0.0)
             if ivs:
                 pc["eje"] = max(ivs, key=lambda t: t[1] - t[0])
-    return pieces
+    return _galeria(pieces, plate, params)
 
 
 def _piezas_de(alas, plate, holes, pedidos, params):
@@ -310,6 +310,100 @@ def _pieza_ala(poly, th, polys, holes, bl, centre, an, params):
     return _make_piece(poly, *_frame_for_poly(poly, ang), ancho=an)
 
 
+# ---------------------------------------------------------------- galería: el pasillo de borde dentro del patio (R3.8)
+def _sobre_galeria(pc, y, sgn, plate, params, n=40, frac=1 / 3.0):
+    """R3.8: ¿el borde y (local, de xa a xb) de la pieza pc da a un patio con galería (params["_galerias"])? Se prueban
+    puntos del otro lado del muro exterior (a outer_wall + 0,05 del borde, hacia sgn): una fracción frac o más (un
+    tercio) tiene que caer en un patio con galería y los demás dentro de la planta o en su muro (ahí la banda sigue por
+    otra ala, como un pasillo interior de esa ala); ninguno fuera del edificio. El borde tiene que ser recto de punta a
+    punta."""
+    gals = params.get("_galerias") or []
+    loc = pc["loc_plate"]
+    x0, _, x1, _ = G.bbox(loc)
+    if not gals or x1 - x0 < 1.0 or G.strip_area(loc, x0, x1, min(y, y - sgn * 0.05), max(y, y - sgn * 0.05)) < \
+            0.95 * (x1 - x0) * 0.05:
+        return False                                    # (la franja de 5 cm hacia adentro de la planta, entera)
+    ow = params["outer_wall"]
+    ws = G.to_world([(x0 + (x1 - x0) * k / n, y + sgn * (ow + 0.05)) for k in range(n + 1)], pc["origin"], pc["angle"])
+    patio = [any(G.point_in_poly(w, g) for g in gals) for w in ws]
+    if sum(patio) < frac * (n + 1):
+        return False
+    return all(p or G.point_in_poly(w, plate) or _dist_to_boundary(w, plate) <= ow + 0.1 for p, w in zip(patio, ws))
+
+
+def _a_galeria(pc, params):
+    """R3.8: corre el pasillo de la pieza pc (de borde) al patio: la banda del ancho del pasillo queda del otro lado del
+    muro exterior, pegada al edificio, y toda el ala es de las viviendas. El marco se corre hacia el patio y
+    loc_plate/poly se extienden con la banda y el muro, así corridor_local cae en la banda y los núcleos la toman como
+    palier. Anota galeria, banda (mundo) y ala (el ala sola, en el marco nuevo: la región de viviendas). Devuelve False
+    si el ala no se deja extender."""
+    cw, ow = ancho_de(pc, params), params["outer_wall"]
+    x0, y0, x1, y1 = G.bbox(pc["loc_plate"])
+    o = G.to_world([(x0, y0 - ow - cw / 2)], pc["origin"], pc["angle"])[0]
+    ang = pc["angle"]
+    L = x1 - x0
+    ala = G.to_local(pc["poly"], o, ang)                        # el ala, desde y = cw/2 + ow
+    muro = [(0.0, -cw / 2), (L, -cw / 2), (L, cw / 2 + ow), (0.0, cw / 2 + ow)]    # la banda y el muro, hasta el ala
+    partes = G.union_parts([ala, muro])
+    if len(partes) != 1 or partes[0][1]:
+        return False
+    ext = partes[0][0]
+    if (G.area(ext) > 0) != (G.area(ala) > 0):
+        ext = ext[::-1]
+    pc.update(origin=o, angle=ang, xa=0.0, xb=L, loc_plate=ext, poly=G.to_world(ext, o, ang), galeria=True, ala=ala,
+              banda=G.to_world([(0.0, -cw / 2), (L, -cw / 2), (L, cw / 2), (0.0, cw / 2)], o, ang))
+    return True
+
+
+def _galeria(pieces, plate, params):
+    """R3.8 (modo automático, sin patios interiores): cada pieza con pasillo de borde cuyo borde del pasillo da a un patio
+    con galería corre su pasillo al patio (_a_galeria). Donde la banda sale del patio y entra en otra ala es un pasillo
+    interior de esa ala: sus viviendas se bloquean ahí (_bloquear_banda). Las alas de dos crujías no cambian, y la tira
+    con el pasillo contra una medianera tampoco (se descartó: sus viviendas solo tendrían luz por la galería y el plano
+    no tiene luz en el fondo)."""
+    if not params.get("_galerias") or params.get("_huecos"):
+        return pieces
+    for pc in pieces:
+        if not pc.get("single") or "eje" in pc or pc.get("between") or pc.get("user"):
+            continue
+        cw = ancho_de(pc, params)
+        _, y0, _, _ = G.bbox(pc["loc_plate"])
+        if abs(y0 + cw / 2) > 0.05:
+            continue                                        # el pasillo no está pegado al borde y0
+        if _sobre_galeria(pc, y0, -1, plate, params):
+            _a_galeria(pc, params)
+    _bloquear_banda(pieces, params)
+    return pieces
+
+
+def _bloquear_banda(pieces, params):
+    """R3.8: la banda de una galería que entra en el ala de otra pieza (sale del patio y cruza el muro) es un pasillo
+    interior de esa ala: sus viviendas no van ahí (extra_blocks, y conectores para que un núcleo no la pise)."""
+    pw = params["party_wall"]
+    for pc in pieces:
+        if not pc.get("galeria"):
+            continue
+        for q in pieces:
+            if q is pc:
+                continue
+            ql = G.to_local(pc["banda"], q["origin"], q["angle"])
+            region = q["ala"] if q.get("galeria") else q["loc_plate"]
+            bq = G.bbox(ql)
+            br = G.bbox(region)
+            if bq[0] >= br[2] or br[0] >= bq[2] or bq[1] >= br[3] or br[1] >= bq[3]:
+                continue
+            cq = ancho_de(q, params)
+            for dentro in G.subtract(region, [ql])[1][0]:
+                for sd in (1, -1):
+                    parte = G.clip_rect(dentro, None, None, cq / 2 + pw / 2, None) if sd > 0 else \
+                        G.clip_rect(dentro, None, None, None, -cq / 2 - pw / 2)
+                    if not parte or abs(G.area(parte)) < 0.5:
+                        continue
+                    bx0, _, bx1, _ = G.bbox(parte)
+                    q["extra_blocks"][sd].append((bx0 - pw / 2, bx1 + pw / 2))
+                    q.setdefault("conectores", []).append((sd, bx0 - pw / 2, bx1 + pw / 2))
+
+
 def _link(pieces, i, e, nb, params):
     """Une el extremo e (0=xa, 1=xb) de la pieza i con el pasillo de la pieza nb (conector + bloqueo). El conector es
     del ancho del pasillo de i y llega hasta el borde lejano del pasillo de nb (R10.8: cada uno con su ancho)."""
@@ -324,8 +418,14 @@ def _link(pieces, i, e, nb, params):
     if abs(d[1]) < 0.2:       # ejes paralelos: unión directa
         pc["junctions"].append({"x": xe, "nb": nb, "nbx": P[0]})
         return
-    t = max(0.0, -P[1] / d[1])
+    s = -P[1] / d[1]                                     # hasta el eje del otro (negativo: la punta ya lo pasó)
+    t = max(0.0, s)
     ext_len = t + cq / 2.0
+    if pc.get("galeria") or q.get("galeria"):            # R3.8: dos galerías ya se solapan en la esquina del patio
+        if s + cq / 2.0 <= 0.05:                         # la punta está dentro del pasillo del otro, o más allá
+            pc["junctions"].append({"x": xe, "nb": nb, "nbx": P[0] + d[0] * t})
+            return                                       # unión sin conector
+        ext_len = s + cq / 2.0                           # solo hasta el borde lejano del otro pasillo
     if sgn < 0:
         box = [(xe - ext_len, -cw / 2), (xe, -cw / 2), (xe, cw / 2), (xe - ext_len, cw / 2)]
     else:
@@ -375,6 +475,8 @@ def _franjas_sin_luz(pieces, plate, params):
         xs = [q["xa"] + (q["xb"] - q["xa"]) * k / n for k in range(n + 1)]
         tr = [(p[1], p[0]) for p in q["loc_plate"]]               # el ala traspuesta: su borde en cada x
         for sd in (1, -1):
+            if sd < 0 and q.get("galeria"):
+                continue                                          # R3.8: del lado del patio está la galería, no hay franja
             pts = []
             for x in xs:                                          # el fondo real del ala en x (también si es inclinado)
                 ivs = G.line_intervals(tr, x)
@@ -428,8 +530,9 @@ def _codos(pieces, plate, params):
             if largo < 1.0:
                 continue
             xs0, xs1 = (pc["xa"] - largo, pc["xa"]) if e == 0 else (pc["xb"], pc["xb"] + largo)
+            lin = cw / 2 + (params["outer_wall"] if pc.get("galeria") else pw / 2)   # R3.8: el muro hacia la galería
             for sd in ((1,) if pc.get("single") else (1, -1)):
-                ya, yb = (cw / 2 + pw / 2, y1b) if sd > 0 else (y0b, -cw / 2 - pw / 2)
+                ya, yb = (lin, y1b) if sd > 0 else (y0b, -lin)
                 if yb - ya < 2.0:
                     continue
                 zona = G.clip_rect(loc_full, xs0, xs1, ya, yb)
@@ -449,6 +552,19 @@ def _codos(pieces, plate, params):
         if ext[1] or ext[-1]:                                # el ala más sus esquinas (nunca la planta entera)
             pc["side_region"] = {sd: G.union_parts([pc["loc_plate"]] + ext[sd])[0][0] if ext[sd] else pc["loc_plate"]
                                  for sd in (1, -1)}
+
+
+def _recortar_galeria(pieces, params):
+    """R3.8: en una pieza con galería, la región de viviendas es el ala (desde el borde de la planta, del otro lado del
+    muro), con las esquinas que le sumó _codos: sin la banda ni el muro, que loc_plate incluye para el pasillo y los
+    núcleos. Del lado del patio no hay viviendas."""
+    ow = params["outer_wall"]
+    for pc in pieces:
+        if not pc.get("galeria"):
+            continue
+        lim = ancho_de(pc, params) / 2 + ow
+        reg = (pc.get("side_region") or {}).get(1) or pc["loc_plate"]
+        pc["side_region"] = {1: G.clip_rect(reg, None, None, lim, None), -1: []}
 
 
 def _clip_sr(pc, fn):
@@ -1029,8 +1145,8 @@ def _puntas_tras_cruce(pieces, params):
     unión (q["tramo"]). Las viviendas del otro lado entran por lo que queda (q["puntas"], ver units.entradas)."""
     pw = params["party_wall"]
     for q in pieces:
-        if q.get("user") or q.get("between"):
-            continue
+        if q.get("user") or q.get("between") or q.get("galeria"):
+            continue                                     # R3.8: la banda de una galería está fuera de la planta
         cw = ancho_de(q, params)                         # R10.8: cada pasillo con su ancho
         lin = cw / 2 + pw / 2
         anclas = [(j["x"] - ancho_de(pieces[j["nb"]], params) / 2, j["x"] + ancho_de(pieces[j["nb"]], params) / 2)
@@ -1167,6 +1283,7 @@ def _generate_circulation(plate, params):
     if not user:
         _franjas_sin_luz(pieces, plate, params)
         _codos(pieces, plate, params)
+        _recortar_galeria(pieces, params)                # R3.8: las viviendas de una galería, solo en el ala
     counter = [0]
 
     def next_side():
