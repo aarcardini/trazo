@@ -527,6 +527,7 @@ function drawDims(g){ if(!showDims||!view||!footprint.length) return;
  [0,1].forEach(i=>g.appendChild(el('rect',{x:x+i*px/2,y:y-5,width:px/2,height:5,fill:i?HALO():TINTA(),stroke:TINTA(),'stroke-width':1,'pointer-events':'none'})));
  [[0,'0'],[px/2,String(m/2)],[px,m+' m']].forEach(([dx,t])=>g.appendChild(el('text',{x:x+dx,y:y-9,'text-anchor':'middle','font-size':10,fill:TINTA(),'pointer-events':'none'},t))); }
 function drawOverlay(){ const go=$('go'); go.innerHTML=''; if(!view) return; if(medidaModo()!==medModo) herramientaBar(true); drawMeds(go); iconoScp(go); const et=[];   // R4.13a: las medidas en vivo de lo que se dibuja o se arrastra; se dibujan al final, encima de todo
+ if(marcaExt&&viewMode==='plan'){ go.appendChild(el('circle',{cx:X(marcaExt),cy:Y(marcaExt),r:9,fill:'none',stroke:'#2f6fed','stroke-width':2,'pointer-events':'none'})); go.appendChild(el('circle',{cx:X(marcaExt),cy:Y(marcaExt),r:3,fill:'#2f6fed','pointer-events':'none'})); }   // R4.13b: el vacío al que apunta el botón «Extender…» mientras el mouse está sobre él
  if(result&&viewMode==='plan'&&(!result.stories||planStory==null||(result.stories[planStory]||{}).program==='Residential'))
   (result.pasillos||[]).forEach(ps=>{ if(!ps.propio) return; const a=ps.eje[0], b=ps.eje[1], m=[(a[0]+b[0])/2,(a[1]+b[1])/2];   // R10.8: la medida de los tramos con ancho propio, a lo largo del pasillo
    let g=Math.atan2(Y(b)-Y(a),X(b)-X(a))*180/Math.PI; if(g>90) g-=180; if(g<-90) g+=180;
@@ -631,7 +632,7 @@ function drawGraph(g,u){ if(!u.graph) return; const pos={}; u.graph.nodes.forEac
  u.graph.edges.forEach(e=>{ const a=pos[e.a], b=pos[e.b]; if(!a||!b) return;
   g.appendChild(el('line',{x1:X(a),y1:Y(a),x2:X(b),y2:Y(b),stroke:!e.ok?'#d63b3b':e.type==='abierto'?'#1a9d5b':'#2f6fed','stroke-width':1.6,'stroke-dasharray':e.type==='puerta'?'4 3':'',opacity:.9,'pointer-events':'none'})); });
  u.graph.nodes.forEach(n=>{ g.appendChild(el('circle',{cx:X(n.pos),cy:Y(n.pos),r:3.5,fill:'#fff',stroke:'#1b2430','stroke-width':1,'pointer-events':'none'})); }); }
-function unitPanel(){ const c=$('ctx'); if(selCore!=null&&result&&result.cores&&result.cores[selCore]){ corePanel(); return; }
+function unitPanel(){ const c=$('ctx'); marcaExt=null; if(selCore!=null&&result&&result.cores&&result.cores[selCore]){ corePanel(); return; }
  if(selPas!=null&&result&&result.pasillos&&result.pasillos[selPas]){ pasilloPanel(); return; }
  if(selPatio!=null&&listaPatios()[selPatio]){ patioPanel(); return; }
  const u=result&&result.units?result.units.find(x=>x.id===selUnit):null; if(!u){ c.style.display='none'; return; }
@@ -645,7 +646,7 @@ function unitPanel(){ const c=$('ctx'); if(selCore!=null&&result&&result.cores&&
   <h2 style="margin:10px 0 4px">Comprobaciones (${ok}/${n})</h2>
   ${(u.checks||[]).map(x=>`<div class="${x.ok?'hint':'w'}">${x.info?'ℹ':x.ok?'✓':'⚠'} ${x.msg}</div>`).join('')}
   <h2 style="margin:10px 0 4px">Editar vivienda${u.editada?' (editada)':''}${u.editada_dentro?' · cambiada por dentro':''}</h2><div class="hint">Arrastra sus tabiques con las vecinas (azules) para cambiar su ancho, o haz clic en uno y escribe el frente exacto de una de las dos; sus tabiques interiores (verdes) y sus puertas, para ajustarla por dentro.</div>
-  <button class="s" onclick="dividirVivienda()">Dividir en dos</button>${(result.tabiques||[]).map((t,k)=>t.a===u.id||t.b===u.id?`<button class="s" onclick="unirViviendas(${k})">Unir con ${t.a===u.id?t.b:t.a}</button>`:'').join('')}${puertasPanel(u)}
+  <button class="s" onclick="dividirVivienda()">Dividir en dos</button>${(result.tabiques||[]).map((t,k)=>t.a===u.id||t.b===u.id?`<button class="s" onclick="unirViviendas(${k})">Unir con ${t.a===u.id?t.b:t.a}</button>`:'').join('')}${extenderBotones(u)}${puertasPanel(u)}
   <button class="s" onclick="selUnit=null;draw();unitPanel()">Cerrar</button>`;
  c.style.display='block'; }
 
@@ -897,6 +898,15 @@ function editar(op,txt){ recordar(txt); ediciones.push(op); edInfo(); return run
 function dividirVivienda(){ const u=result.units.find(x=>x.id===selUnit); if(u){ const c=centroidOf(u.poly); editar({op:'dividir',p:[+c[0].toFixed(3),+c[1].toFixed(3)]},'dividir '+u.id); } }   // la primera parte conserva el número
 function unirViviendas(k){ const t=result.tabiques[k]; if(t){ selUnit=t.a; editar({op:'fusionar',p:mitad(t.seg)},'unir '+t.a+' y '+t.b); } }
 function descartarEdiciones(){ recordar('descartar los cambios de viviendas'); ediciones=[]; edInfo(); if(lastStage) run(lastStage,{keepView:true}); }
+/* ---------- extender una vivienda al espacio vacío (R4.13b) ---------- */
+let marcaExt=null;   // el punto del vacío que marca en la planta el botón «Extender…» mientras el mouse está sobre él
+const mTxt=v=>v.toFixed(2).replace('.',',')+' m';
+function ladoExtension(u,x){ const S=scpActual(), o=aLocal(centroidOf(u.poly),S), d=aLocal(x.p,S), dx=d[0]-o[0], dy=d[1]-o[1];   // hacia dónde queda el vacío en el SCP actual: izquierda/derecha o arriba/abajo; en diagonal (ambiguo), null
+ if(Math.abs(dx)>=2*Math.abs(dy)) return dx<0?'la izquierda':'la derecha'; if(Math.abs(dy)>=2*Math.abs(dx)) return dy>0?'arriba':'abajo'; return null; }
+function extenderBotones(u){ return Object.entries(u.extensible||{}).map(([k,x])=>`<button class="s" onclick="extenderVivienda('${k}')" onmouseenter="marcarPunto(${JSON.stringify(x.p)})" onmouseleave="marcarPunto(null)" title="Estira la vivienda sobre la planta libre de ese lado (hasta la vecina, un pasillo o un núcleo)">Extender hacia ${ladoExtension(u,x)||k} (${mTxt(x.largo)})</button>`).join(''); }   // un botón por lado con planta libre (u.extensible: x0 o x1 de su franja); el punto se marca en la planta al pasar el mouse
+function extenderVivienda(k){ const u=result&&result.units?result.units.find(x=>x.id===selUnit):null, x=u&&u.extensible?u.extensible[k]:null; if(!x) return; marcarPunto(null); const c=centroidOf(u.poly);
+ editar({op:'extender',p:[+c[0].toFixed(3),+c[1].toFixed(3)],a:x.p},'extender '+u.id); }   // el motor estira hacia el lado de «a» hasta lo primero que encuentra; se deshace con ↶
+function marcarPunto(p){ marcaExt=p; drawOverlay(); }
 /* ---------- la vivienda por dentro (R5.7): tabiques interiores y puertas ---------- */
 function editarInterior(op,txt){ recordar(txt); interiores.push(op); return run('plans',{keepView:true}); }   // el motor aplica los cambios en orden
 function enPoli(p,poly){ let a=false; for(let i=0,j=poly.length-1;i<poly.length;j=i++){ const [xi,yi]=poly[i],[xj,yj]=poly[j]; if((yi>p[1])!==(yj>p[1])&&p[0]<(xj-xi)*(p[1]-yi)/(yj-yi)+xi) a=!a; }
