@@ -439,11 +439,101 @@ def _tabique_en(units, p, params, tol=0.75):
     return mejor[1:] if mejor else None
 
 
-def editar_unidades(units, edits, params, hechos):
+def _vivienda_en(units, p):
+    """La vivienda que contiene el punto p (de mundo) o, si p cae fuera de la figura (vivienda en L), la de la franja
+    que lo cubre a menos de 1 m; None si ninguna."""
+    u = next((u for u in units if u.get("_region") is not None and G.point_in_poly(_local(u, p), u["poly_local"])), None)
+    if u is None:
+        cerca = []
+        for v in units:
+            x, y = _local(v, p) if v.get("_region") is not None else (None, 0)
+            ys = [q[1] for q in v["poly_local"]]
+            if x is not None and v["x0"] <= x <= v["x1"] and y * v["side"] > 0:
+                cerca.append((max(0.0, min(ys) - y, y - max(ys)), id(v), v))
+        u = min(cerca)[2] if cerca and min(cerca)[0] < 1.0 else None
+    return u
+
+
+def _fijos(pieces, nucleos):
+    """Lo que ninguna vivienda puede pisar, en el mundo: los pasillos de todas las piezas (con sus conectores) y los
+    núcleos."""
+    W = lambda pc, pl: G.to_world(pl, pc["origin"], pc["angle"])
+    return [W(pc, p) for pc in pieces for p in G.split_parts(pc["corridor_local"])] + \
+        [list(e) for pc in pieces for e in pc["corridor_ext"]] + [list(c) for c in nucleos]
+
+
+def obstaculos(pieces, nucleos):
+    """R4.13b: lo que frena una vivienda que se extiende: los pasillos y núcleos (_fijos) y las zonas sin luz (codos y
+    la zona central entre medianeras), en el mundo."""
+    return _fijos(pieces, nucleos) + [list(d) for pc in pieces for k in ("dark", "codos") for d in pc.get(k, [])]
+
+
+def _libre(u, units, fijos, params):
+    """R4.13b: hasta dónde se puede estirar la vivienda u por cada punta de su franja, en el marco de su pieza:
+    {0: x, 1: x}, con x <= x0 (hacia atrás) y x >= x1 (hacia adelante). El tope es lo primero que encuentra en la franja
+    (_region, lo que generate_unit_mix repartió: ya sin los núcleos de su lado ni lo bloqueado por otras alas): otra
+    vivienda (del otro lado del tabique), un pasillo, un núcleo, una zona sin luz (fijos, de obstaculos) o el fin de la
+    franja. Una franja cóncava solo cuenta la parte pegada a la vivienda: _recortar se queda con una sola figura."""
+    pc, reg, pw = u["_pc"], u.get("_region"), params["party_wall"]
+    out = {0: u["x0"], 1: u["x1"]}
+    if reg is None or u.get("frente"):
+        return out                                       # al frente (R3.7): ya toma toda la punta del pasillo
+    xs = [q[0] for q in reg]
+    xmin, xmax = min(xs), max(xs)
+    toca = lambda a, b: a[0] < b[2] - 1e-6 and b[0] < a[2] - 1e-6 and a[1] < b[3] - 1e-6 and b[1] < a[3] - 1e-6
+    L = lambda poly: G.to_local(poly, pc["origin"], pc["angle"])
+    otros = [(L(G.to_world(v["poly_local"], v["_pc"]["origin"], v["_pc"]["angle"])), pw) for v in units if v is not u]
+    otros += [(L(f), 0.0) for f in fijos if len(f) >= 3]
+    for e, a, b in ((0, xmin, u["x0"]), (1, u["x1"], xmax)):
+        if b - a < 1e-6:
+            continue
+        partes = G.split_parts(G.clip_rect(reg, a, b))
+        borde = u["x0"] if e == 0 else u["x1"]              # la parte de la franja pegada a la vivienda
+        S = next((q for q in partes if abs((G.bbox(q)[2] if e == 0 else G.bbox(q)[0]) - borde) < 0.01), None)
+        if not S:
+            continue
+        bs = G.bbox(S)
+        lim = bs[0] if e == 0 else bs[2]                    # el fin de la franja
+        for o, gap in otros:
+            if not toca(bs, G.bbox(o)):
+                continue
+            for q in G.subtract(S, [o])[1][0]:               # las partes del obstáculo dentro del tramo libre
+                if abs(G.area(q)) > 0.01:
+                    qx = [t[0] for t in q]
+                    lim = max(lim, max(qx) + gap) if e == 0 else min(lim, min(qx) - gap)
+        out[e] = min(lim, u["x0"]) if e == 0 else max(lim, u["x1"])
+    return out
+
+
+def extensibles(units, fijos, params, minimo=0.3):
+    """R4.13b: anota en cada vivienda «extensible» = {"x0": {"largo", "p"}, "x1": {...}} con los lados de su franja donde
+    hay planta libre de minimo m o más (ver _libre); p es un punto de mundo dentro de ese vacío (la web lo manda como
+    «a» de la operación extender). Sin nada libre, {}."""
+    for u in units:
+        lib = _libre(u, units, fijos, params)
+        u["extensible"] = {}
+        for e, lado in ((0, "x0"), (1, "x1")):
+            largo = (u["x0"] - lib[0]) if e == 0 else (lib[1] - u["x1"])
+            if largo < minimo:
+                continue
+            x = (u["x0"] - largo / 2.0) if e == 0 else (u["x1"] + largo / 2.0)
+            tajada = G.split_parts(G.clip_rect(u["_region"], x - 0.05, x + 0.05))
+            if not tajada:
+                continue
+            cy = G.centroid(max(tajada, key=lambda q: abs(G.area(q))))[1]
+            pw_ = G.to_world([(x, cy)], u["_pc"]["origin"], u["_pc"]["angle"])[0]
+            u["extensible"][lado] = {"largo": round(largo, 2), "p": [round(pw_[0], 3), round(pw_[1], 3)]}
+
+
+def editar_unidades(units, edits, params, hechos, fijos=None, fallidos=None):
     """R4.4: aplica en orden los cambios del usuario a las viviendas de un bloque (puntos de mundo):
     {"op": "tabique", "p", "a"} mueve hasta a el tabique que pasa por p; {"op": "fusionar", "p"} une las dos viviendas
     de ese tabique; {"op": "dividir", "p"} parte en dos, en p, la vivienda que contiene p. Cada parte conserva al menos
-    la mitad del ancho mínimo. Anota en hechos los índices de los cambios aplicados (los demás se avisan)."""
+    la mitad del ancho mínimo. Anota en hechos los índices de los cambios aplicados (los demás se avisan).
+    R4.13b: {"op": "extender", "p", "a"?} estira la vivienda que contiene p sobre la planta libre de su franja (ver
+    _libre; fijos, de obstaculos: pasillos, núcleos y zonas sin luz) hacia el lado de a (la punta x0 o x1 más cercana a a)
+    o, sin a, hacia los dos; conserva el tipo. Con menos de 0,30 m libres no se aplica y la vivienda va a fallidos
+    (layout avisa «no hay planta libre al lado de Uxx»)."""
     pw, wmin = params["party_wall"], 0.5 * params["min_unit_width"]
     for k, e in enumerate(edits or []):
         op, p = e.get("op"), e.get("p")
@@ -466,15 +556,7 @@ def editar_unidades(units, edits, params, hechos):
                 _tipo(a, params)
                 units.remove(b)
         elif op == "dividir":
-            u = next((u for u in units if u.get("_region") is not None and G.point_in_poly(_local(u, p), u["poly_local"])), None)
-            if u is None:                              # punto fuera de la figura (vivienda en L): la de la franja que lo cubre
-                cerca = []
-                for v in units:
-                    x, y = _local(v, p) if v.get("_region") is not None else (None, 0)
-                    ys = [q[1] for q in v["poly_local"]]
-                    if x is not None and v["x0"] <= x <= v["x1"] and y * v["side"] > 0:
-                        cerca.append((max(0.0, min(ys) - y, y - max(ys)), id(v), v))
-                u = min(cerca)[2] if cerca and min(cerca)[0] < 1.0 else None
+            u = _vivienda_en(units, p)                 # punto fuera de la figura (vivienda en L): la de la franja que lo cubre
             if u is None or u["x1"] - u["x0"] < 2 * wmin + pw:
                 continue
             x = min(max(_local(u, p)[0], u["x0"] + wmin + pw / 2), u["x1"] - wmin - pw / 2)
@@ -484,6 +566,22 @@ def editar_unidades(units, edits, params, hechos):
             _tipo(u, params)
             _tipo(otra, params)
             units.insert(units.index(u) + 1, otra)
+        elif op == "extender":                         # R4.13b
+            u = _vivienda_en(units, p)
+            if u is None:
+                continue
+            lib = _libre(u, units, fijos or [], params)
+            lados = (0, 1)
+            if e.get("a"):                             # hacia el lado de a: la punta más cercana
+                ax = _local(u, e["a"])[0]
+                lados = (0,) if abs(ax - u["x0"]) < abs(ax - u["x1"]) else (1,)
+            x0 = lib[0] if 0 in lados and u["x0"] - lib[0] >= 0.3 else u["x0"]
+            x1 = lib[1] if 1 in lados and lib[1] - u["x1"] >= 0.3 else u["x1"]
+            if (x0, x1) == (u["x0"], u["x1"]) or not _recortar(u, x0, x1, params):
+                if fallidos is not None:
+                    fallidos.append(u)
+                continue
+            _tipo(u, params, conservar=True)
         else:
             continue
         hechos.add(k)
@@ -496,10 +594,8 @@ def sin_solapes(units, pieces, nucleos, params):
     if not any(pc.get("user") for pc in pieces):
         return units, []
     W = lambda pc, pl: G.to_world(pl, pc["origin"], pc["angle"])
-    fijos = [W(pc, p) for pc in pieces for p in G.split_parts(pc["corridor_local"])] + \
-        [list(e) for pc in pieces for e in pc["corridor_ext"]] + [list(c) for c in nucleos]
     toca = lambda a, b: a[0] < b[2] - 1e-6 and b[0] < a[2] - 1e-6 and a[1] < b[3] - 1e-6 and b[1] < a[3] - 1e-6
-    fijos = [(G.bbox(p), p) for p in fijos if len(p) >= 3]
+    fijos = [(G.bbox(p), p) for p in _fijos(pieces, nucleos) if len(p) >= 3]
     out, quitadas, ya = [], 0, []
     for u in units:
         pc = u["_pc"]

@@ -20,10 +20,11 @@ from .circulation import (pick_frame, core_positions, side_for, _frame_for_poly,
                           _generate_circulation, nucleo_punto, medidas_nucleo, ancho_de)  # noqa: F401
 from .units import (_bisect_x, _chain_union, _is_rect, _segments, generate_unit_mix, metrics_mix, bedrooms_for,
                     unit_rooms, sin_solapes, editar_unidades, vecinas, formar_frentes, entradas, puntas_libres,
+                    extensibles, obstaculos,
                     superficie_con_muros)  # noqa: F401
 from .patios import (auto_patios, _anillo, split_blocks, make_patio_dark, _block_of, _block_of_line)  # noqa: F401
 
-VERSION = "2.55"
+VERSION = "2.56"
 
 DEFAULT_PARAMS = {
     # Masa
@@ -59,7 +60,7 @@ DEFAULT_PARAMS = {
     "patios_mode": "auto",      # auto (patios en predios entre medianeras demasiado profundos) | manual
     "patios": None,             # patios manuales: [[[x,y],...],...] en coordenadas de mundo
     "patios_galeria": None,     # R3.8: [bool] alineado con patios: el pasillo de borde del ala que da a ese patio va en el patio (galería)
-    "unit_edits": None,         # R4.4: [{"op": "tabique"|"fusionar"|"dividir", "p": [x,y], "a": [x,y]}] en orden (units.editar_unidades)
+    "unit_edits": None,         # R4.4: [{"op": "tabique"|"fusionar"|"dividir"|"extender", "p": [x,y], "a": [x,y]}] en orden (units.editar_unidades)
     "room_edits": None,         # R5.7: [{"op": "pared", "p", "a"} | {"op": "puerta", "p", "entre"?, "a"?, "ancho"?, "abre"?}] en orden (plans)
 }
 
@@ -325,6 +326,7 @@ def generate(data):
     bloques_pc = []                                          # por bloque: (piezas, parámetros, planta, núcleos, viviendas)
     emax = area_codos = fuera = 0.0                          # fuera: pasillo fuera de la planta (la galería y su muro)
     state, hechos, avisos_u = {}, set(), []                  # mix compartido entre bloques, cambios R4.4 aplicados
+    fallidos = []                                            # R4.13b: viviendas que no tenían planta libre para extender
     params["_anchos_usados"] = set()                         # R10.8: anchos de pasillo pedidos que se aplicaron
     res["pasillos"] = []                                     # R10.8: cada tramo de pasillo (para elegirlo en la web)
     for bi, (pl_b, ph_b) in enumerate(plantas):
@@ -390,12 +392,21 @@ def generate(data):
             for u in us:
                 u["_pc"], u["_pb"], u["_plate"], u["_i"] = pc, pb, pl_b, i
             del_bloque += us
-        editar_unidades(del_bloque, params.get("unit_edits"), pb, hechos)   # R4.4: tabiques movidos, viviendas unidas o divididas
+        # R4.13b: los cambios del usuario van después de sin_solapes, porque la planta libre que deja una vivienda quitada
+        # (pasillos dibujados que se cruzan) solo existe ahí; si alguno se aplicó, sin_solapes vuelve a recortar lo que el
+        # cambio rearmó desde su franja (_recortar)
         del_bloque, warns = sin_solapes(del_bloque, pieces, cpolys, pb)
         avisos_u += warns
+        obst = obstaculos(pieces, cpolys)                # pasillos, núcleos y zonas sin luz: frenan una vivienda que se extiende
+        n_hechos = len(hechos)
+        editar_unidades(del_bloque, params.get("unit_edits"), pb, hechos, obst, fallidos)   # R4.4: tabiques movidos, viviendas unidas, divididas o extendidas
+        if len(hechos) > n_hechos:
+            del_bloque, warns = sin_solapes(del_bloque, pieces, cpolys, pb)
+            avisos_u += warns
         formar_frentes(del_bloque, pieces, pb)           # R3.7: vivienda al frente en la punta de un pasillo de borde
         entradas(del_bloque, pieces, pb)                 # R3.7: entrada por el pasillo que queda tras cortar una punta
         puntas_libres(del_bloque, pieces, pb)            # R3.7b: la vivienda del extremo, con su puerta en la punta libre
+        extensibles(del_bloque, obst, pb)                # R4.13b: cuánto puede estirarse cada una sobre la planta libre
         for pc in pieces:
             t = pc.get("tramo")                          # R3.7: solo se corta la punta que ya no hace falta
             pasillo = G.clip_rect(pc["corridor_local"], t[0] if t[0] > pc["xa"] + 1e-6 else None,
@@ -539,6 +550,10 @@ def generate(data):
         if u["target"] and not u.get("editada") and abs(u["area"] - u["target"]) > 0.35 * u["target"]:
             res["warnings"].append("%s mide %.0f m² y el objetivo de «%s» es %.0f m²: la geometría no permite ajustarlo" %
                                    (u["id"], u["area"], u["type"], u["target"]))
+    for u in fallidos:                                     # R4.13b: el cambio «extender» que no encontró planta libre
+        if u.get("id"):
+            res["warnings"].append("No hay planta libre al lado de %s: no se pudo extender (la planta cambió desde que lo "
+                                   "pediste)" % u["id"])
     lejos = ["%s (%.0f m)" % (u["id"], u["egress"]) for u in units if u["egress"] > params["egress_multi"]]
     sacos = ["%s (%.0f m)" % (u["id"], u["saco"]) for u in units
              if u["egress"] <= params["egress_multi"] and u["saco"] > params["egress_single"]]
@@ -568,6 +583,7 @@ def generate(data):
                 "saco": round(sc, 1), "egress_status": status, "poly": um, "area_muros": round(am, 1),
                 "door": [round(v, 3) for v in G.to_world([u["door_local"]], pc["origin"], pc["angle"])[0]]}
         item["pasillo"] = res["pasillos"][pc["_pas"]]["id"]   # R10.8: el tramo de pasillo de su puerta
+        item["extensible"] = u.get("extensible") or {}      # R4.13b: lados con planta libre {"x0"|"x1": {largo, p}}
         if u.get("editada"):
             item["editada"] = True
         if u.get("frente"):

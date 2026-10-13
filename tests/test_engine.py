@@ -5109,3 +5109,145 @@ def test_galeria():
 
 if __name__ == "__main__":
     test_galeria(); print("OK71")
+
+
+def test_extender_vivienda():
+    """R4.13b: extender una vivienda al espacio vacío. Cada vivienda del resultado trae «extensible»: los lados de su
+    franja (x0, x1, en el marco de su pieza) con planta libre de 0,30 m o más, con el largo y un punto de mundo dentro
+    del vacío; la operación {"op": "extender", "p", "a"?} de unit_edits la estira hacia el lado de a (sin a, hacia los
+    dos) hasta lo primero que encuentra: la vecina (del otro lado del tabique), un pasillo, un núcleo, una zona sin luz
+    o el fin de la franja; conserva el tipo y queda editada. En la web, un botón por lado libre en la ficha de la
+    vivienda (pasa por editar: se deshace con ↶). Los cambios del usuario se aplican después de sin_solapes (el vacío
+    que deja una vivienda quitada por los pasillos dibujados solo existe ahí) y sin_solapes vuelve a correr si hubo
+    cambios. Las franjas de los ejemplos están llenas: no cambian."""
+    import shutil, subprocess, tempfile
+    from engine import geometry as G, layout as LY, units as UN
+    T_ = lambda p: [tuple(q) for q in p]
+    inter = lambda a, b: abs(G.area(T_(a))) - sum(abs(G.area(o)) for o, _ in G.subtract(T_(a), [T_(b)])[0])
+    muestra = lambda n: json.load(open(os.path.join(os.path.dirname(__file__), "..", "samples", n + ".json"),
+                                       encoding="utf-8"))
+    gen = lambda fp, stage="plans", **p: generate({"footprint": fp, "height": 15, "stage": stage, "params": p})
+    centro = lambda u: [round(sum(p[0] for p in u["poly"]) / len(u["poly"]), 3), round(sum(p[1] for p in u["poly"]) / len(u["poly"]), 3)]
+    mitad = lambda s: [(s[0][0] + s[1][0]) / 2, (s[0][1] + s[1][1]) / 2]
+
+    def pisa(r):
+        fijos = r["corridors"] + [c["poly"] for c in r["cores"]]
+        us = [u["poly"] for u in r["units"]]
+        return max([inter(a, b) for i, a in enumerate(us) for b in us[i + 1:]] + [inter(a, f) for a in us for f in fijos])
+    # ---- en los ejemplos las franjas están llenas: ninguna vivienda tiene planta libre al lado (lo que el resumen
+    # muestra como «Sin usar» son los tabiques y los medios muros junto al pasillo, que la métrica no atribuye a nadie)
+    for n in ("barra_larga", "T_dos_lineas", "patio_central", "entre_medianeras_patio_central"):
+        s = muestra(n)
+        p = {k: s[k] for k in ("centerlines", "stories", "medianeras") if s.get(k)}
+        if s.get("patios"):
+            p.update(patios_mode="manual", patios=s["patios"])
+        if s.get("cores"):
+            p.update(cores_mode="manual", cores=s["cores"])
+        r = generate({"footprint": s["footprint"], "height": s.get("height"), "stage": "plans", "params": p})
+        assert r["units"] and all(u["extensible"] == {} for u in r["units"]), (n, [u["extensible"] for u in r["units"]])
+    # (d) sin nada libre, el cambio no se aplica, se avisa con la vivienda y nada cambia
+    s = muestra("barra_larga")
+    base = gen(s["footprint"])
+    u0 = base["units"][0]
+    r = gen(s["footprint"], unit_edits=[{"op": "extender", "p": centro(u0), "a": [u0["poly"][0][0] + 1, u0["poly"][0][1]]}])
+    assert any("No hay planta libre al lado de %s" % u0["id"] in w for w in r["warnings"]), r["warnings"]
+    assert any("1 cambio(s) de viviendas no se pudieron aplicar" in w for w in r["warnings"]), r["warnings"]
+    assert [u["poly"] for u in r["units"]] == [u["poly"] for u in base["units"]] and r["metrics"] == base["metrics"]
+    assert all(not u.get("editada") for u in r["units"])
+    # ---- tres líneas por un mismo punto (horizontal, vertical y una diagonal a 22°): la vivienda de la diagonal que
+    # pisa el pasillo horizontal no entra (sin_solapes) y su vecina de la franja queda con 4,3 m de planta libre al lado
+    fp = [[0, 0], [80, 0], [80, 40], [0, 40]]
+    lineas = [[[1, 20], [79, 20]], [[40, 1], [40, 39]], [[10, 8], [70, 32]]]
+    r = gen(fp, centerlines=lineas)
+    assert any("no entran donde se cruzan" in w for w in r["warnings"]), r["warnings"]
+    con = [u for u in r["units"] if u["extensible"]]
+    assert len(con) == 1 and list(con[0]["extensible"]) == ["x0"], [(u["id"], u["extensible"]) for u in con]
+    u, ext = con[0], con[0]["extensible"]["x0"]
+    assert 4.0 <= ext["largo"] <= 4.6 and u["type"] == "3 dorm", (ext, u["type"])
+    # (a) el punto del vacío cae en la planta y fuera de las viviendas, los pasillos, los núcleos y las zonas sin luz
+    p = tuple(ext["p"])
+    assert G.point_in_poly(p, T_(r["plate"]))
+    todo = [v["poly"] for v in r["units"]] + r["corridors"] + [c["poly"] for c in r["cores"]] + r.get("dark_zones", [])
+    assert not any(G.point_in_poly(p, T_(x)) for x in todo)
+    assert all("extensible" in v for v in gen(fp, "units", centerlines=lineas)["units"])   # también en la etapa del mix
+    # (b) con la operación (a = ese punto) la vivienda crece lo libre, conserva el tipo y queda editada; «Sin usar»
+    # baja lo mismo; nadie pisa a nadie; los planos se generan y la evacuación sigue igual
+    r2 = gen(fp, centerlines=lineas, unit_edits=[{"op": "extender", "p": centro(u), "a": ext["p"]}])
+    v = next(x for x in r2["units"] if x["id"] == u["id"])
+    gana = v["area"] - u["area"]
+    assert v.get("editada") and v["type"] == u["type"] and abs(v["width"] - u["width"] - ext["largo"]) < 0.02, (v["width"], u["width"], ext)
+    assert 10 < gana < ext["largo"] * u["depth"] + 0.5 and v["extensible"] == {}, (gana, ext, u["depth"])   # la franja es más playa en el vacío
+    assert abs((r["metrics"]["unused_area"] - r2["metrics"]["unused_area"]) - gana) < 0.3, (r["metrics"]["unused_area"], r2["metrics"]["unused_area"], gana)
+    assert pisa(r2) < 0.01 and len(v["rooms"]) >= 5 and "plan_score" in v and len(r2["units"]) == len(r["units"]), pisa(r2)
+    assert r2["evacuacion"] == r["evacuacion"] and all(y["poly"] == x["poly"] and y["egress"] == x["egress"]
+                                                       for x, y in zip(r["units"], r2["units"]) if x["id"] != u["id"])
+    assert v["egress_status"] == u["egress_status"] and not any("no se pud" in w or "planta libre" in w for w in r2["warnings"])
+    assert gen(fp, centerlines=lineas, unit_edits=[{"op": "extender", "p": centro(u)}])["units"][int(u["id"][1:]) - 1]["poly"] == v["poly"]   # sin a: el único lado libre
+    # (e) los cambios se aplican en orden: extender y después dividir en el vacío ganado (ahí solo hay vivienda si la
+    # extensión se aplicó antes), y después mover el tabique nuevo 1 m
+    ex = {"op": "extender", "p": centro(u), "a": ext["p"]}
+    r4 = gen(fp, centerlines=lineas, unit_edits=[ex, {"op": "dividir", "p": ext["p"]}])
+    A, B = [x for x in r4["units"] if x.get("editada")]
+    assert len(r4["units"]) == len(r["units"]) + 1 and A["id"] == u["id"] and abs(A["width"] + 0.3 + B["width"] - v["width"]) < 0.02, (A["width"], B["width"], v["width"])
+    t = next(t for t in r4["tabiques"] if (t["a"], t["b"]) == (A["id"], B["id"]))
+    hacia = [mitad(t["seg"])[0] + t["dir"][0], mitad(t["seg"])[1] + t["dir"][1]]
+    r5 = gen(fp, centerlines=lineas, unit_edits=[ex, {"op": "dividir", "p": ext["p"]}, {"op": "tabique", "p": mitad(t["seg"]), "a": hacia}])
+    A5, B5 = (next(x for x in r5["units"] if x["id"] == k) for k in (A["id"], B["id"]))
+    assert abs(A5["width"] - A["width"] - 1) < 0.02 and abs(B5["width"] - B["width"] + 1) < 0.02 and pisa(r5) < 0.01, (A5["width"], A["width"], B5["width"], B["width"])
+    assert not any("no se pud" in w or "planta libre" in w for w in r4["warnings"] + r5["warnings"]), r5["warnings"]
+    assert gen(fp, centerlines=lineas, unit_edits=[{"op": "dividir", "p": ext["p"]}, ex])["units"][int(u["id"][1:]) - 1]["poly"] == v["poly"]   # al revés, el dividir no encuentra vivienda y el extender sí
+    # (c) sin a se extiende hacia los dos lados si los dos están libres: en la barra, sin la primera y la tercera
+    # vivienda de una franja, la segunda toma el fin de la franja de un lado y llega hasta el tabique de la cuarta del otro
+    barra = [[0, 0], [60, 0], [60, 16], [0, 16]]
+    captura, orig = [], LY.extensibles
+    LY.extensibles = lambda units, fijos, params: (orig(units, fijos, params), captura.append((units, fijos, params)))
+    try:
+        gen(barra)
+    finally:
+        LY.extensibles = orig
+    units, fijos, params = captura[0]
+    reg = units[0]["_region"]
+    fila = sorted([x for x in units if x.get("_region") is reg], key=lambda x: x["x0"])
+    assert len(fila) == 4 and all(x["extensible"] == {} for x in fila)
+    a_, b_, c_, d_ = fila
+    for x in (a_, c_):
+        units.remove(x)
+    UN.extensibles(units, fijos, params)
+    assert set(b_["extensible"]) == {"x0", "x1"} and abs(b_["extensible"]["x0"]["largo"] - a_["width"] - params["party_wall"]) < 0.01 \
+        and abs(b_["extensible"]["x1"]["largo"] - c_["width"] - params["party_wall"]) < 0.01, b_["extensible"]
+    pm = G.to_world([((b_["x0"] + b_["x1"]) / 2, G.centroid(b_["poly_local"])[1])], b_["_pc"]["origin"], b_["_pc"]["angle"])[0]
+    hechos, fallidos = set(), []
+    UN.editar_unidades(units, [{"op": "extender", "p": list(pm)}], params, hechos, fijos, fallidos)
+    assert hechos == {0} and not fallidos and b_.get("editada") and abs(b_["x0"] - a_["x0"]) < 1e-6 and abs(b_["x1"] - c_["x1"]) < 1e-6, (b_["x0"], a_["x0"], b_["x1"], c_["x1"])
+    assert abs(b_["x1"] + params["party_wall"] - d_["x0"]) < 1e-6 and b_["type"] == "3 dorm"   # hasta el tabique de la cuarta
+    UN.extensibles(units, fijos, params)
+    assert b_["extensible"] == {} and d_["extensible"] == {}
+    # y en orden con un tabique: el de la segunda con la cuarta se corre 1 m después de extender
+    pt = G.to_world([(b_["x1"] + params["party_wall"] / 2, G.centroid(b_["poly_local"])[1])], b_["_pc"]["origin"], b_["_pc"]["angle"])[0]
+    pa = G.to_world([(b_["x1"] + params["party_wall"] / 2 + 1, G.centroid(b_["poly_local"])[1])], b_["_pc"]["origin"], b_["_pc"]["angle"])[0]
+    x1_antes = b_["x1"]
+    UN.editar_unidades(units, [{"op": "extender", "p": list(pm)}, {"op": "tabique", "p": list(pt), "a": list(pa)}], params, hechos, fijos, fallidos)
+    assert hechos == {0, 1} and abs(b_["x1"] - x1_antes - 1) < 1e-6 and abs(b_["x1"] + params["party_wall"] - d_["x0"]) < 1e-6, (hechos, b_["x1"], x1_antes)
+    # ---- la web: un botón por lado libre en la ficha de la vivienda, que pasa por editar (test_deshacer); el texto dice
+    # hacia dónde en el SCP actual; el punto del vacío se marca en la planta al pasar el mouse
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    js = html.split("<script>", 1)[1].split("</script>", 1)[0]
+    cuerpo = lambda f: js.split("function %s(" % f, 1)[1].split("\nfunction ", 1)[0].split("\nasync function ", 1)[0].split("\n/*", 1)[0]
+    assert "extenderBotones(u)" in cuerpo("unitPanel") and "marcaExt=null" in cuerpo("unitPanel")
+    assert "u.extensible" in cuerpo("extenderBotones") and "extenderVivienda('${k}')" in cuerpo("extenderBotones") and "marcarPunto(" in cuerpo("extenderBotones")
+    ev = cuerpo("extenderVivienda")
+    assert "op:'extender'" in ev and "a:x.p" in ev and "editar(" in ev and "'extender '+u.id" in ev
+    assert "'la izquierda'" in cuerpo("ladoExtension") and "'la derecha'" in cuerpo("ladoExtension") and "scpActual()" in cuerpo("ladoExtension")
+    assert "marcaExt" in cuerpo("drawOverlay") and "function marcarPunto(" in js
+    node = shutil.which("node")
+    if not node:
+        print("(sin node: se omite «node --check» del programa de la página)")
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        ruta = os.path.join(tmp, "programa.js")
+        open(ruta, "w", encoding="utf-8").write(js)
+        c = subprocess.run([node, "--check", ruta], capture_output=True, text=True, encoding="utf-8")
+        assert c.returncode == 0, c.stderr
+
+if __name__ == "__main__":
+    test_extender_vivienda(); print("OK72")
