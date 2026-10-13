@@ -59,7 +59,6 @@ DEFAULT_PARAMS = {
     "patios_mode": "auto",      # auto (patios en predios entre medianeras demasiado profundos) | manual
     "patios": None,             # patios manuales: [[[x,y],...],...] en coordenadas de mundo
     "patios_galeria": None,     # R3.8: [bool] alineado con patios: el pasillo de borde del ala que da a ese patio va en el patio (galería)
-    "galeria_ventanas": False,  # R3.8: las viviendas pueden abrir sus ventanas a la galería (y el pasillo contra una medianera pasa al patio)
     "unit_edits": None,         # R4.4: [{"op": "tabique"|"fusionar"|"dividir", "p": [x,y], "a": [x,y]}] en orden (units.editar_unidades)
     "room_edits": None,         # R5.7: [{"op": "pared", "p", "a"} | {"op": "puerta", "p", "entre"?, "a"?, "ancho"?, "abre"?}] en orden (plans)
 }

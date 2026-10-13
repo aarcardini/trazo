@@ -4996,8 +4996,8 @@ def test_galeria():
     y albergar las circulaciones generales, para que el espacio útil sea únicamente para las viviendas»). Por patio
     manual, params.patios_galeria (alineado con patios) marca que el ala cuyo pasillo de borde da a ese patio lo corre
     al patio: la banda del ancho del pasillo queda del otro lado del muro, pegada al edificio, y toda el ala es de las
-    viviendas. Con galeria_ventanas, también la tira con el pasillo contra la medianera y el otro lado al patio (sus
-    viviendas abren a la galería). Planta del usuario: 30 × 45 entre medianeras, patio de 20 × 17 abierto a la
+    viviendas (la tira con el pasillo contra la medianera no cambia: se descartó para esta versión, sus viviendas solo
+    tendrían luz por la galería). Planta del usuario: 30 × 45 entre medianeras, patio de 20 × 17 abierto a la
     medianera izquierda, pasillo de 2 m, 4 núcleos manuales."""
     import copy, re
     fp = [[0, 0], [30, 0], [30, 45], [0, 45]]
@@ -5053,20 +5053,6 @@ def test_galeria():
     c0 = next(c for c in r1["cores"] if c["spec"] == 0)
     assert abs(c0["center"][0] - 3.075) < 0.05 and abs(max(y for _, y in c0["poly"]) - 10) < 0.01 and min(y for _, y in c0["poly"]) < 1
     assert any(p_["kind"] == "stair" for p_ in c0["parts"])
-    # (c) galeria_ventanas: la tira derecha también corre su pasillo al patio; sus viviendas abren a la galería
-    r2 = corre(patios_galeria=[True], galeria_ventanas=True)
-    gal2 = {ps["id"]: ps for ps in r2["pasillos"] if ps.get("galeria")}
-    assert len(gal2) == 2
-    p3 = next(ps for ps in gal2.values() if abs(ps["eje"][0][0] - ps["eje"][1][0]) < 1e-6)       # la tira: eje vertical
-    assert abs(p3["eje"][0][0] - 19.0) < 0.01, p3
-    assert len(r2["galerias"]) == 2 and all(dentro(q) for q in r2["galerias"]) and 70 <= r2["metrics"]["galeria_area"] <= 76
-    u3 = [u for u in r2["units"] if u["pasillo"] == p3["id"] and 10 < u["door"][1] < 25]       # las que dan al patio
-    assert u3 and all(abs(u["depth"] - 9.3) < 0.05 and abs(u["door"][0] - 20.35) < 0.01 for u in u3), [(u["depth"], u["door"]) for u in u3]
-    assert any(abs(w["seg"][0][0] - 20.35) < 0.05 and abs(w["seg"][1][0] - 20.35) < 0.05 for u in u3 for w in u["ventanas"])   # ventanas a la galería
-    assert all(u["egress_status"] == "ok" for u in r2["units"])
-    assert r2["metrics"]["mix"]["nsa"] > r1["metrics"]["mix"]["nsa"]
-    uno = [u for u in r2["units"] if u["pasillo"] == p1["id"]]              # el brazo de abajo, con ventanas a la galería
-    assert uno and any(abs(w["seg"][0][1] - 7.65) < 0.05 for u in uno for w in u["ventanas"])
     # (e) un patio automático o un patio sin marca no cambia nada
     ra = run(fp, **dict(copy.deepcopy(base), patios_mode="auto", patios=None))
     rb = run(fp, **dict(copy.deepcopy(base), patios_mode="auto", patios=None, patios_galeria=[True]))
@@ -5085,18 +5071,18 @@ def test_galeria():
     assert ue and all(abs(u["depth"] - 7.3) < 0.05 for u in ue)
     # el proyecto guardado por la web lleva los dos parámetros; el motor los lee tal cual (compatibilidad del JSON)
     from engine.layout import DEFAULT_PARAMS
-    assert DEFAULT_PARAMS["patios_galeria"] is None and DEFAULT_PARAMS["galeria_ventanas"] is False
+    assert DEFAULT_PARAMS["patios_galeria"] is None and "galeria_ventanas" not in DEFAULT_PARAMS
     # ---- la web (el comportamiento se comprobó en navegador; acá se vigila el código): la casilla por patio en la ficha
-    # del patio, la de Circulación, el proyecto, deshacer, el dibujo de la banda, la ficha del tramo y el resumen
+    # del patio, el proyecto, deshacer, el dibujo de la banda, la ficha del tramo y el resumen
     html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
     js = html.split("<script>", 1)[1].split("</script>", 1)[0]
     cuerpo = lambda f: js.split(f, 1)[1].split("\nfunction ", 1)[0].split("\nasync function ", 1)[0]
-    assert 'id="galeria_ventanas"' in html.split('<div class="grupo" data-grupo="circ"', 1)[1].split('<div class="grupo"', 1)[0]
+    assert "galeria_ventanas" not in html                      # la regla 2 (ventanas a la galería) se descartó: sin casilla
     assert 'id="paGaleria"' in cuerpo("function patioPanel(") and "galeriaPatio(this.checked)" in cuerpo("function patioPanel(")
     gp = cuerpo("function galeriaPatio(")
     assert "recordar(" in gp and "ensurePatiosManual()" in gp and "patiosGaleria=" in gp
     obj = cuerpo("function params(){")
-    assert "patios_galeria:" in obj and "galeria_ventanas:$('galeria_ventanas').checked" in obj
+    assert "patios_galeria:" in obj
     assert "P.patios_galeria" in cuerpo("function abrirProyecto(") and "m.patios_galeria" in cuerpo("function setMass(")
     assert "patiosGaleria" in cuerpo("function foto(") and "patiosGaleria=s.patiosGaleria||[]" in cuerpo("function volverA(")
     assert "patiosGaleria=[]" in cuerpo("async function nuevo(") and "patiosGaleria=[]" in cuerpo("function ensurePatiosManual(")

@@ -311,11 +311,12 @@ def _pieza_ala(poly, th, polys, holes, bl, centre, an, params):
 
 
 # ---------------------------------------------------------------- galería: el pasillo de borde dentro del patio (R3.8)
-def _sobre_galeria(pc, y, sgn, plate, params, n=40):
+def _sobre_galeria(pc, y, sgn, plate, params, n=40, frac=1 / 3.0):
     """R3.8: ¿el borde y (local, de xa a xb) de la pieza pc da a un patio con galería (params["_galerias"])? Se prueban
-    puntos del otro lado del muro exterior (a outer_wall + 0,05 del borde, hacia sgn): un tercio o más tiene que caer en
-    un patio con galería y los demás dentro de la planta o en su muro (ahí la banda sigue por otra ala, como un pasillo
-    interior de esa ala); ninguno fuera del edificio. El borde tiene que ser recto de punta a punta."""
+    puntos del otro lado del muro exterior (a outer_wall + 0,05 del borde, hacia sgn): una fracción frac o más (un
+    tercio) tiene que caer en un patio con galería y los demás dentro de la planta o en su muro (ahí la banda sigue por
+    otra ala, como un pasillo interior de esa ala); ninguno fuera del edificio. El borde tiene que ser recto de punta a
+    punta."""
     gals = params.get("_galerias") or []
     loc = pc["loc_plate"]
     x0, _, x1, _ = G.bbox(loc)
@@ -325,25 +326,21 @@ def _sobre_galeria(pc, y, sgn, plate, params, n=40):
     ow = params["outer_wall"]
     ws = G.to_world([(x0 + (x1 - x0) * k / n, y + sgn * (ow + 0.05)) for k in range(n + 1)], pc["origin"], pc["angle"])
     patio = [any(G.point_in_poly(w, g) for g in gals) for w in ws]
-    if sum(patio) < (n + 1) / 3.0:
+    if sum(patio) < frac * (n + 1):
         return False
     return all(p or G.point_in_poly(w, plate) or _dist_to_boundary(w, plate) <= ow + 0.1 for p, w in zip(patio, ws))
 
 
-def _a_galeria(pc, flip, params):
+def _a_galeria(pc, params):
     """R3.8: corre el pasillo de la pieza pc (de borde) al patio: la banda del ancho del pasillo queda del otro lado del
-    muro exterior, pegada al edificio, y toda el ala es de las viviendas. El marco se corre hacia el patio (con flip, se
-    da vuelta: la banda va del lado opuesto al pasillo de antes) y loc_plate/poly se extienden con la banda y el muro,
-    así corridor_local cae en la banda y los núcleos la toman como palier. Anota galeria, banda (mundo) y ala (el ala
-    sola, en el marco nuevo: la región de viviendas). Devuelve False si el ala no se deja extender."""
+    muro exterior, pegada al edificio, y toda el ala es de las viviendas. El marco se corre hacia el patio y
+    loc_plate/poly se extienden con la banda y el muro, así corridor_local cae en la banda y los núcleos la toman como
+    palier. Anota galeria, banda (mundo) y ala (el ala sola, en el marco nuevo: la región de viviendas). Devuelve False
+    si el ala no se deja extender."""
     cw, ow = ancho_de(pc, params), params["outer_wall"]
     x0, y0, x1, y1 = G.bbox(pc["loc_plate"])
-    if flip:
-        o = G.to_world([(x1, y1 + ow + cw / 2)], pc["origin"], pc["angle"])[0]
-        ang = pc["angle"] + math.pi
-    else:
-        o = G.to_world([(x0, y0 - ow - cw / 2)], pc["origin"], pc["angle"])[0]
-        ang = pc["angle"]
+    o = G.to_world([(x0, y0 - ow - cw / 2)], pc["origin"], pc["angle"])[0]
+    ang = pc["angle"]
     L = x1 - x0
     ala = G.to_local(pc["poly"], o, ang)                        # el ala, desde y = cw/2 + ow
     muro = [(0.0, -cw / 2), (L, -cw / 2), (L, cw / 2 + ow), (0.0, cw / 2 + ow)]    # la banda y el muro, hasta el ala
@@ -360,26 +357,21 @@ def _a_galeria(pc, flip, params):
 
 def _galeria(pieces, plate, params):
     """R3.8 (modo automático, sin patios interiores): cada pieza con pasillo de borde cuyo borde del pasillo da a un patio
-    con galería corre su pasillo al patio (_a_galeria). Con params["galeria_ventanas"], también la que tiene el pasillo
-    contra una medianera ciega y el otro lado largo sobre un patio con galería (sus viviendas abren a la galería). Donde
-    la banda sale del patio y entra en otra ala es un pasillo interior de esa ala: sus viviendas se bloquean ahí
-    (_bloquear_banda). Las alas de dos crujías no cambian."""
+    con galería corre su pasillo al patio (_a_galeria). Donde la banda sale del patio y entra en otra ala es un pasillo
+    interior de esa ala: sus viviendas se bloquean ahí (_bloquear_banda). Las alas de dos crujías no cambian, y la tira
+    con el pasillo contra una medianera tampoco (se descartó: sus viviendas solo tendrían luz por la galería y el plano
+    no tiene luz en el fondo)."""
     if not params.get("_galerias") or params.get("_huecos"):
         return pieces
-    bl = params.get("_blind")
     for pc in pieces:
         if not pc.get("single") or "eje" in pc or pc.get("between") or pc.get("user"):
             continue
         cw = ancho_de(pc, params)
-        x0, y0, x1, y1 = G.bbox(pc["loc_plate"])
+        _, y0, _, _ = G.bbox(pc["loc_plate"])
         if abs(y0 + cw / 2) > 0.05:
             continue                                        # el pasillo no está pegado al borde y0
         if _sobre_galeria(pc, y0, -1, plate, params):
-            _a_galeria(pc, False, params)
-        elif params.get("galeria_ventanas") and bl and \
-                bl(G.to_world([((x0 + x1) / 2, y0)], pc["origin"], pc["angle"])[0]) and \
-                _sobre_galeria(pc, y1, 1, plate, params):
-            _a_galeria(pc, True, params)
+            _a_galeria(pc, params)
     _bloquear_banda(pieces, params)
     return pieces
 

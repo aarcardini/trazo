@@ -683,7 +683,6 @@ def unit_rooms(u, params, pc=None, plate=None, ediciones=None):
     pw = params["party_wall"]
     galeria = bool((pc or u.get("_pc") or {}).get("galeria"))    # R3.8: el pasillo común está del otro lado del muro
     y_in = cw / 2 + (params["outer_wall"] if galeria else pw / 2)
-    abre = not galeria or bool(params.get("galeria_ventanas"))   # R3.8: ¿el borde sobre la galería es fachada?
     fr = u.get("frente")
     if fr:                                     # R3.7: al frente, v desde la punta del pasillo; la puerta, en 0 <= x <= cw
         xh, sg = (fr["a"], 1) if fr["e"] == 1 else (fr["b"], -1)
@@ -708,7 +707,7 @@ def unit_rooms(u, params, pc=None, plate=None, ediciones=None):
         bordes = [plate] + list(params.get("_huecos") or [])      # fachada exterior y caras a los patios interiores
 
         def is_fac(p, q):
-            if not abre and abs(p[1]) < 0.05 and abs(q[1]) < 0.05:
+            if galeria and abs(p[1]) < 0.05 and abs(q[1]) < 0.05:
                 return False                            # R3.8: el borde sobre la galería no es fachada (sin ventanas)
             for t_ in (0.25, 0.5, 0.75):
                 m = (p[0] + (q[0] - p[0]) * t_, p[1] + (q[1] - p[1]) * t_)
@@ -721,7 +720,7 @@ def unit_rooms(u, params, pc=None, plate=None, ediciones=None):
         def ventana(p, q):
             """R5.5: p-q (con la estancia a la izquierda) está sobre la fachada y del otro lado del muro hay aire: ni
             planta ni otra ala a menos del espesor del muro (junto a una esquina entrante, el muro sigue hacia la otra)."""
-            if not abre and abs(p[1]) < 0.05 and abs(q[1]) < 0.05:
+            if galeria and abs(p[1]) < 0.05 and abs(q[1]) < 0.05:
                 return False                            # R3.8: sobre la galería no hay ventanas
             L = ((q[0] - p[0]) ** 2 + (q[1] - p[1]) ** 2) ** 0.5
             n = ((q[1] - p[1]) / L, -(q[0] - p[0]) / L)
