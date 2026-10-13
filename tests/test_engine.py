@@ -5086,6 +5086,40 @@ def test_galeria():
     # el proyecto guardado por la web lleva los dos parámetros; el motor los lee tal cual (compatibilidad del JSON)
     from engine.layout import DEFAULT_PARAMS
     assert DEFAULT_PARAMS["patios_galeria"] is None and DEFAULT_PARAMS["galeria_ventanas"] is False
+    # ---- la web (el comportamiento se comprobó en navegador; acá se vigila el código): la casilla por patio en la ficha
+    # del patio, la de Circulación, el proyecto, deshacer, el dibujo de la banda, la ficha del tramo y el resumen
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    js = html.split("<script>", 1)[1].split("</script>", 1)[0]
+    cuerpo = lambda f: js.split(f, 1)[1].split("\nfunction ", 1)[0].split("\nasync function ", 1)[0]
+    assert 'id="galeria_ventanas"' in html.split('<div class="grupo" data-grupo="circ"', 1)[1].split('<div class="grupo"', 1)[0]
+    assert 'id="paGaleria"' in cuerpo("function patioPanel(") and "galeriaPatio(this.checked)" in cuerpo("function patioPanel(")
+    gp = cuerpo("function galeriaPatio(")
+    assert "recordar(" in gp and "ensurePatiosManual()" in gp and "patiosGaleria=" in gp
+    obj = cuerpo("function params(){")
+    assert "patios_galeria:" in obj and "galeria_ventanas:$('galeria_ventanas').checked" in obj
+    assert "P.patios_galeria" in cuerpo("function abrirProyecto(") and "m.patios_galeria" in cuerpo("function setMass(")
+    assert "patiosGaleria" in cuerpo("function foto(") and "patiosGaleria=s.patiosGaleria||[]" in cuerpo("function volverA(")
+    assert "patiosGaleria=[]" in cuerpo("async function nuevo(") and "patiosGaleria=[]" in cuerpo("function ensurePatiosManual(")
+    for f in ("function quitarPatio(", "function quitarPatioElegido("):
+        assert "patiosGaleria.splice(" in cuerpo(f), f
+    assert "function conGaleria(" in js and all("conGaleria(" in cuerpo(f) for f in ("function lineasPanel(", "function tramosAuto(", "async function quitarTramo(", "function sinAuto("))
+    assert "result.galerias" in cuerpo("function draw(){") and "'class':'galeria'" in cuerpo("function draw(){") and "function patronGaleria(" in js
+    assert "result.galerias" in cuerpo("function drawAxo(){") and "'class':'galeria'" in cuerpo("function drawAxo(){")
+    assert "'Galería · '" in cuerpo("function datoEn(") and "ps.galeria" in cuerpo("function pasilloPanel(")
+    assert "galeria_area" in cuerpo("function resumenPanel(") and "galeria_area" in cuerpo("function panels(")
+    # cada lugar que cambia las marcas registra antes el estado (como test_deshacer con los patios)
+    bloques = re.compile(r"\nfunction |\nasync function |addEventListener\(|onclick=\"|onchange=\"")
+    exentas = ("function volverA", "function setMass", "async function nuevo", "function ensurePatiosManual")
+    sin = []
+    for m in re.finditer(r"\bpatiosGaleria(\[[^\]]*\])?(=(?![=>])|\.(push|pop|splice)\()", js):
+        linea = js[js.rfind("\n", 0, m.start()) + 1:m.start()]
+        if linea.startswith("let "):
+            continue
+        ini = max([0] + [b.start() for b in bloques.finditer(js, 0, m.start())])
+        bloque = js[ini:m.start()].lstrip("\n")
+        if not bloque.startswith(exentas) and "recordar(" not in bloque:
+            sin.append(js[m.start() - 60:m.end() + 20])
+    assert not sin, sin
 
 if __name__ == "__main__":
     test_galeria(); print("OK71")
