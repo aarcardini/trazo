@@ -89,13 +89,14 @@ Para los tipos del mix marcados «Acc.». Editables en «Normativa → Equipamie
 
 | Elemento | Valor por defecto | Referencia |
 |---|---|---|
-| Puertas de dormitorios y baño | 0,82 m | Criterio indicado por el usuario (paso de la silla de ruedas) |
-| Círculo de giro en el baño | Ø 1,50 m, libre de artefactos (puede pisar la ducha a nivel) | Criterio habitual de accesibilidad (UNIT 200, ISO 21542) |
-| Espacio de transferencia junto al inodoro | 0,80 m de ancho a un costado, del fondo del inodoro más su paso | Ídem |
-| Ducha a nivel (sin plato) | 1,20 × 0,90 m, con asiento rebatible | Ídem |
-| Baño de la vivienda accesible | 2,20 m de frente (el fondo lo da la planta; la comprobación es el giro) | Criterio de proyecto |
+| Puertas de dormitorios y baño | 0,82 m | Criterio indicado por el usuario (paso de la silla de ruedas). UNIT 200:2021, 4.11.4.6: luz libre de paso de 0,80 m como mínimo y 2,00 m de alto; con aproximación lateral, al lado de la puerta queda libre B ≥ 0,90 m si la hoja mide 0,90, 0,95 si mide 0,85 y 1,00 si mide 0,80 |
+| Círculo de giro en el baño | Ø 1,50 m, libre de artefactos (puede pisar la ducha a nivel) | UNIT 200:2021, 4.1.2 (espacio de maniobra: Ø 1,50 m; 1,20 m en accesibilidad básica) |
+| Espacio de transferencia junto al inodoro | 0,80 m de ancho a un costado, del fondo del inodoro más su paso | UNIT 200:2021, 4.1.3 (0,80 × 1,20 m) y 4.11.4.4 a.1 (transferencia lateral al inodoro) |
+| Ducha a nivel (sin plato) | 1,20 × 0,90 m, con asiento rebatible | UNIT 200:2021, 4.11.4.4 a.4: 0,80 × 1,20 m libres como mínimo, al nivel del piso del baño, con transferencia lateral contigua |
+| Baño de la vivienda accesible | 2,20 m de frente (el fondo lo da la planta; la comprobación es el giro) | Criterio de proyecto. UNIT 200:2021, 4.11.4.4: la puerta abre hacia afuera o es corrediza (en accesibilidad básica puede abrir hacia adentro si se puede quitar desde afuera) |
+| Pasillo interno de la vivienda accesible | 0,90 m (el mismo de la NNE, art. 36) | UNIT 200:2021, 4.11.3: pasillos y galerías dentro de la vivienda, 0,90 m; de uso público, 1,20 m (0,90 en básica) |
 
-Reglas del motor: el baño principal abre hacia afuera (el barrido de la hoja no quita lugar al giro); no lleva bidé; el costado del inodoro sin transferencia va, si se puede, contra la pared (barra de apoyo). Si el baño no llega, se dibuja el baño común y la ficha avisa. Pendiente: círculos de giro en cocina y dormitorios.
+Reglas del motor: el baño principal abre hacia afuera (el barrido de la hoja no quita lugar al giro); no lleva bidé; el costado del inodoro sin transferencia va, si se puede, contra la pared (barra de apoyo). Si el baño no llega, se dibuja el baño común y la ficha avisa. Pendiente: círculos de giro en cocina y dormitorios (UNIT 200:2021, 4.11.4.1: el dormitorio accesible lleva el espacio de maniobra y un paso libre de 0,90 m hasta el placard y, por lo menos, a un costado de la cama, y da a un baño accesible). Los valores se compararon con la norma el 13/10/2026 (R10.11) y todos cumplen; la norma la publica la Intendencia de Montevideo con licencia individual de UNIT, así que aquí van solo los valores con su apartado.
 
 ## Ventanas (R5.5)
 
@@ -195,10 +196,36 @@ El modo informa la **reserva** (verde + equipamiento, contra el mínimo) y las *
 | Parámetro | Valor | Referencia |
 |---|---|---|
 | Plaza | 2,50 × 5,00 m | Práctica habitual en Uruguay (indicado por el usuario) |
-| Calle de circulación | 6,00 m | Ídem |
+| Calle de circulación | 6,00 m | Ídem; coincide con la calle de maniobra a 90° del Digesto (abajo) |
 | Módulo de peine doble | 5,00 + 6,00 + 5,00 = 16,00 m | — |
 
-Pendiente: rampas, plazas accesibles y radios de giro (ver ROADMAP).
+Digesto de Montevideo (Vol. XV, Título V, Cap. XVIII, «Edificios y espacios destinados a estacionamientos», arts. D.4082.50 a D.4082.98; leído el 13/10/2026 en normativa.montevideo.gub.uy). Todavía no los usa el motor (R10.10 del ROADMAP):
+
+| Parámetro | Valor | Referencia |
+|---|---|---|
+| Sitios | el 80 % de 4,30 × 2,15 m y el 20 % restante de 4,80 × 2,40 m | D.4082.55 |
+| Sitios en boxes | cada medida mínima + 0,50 m; tabique de 0,10 m | D.4082.55 |
+| Calle de maniobra según el ángulo de los sitios | 90°: 6,00 m; 60°: 5,00; 45°: 4,00; 30°: 3,75; 0° (en paralelo): 3,00 | D.4082.55 |
+| Reducción admitida del ancho | hasta 0,20 m, en 1,00 m de largo como máximo, por estructura o cañerías | D.4082.55 |
+| Sitios sin acceso directo desde la calle | hasta 2 dentro del mínimo exigido (salvo a 0°) | D.4082.55 |
+| Estructura | no va en calles ni en sitios; solo en sus divisorias o esquinas | D.4082.55 |
+| Vereda entre el ascensor y la calle o los sitios | 1,20 m con cordón de 0,10 m | D.4082.55 |
+| Circulaciones (rampas y calles de acceso) | 2,70 m hasta 50 vehículos; 4,80 m con más (y estudio de impacto de tránsito) | D.4082.54 |
+| Pendiente de las rampas | 15 % como máximo; 20 % si el edificio es solo de vivienda u oficinas; 4,00 m al 5 % antes de la vereda | D.4082.54 |
+| Altura libre | 2,20 m (2,00 m bajo la estructura) | D.4082.52 |
+| Estacionamiento individual (no se le aplica el capítulo) | hasta 3 vehículos | D.4082.51 |
+| Plaza accesible | franja lateral libre de 1,10 m del largo del sitio (2,40 m con rampa lateral; dos sitios pueden compartirla) o posterior de 2,40 m | UNIT 200:2021, 4.9.1 |
+
+Pendiente: rampas, plazas accesibles y radios de giro en el motor (ver ROADMAP).
+
+## Ochava y lotes en Montevideo (R8.9, pendiente en el motor)
+
+| Parámetro | Valor | Referencia |
+|---|---|---|
+| Ochava | perpendicular a la bisectriz, de 5 m como mínimo (8 m fuera de los centros urbanos); en ángulo agudo, 3,53 m sobre cada alineación desde el vértice; con 135° o más no se exige | Digesto, Vol. XV, arts. D.3186 a D.3193; Vol. IV, D.223.97 y siguientes (trazados nuevos) |
+| Ochava en Trazo (`masterplan.ochava`) | 3,0 m sobre cada lado (4,24 m a 90°) | Criterio de proyecto; queda corto para Montevideo |
+| Lote en suelo urbano | 10 m de frente y 200 m² (Central; Intermedia con FOS 80 y 60 %; Periférica y otras áreas con saneamiento), 12 m y 300 m² (Intermedia con FOS 50 %; Costera con FOS 80 y 60 %; Periférica sin saneamiento) o 15 m y 500 m² (Intermedia con FOS 35 %; Costera con FOS 50 y 35 %); con frente a rutas o vías de enlace, 15 m y 500 m² | Digesto, Vol. IV, D.223.97 y D.223.97.1 (Dto. JDM 39.163 de 2025) |
+| Tolerancia | hasta dos lotes con el 10 % menos de frente y el 15 % menos de superficie | Digesto, Vol. IV, fraccionamientos |
 
 ## Fuentes consultadas
 - Normativa Nacional de Edificación — Higiene de la Vivienda (Congreso de Intendentes, MVOTMA y SAU, 2016; comisión con participación de la Intendencia de Montevideo). PDF aportado por el usuario
@@ -214,6 +241,10 @@ Pendiente: rampas, plazas accesibles y radios de giro (ver ROADMAP).
 - [Ley 10.723, art. 16 (IMPO)](https://www.impo.com.uy/bases/leyes/10723-1946/16)
 - [Ley 18.308, art. 38 (IMPO)](https://www.impo.com.uy/bases/leyes/18308-2008/38)
 - [Decreto 406/988 — Reglamento de seguridad e higiene ocupacional (IMPO)](https://www.impo.com.uy/bases/decretos-reglamento/406-1988)
-- [Digesto de Montevideo — De los locales habitables](https://normativa.montevideo.gub.uy/articulos/82820) y [D.3318](https://normativa.montevideo.gub.uy/content/d3318) (iluminación de locales habitables; D.3319 sobre la parte móvil). Consultados a través de un buscador: el texto no se pudo abrir desde aquí
+- [Digesto de Montevideo — De los locales habitables](https://normativa.montevideo.gub.uy/articulos/82820) y [D.3318](https://normativa.montevideo.gub.uy/content/d3318) (iluminación de locales habitables; D.3319 sobre la parte móvil). Consultados a través de un buscador cuando el sitio no se podía abrir desde aquí
+- [Digesto de Montevideo — Edificios y espacios destinados a estacionamientos](https://normativa.montevideo.gub.uy/articulos/82846) (Vol. XV, Tít. V, Cap. XVIII, arts. D.4082.52 a D.4082.98; [disposiciones generales](https://normativa.montevideo.gub.uy/articulos/86214), D.4082.50 y D.4082.51). Leído el 13/10/2026
+- [Digesto de Montevideo — De las ochavas](https://normativa.montevideo.gub.uy/articulos/82696) (Vol. XV, arts. D.3186 a D.3193) y [Fraccionamientos y reparcelamientos](https://normativa.montevideo.gub.uy/articulos/92429) (Vol. IV, D.223.97 y siguientes). Leídos el 13/10/2026
+- [Digesto de Montevideo — Condiciones de accesibilidad en edificaciones destinadas a viviendas, escritorios y oficinas](https://normativa.montevideo.gub.uy/articulos/90772) (Vol. XVI, arts. R.1894.8 a R.1894.9.1: rige desde 4 viviendas; itinerario accesible hasta el estar comedor y accesibilidad convertible en un dormitorio, un baño y la cocina)
+- [UNIT 200:2021 — Accesibilidad de las personas al medio físico](https://montevideo.gub.uy/sites/default/files/biblioteca/unit2002021.pdf) (copia que publica la Intendencia de Montevideo, con licencia individual de UNIT: aquí se citan valores y apartados, no texto). Leída el 13/10/2026
 
-Nota: desde v2.27 los mínimos de la vivienda siguen la Normativa Nacional de Edificación (2016), que rige en todos los departamentos (confirmado por el usuario). El Digesto de Montevideo (normativa.montevideo.gub.uy) no estaba disponible al consultar.
+Nota: desde v2.27 los mínimos de la vivienda siguen la Normativa Nacional de Edificación (2016), que rige en todos los departamentos (confirmado por el usuario). El Digesto de Montevideo (normativa.montevideo.gub.uy) no estaba disponible al consultar entonces; desde el 13/10/2026 se leyó directamente (estacionamiento, ochavas, lotes y accesibilidad).
