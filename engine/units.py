@@ -53,6 +53,12 @@ def _is_rect(poly, tol=0.02):
     return A > 0 and abs(abs(G.area(poly)) - A) / A < tol
 
 
+def _y_puerta(pc, params):
+    """Distancia del eje del pasillo común a la puerta de una vivienda: el borde del pasillo o, con galería (R3.8), el
+    borde de la planta, del otro lado del muro exterior."""
+    return ancho_de(pc, params) / 2 + (params["outer_wall"] if pc.get("galeria") else 0.0)
+
+
 def _segments(loc, circ, params):
     """Regiones laterales (local) entre núcleos, a cada lado del pasillo.
     El bolsillo que queda detrás de un núcleo se suma al tramo vecino para no desperdiciar planta."""
@@ -259,7 +265,7 @@ def generate_unit_mix(circ, params, state=None):
     # puertas, evacuación y profundidad
     for i, u in enumerate(units):
         xd = (u["x0"] + u["x1"]) / 2.0
-        yd = (cw / 2) * u["side"]
+        yd = _y_puerta(circ, params) * u["side"]
         u["door_local"] = (xd, yd)
         u["egress"] = 0.0
         ys = [p[1] for p in u["poly_local"]]
@@ -281,8 +287,8 @@ def extremos_al_frente(pc, params):
     de la planta en esa punta: punta libre (sin unión) que llega a la fachada, con el pasillo apoyado en el borde de la
     planta (del otro lado no hay viviendas). Devuelve {e: (x de la punta, franja)}: franja, la del pasillo con el medio
     tabique hacia las viviendas, de todo el largo (marco de la pieza)."""
-    if pc.get("between") or pc.get("puntas") or not pc.get("corridor_local"):
-        return {}
+    if pc.get("between") or pc.get("puntas") or pc.get("galeria") or not pc.get("corridor_local"):
+        return {}                                      # R3.8: la banda de una galería está fuera de la planta
     cw, pw = ancho_de(pc, params), params["party_wall"]
     loc = pc["loc_plate"]
     planta = pc.get("_planta") or G.to_world(loc, pc["origin"], pc["angle"])
@@ -401,7 +407,7 @@ def _recortar(u, x0, x1, params):
         return False
     ys = [q[1] for q in poly]
     u.update({"x0": x0, "x1": x1, "poly_local": poly, "area": abs(G.area(poly)), "width": x1 - x0,
-              "depth": max(ys) - min(ys), "door_local": ((x0 + x1) / 2.0, (ancho_de(u["_pc"], params) / 2) * u["side"]),
+              "depth": max(ys) - min(ys), "door_local": ((x0 + x1) / 2.0, _y_puerta(u["_pc"], params) * u["side"]),
               "editada": True})
     return True
 
@@ -515,7 +521,7 @@ def sin_solapes(units, pieces, nucleos, params):
                 ys = [p[1] for p in loc]
                 u.update({"poly_local": loc, "area": abs(G.area(loc)), "x0": x0, "x1": x1, "width": x1 - x0,
                           "depth": max(ys) - min(ys),
-                          "door_local": ((x0 + x1) / 2.0, (ancho_de(pc, params) / 2) * u["side"])})
+                          "door_local": ((x0 + x1) / 2.0, _y_puerta(pc, params) * u["side"])})
                 w = mayor
         ya.append((G.bbox(w), w))
         out.append(u)
@@ -567,7 +573,7 @@ def superficie_con_muros(polys, bordes, pasillos, nucleos, params, S=None, paso=
         [(G.bbox(p), p, "pasillo", None) for p in pasillos if len(p) >= 3] + \
         [(G.bbox(p), p, "nucleo", None) for p in nucleos if len(p) >= 3]
     sondas = (0.05, pw / 2 + 0.05, pw + 0.05)
-    lejos = sondas[-1] + 1e-6
+    lejos = max(sondas[-1], ow + 0.05) + 1e-6
     out = []
     for i, pl in enumerate(polys):
         poly = G.ensure_ccw(G.clean_rel(pl))           # sin quiebres mínimos ni puntas de ancho cero (redondeo)
@@ -600,7 +606,11 @@ def superficie_con_muros(polys, bordes, pasillos, nucleos, params, S=None, paso=
                 m = pt((t0 + t1) / 2)
                 if en_borde(pt(t0)) and en_borde(m) and en_borde(pt(t1)):
                     d = ow                                         # fachada o medianera (el tramo entero sobre el borde)
-                else:
+                    q = (m[0] + nx * (ow + 0.05), m[1] + ny * (ow + 0.05))
+                    if any(o[2] == "pasillo" and o[0][0] <= q[0] <= o[0][2] and o[0][1] <= q[1] <= o[0][3] and
+                           G.point_in_poly(q, o[1]) for o in cerca):
+                        d = ow / 2                                 # R3.8: la galería detrás del muro: como un pasillo
+                else:                                              #   común, hasta el eje de ese muro
                     d = pw / 2                                     # otra vivienda, o nada: un tabique
                     for t in sondas:
                         q = (m[0] + nx * t, m[1] + ny * t)
@@ -671,7 +681,9 @@ def unit_rooms(u, params, pc=None, plate=None, ediciones=None):
     side = u["side"]
     cw = ancho_de(pc or u.get("_pc") or {}, params)    # R10.8: el ancho del pasillo de su tramo
     pw = params["party_wall"]
-    y_in = cw / 2 + pw / 2
+    galeria = bool((pc or u.get("_pc") or {}).get("galeria"))    # R3.8: el pasillo común está del otro lado del muro
+    y_in = cw / 2 + (params["outer_wall"] if galeria else pw / 2)
+    abre = not galeria or bool(params.get("galeria_ventanas"))   # R3.8: ¿el borde sobre la galería es fachada?
     fr = u.get("frente")
     if fr:                                     # R3.7: al frente, v desde la punta del pasillo; la puerta, en 0 <= x <= cw
         xh, sg = (fr["a"], 1) if fr["e"] == 1 else (fr["b"], -1)
@@ -696,6 +708,8 @@ def unit_rooms(u, params, pc=None, plate=None, ediciones=None):
         bordes = [plate] + list(params.get("_huecos") or [])      # fachada exterior y caras a los patios interiores
 
         def is_fac(p, q):
+            if not abre and abs(p[1]) < 0.05 and abs(q[1]) < 0.05:
+                return False                            # R3.8: el borde sobre la galería no es fachada (sin ventanas)
             for t_ in (0.25, 0.5, 0.75):
                 m = (p[0] + (q[0] - p[0]) * t_, p[1] + (q[1] - p[1]) * t_)
                 w = G.to_world([back(m)], pc["origin"], pc["angle"])[0]
@@ -707,6 +721,8 @@ def unit_rooms(u, params, pc=None, plate=None, ediciones=None):
         def ventana(p, q):
             """R5.5: p-q (con la estancia a la izquierda) está sobre la fachada y del otro lado del muro hay aire: ni
             planta ni otra ala a menos del espesor del muro (junto a una esquina entrante, el muro sigue hacia la otra)."""
+            if not abre and abs(p[1]) < 0.05 and abs(q[1]) < 0.05:
+                return False                            # R3.8: sobre la galería no hay ventanas
             L = ((q[0] - p[0]) ** 2 + (q[1] - p[1]) ** 2) ** 0.5
             n = ((q[1] - p[1]) / L, -(q[0] - p[0]) / L)
             for t_ in (0.25, 0.5, 0.75):

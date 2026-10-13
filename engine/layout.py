@@ -23,7 +23,7 @@ from .units import (_bisect_x, _chain_union, _is_rect, _segments, generate_unit_
                     superficie_con_muros)  # noqa: F401
 from .patios import (auto_patios, _anillo, split_blocks, make_patio_dark, _block_of, _block_of_line)  # noqa: F401
 
-VERSION = "2.54"
+VERSION = "2.55"
 
 DEFAULT_PARAMS = {
     # Masa
@@ -58,6 +58,8 @@ DEFAULT_PARAMS = {
     "medianeras": None,         # [{"a":[x,y],"b":[x,y],"retiro":m}] bordes del predio contra linderos
     "patios_mode": "auto",      # auto (patios en predios entre medianeras demasiado profundos) | manual
     "patios": None,             # patios manuales: [[[x,y],...],...] en coordenadas de mundo
+    "patios_galeria": None,     # R3.8: [bool] alineado con patios: el pasillo de borde del ala que da a ese patio va en el patio (galería)
+    "galeria_ventanas": False,  # R3.8: las viviendas pueden abrir sus ventanas a la galería (y el pasillo contra una medianera pasa al patio)
     "unit_edits": None,         # R4.4: [{"op": "tabique"|"fusionar"|"dividir", "p": [x,y], "a": [x,y]}] en orden (units.editar_unidades)
     "room_edits": None,         # R5.7: [{"op": "pared", "p", "a"} | {"op": "puerta", "p", "entre"?, "a"?, "ancho"?, "abre"?}] en orden (plans)
 }
@@ -119,9 +121,12 @@ def _pasillo(pc, pb, bi, partes, W):
             pb["corridor_width"]                                                             # núcleo (no se angosta)
     else:
         ancho, largo = ancho_de(pc, pb), b - a + pc.get("prolonga", 0.0)
-    return {"id": "P%d" % (pc["_pas"] + 1), "bloque": bi, "eje": W(pc, [(a, 0.0), (b, 0.0)]), "largo": round(largo, 2),
-            "ancho": round(ancho, 3), "propio": "ancho_k" in pc, "spec": pc.get("ancho_k"), "editable": editable,
-            "partes": partes}
+    out = {"id": "P%d" % (pc["_pas"] + 1), "bloque": bi, "eje": W(pc, [(a, 0.0), (b, 0.0)]), "largo": round(largo, 2),
+           "ancho": round(ancho, 3), "propio": "ancho_k" in pc, "spec": pc.get("ancho_k"), "editable": editable,
+           "partes": partes}
+    if pc.get("galeria"):
+        out["galeria"] = True                          # R3.8: el tramo va por el patio, pegado al edificio
+    return out
 
 
 def _rectos(pieces, pasillos, tol=0.05):
@@ -272,8 +277,13 @@ def generate(data):
     # ---- patios: la huella menos los patios da uno o más bloques, cada uno con su planta, su pasillo y su núcleo
     ancho_patio = S0["predio"]["patio_min"]
     auto = params.get("patios_mode", "auto") != "manual"
-    patios = auto_patios(fp, plate, params, ancho_patio) if auto else \
-        [p for p in (params.get("patios") or []) if len(p) >= 3]
+    if auto:
+        patios = auto_patios(fp, plate, params, ancho_patio)
+    else:                                                    # R3.8: la marca «galería» va alineada con params.patios
+        marcas = list(params.get("patios_galeria") or [])
+        pares = [(p, k < len(marcas) and bool(marcas[k])) for k, p in enumerate(params.get("patios") or [])]
+        patios = [p for p, _ in pares if len(p) >= 3]
+        params["_galerias"] = [p for p, g in pares if g and len(p) >= 3]   # los patios que llevan el pasillo adentro
     if patios:
         bloques, plantas, partes = split_blocks(fp, patios, params, res["warnings"])
         params["_patio_dark"] = make_patio_dark(partes, ancho_patio, params["outer_wall"], res["warnings"])
@@ -289,6 +299,7 @@ def generate(data):
         if hb:                                               # anillo alrededor de patios interiores
             res["blocks"][-1].update(holes=[G.pol_to_list(h) for h in hb], plate_holes=[G.pol_to_list(h) for h in hp])
     huellas = [b for b, _ in bloques]
+    partes_patio = partes                                    # los patios dentro de la masa (R3.8: donde va la galería)
     res["patios"] = [G.pol_to_list(p) for p in partes]
     res["patios_auto"] = auto
     res["metrics"] = {"plate_area": round(gfa_plate, 1), "gfa": round(fp_area * len(stories), 1), "stories": len(stories)}
@@ -311,8 +322,9 @@ def generate(data):
     W = lambda pc, pl: G.pol_to_list(G.to_world(pl, pc["origin"], pc["angle"]))
     manual = params.get("cores_mode") == "manual"
     res["corridors"], res["cores"], res["dark_zones"] = [], [], []
+    res["galerias"] = []                                     # R3.8: las bandas de pasillo dentro de los patios (mundo)
     bloques_pc = []                                          # por bloque: (piezas, parámetros, planta, núcleos, viviendas)
-    emax = area_codos = 0.0
+    emax = area_codos = fuera = 0.0                          # fuera: pasillo fuera de la planta (la galería y su muro)
     state, hechos, avisos_u = {}, set(), []                  # mix compartido entre bloques, cambios R4.4 aplicados
     params["_anchos_usados"] = set()                         # R10.8: anchos de pasillo pedidos que se aplicaron
     res["pasillos"] = []                                     # R10.8: cada tramo de pasillo (para elegirlo en la web)
@@ -396,6 +408,13 @@ def generate(data):
             for ext in pc["corridor_ext"]:
                 partes.append(len(res["corridors"]))
                 res["corridors"].append(G.pol_to_list(ext))
+            if pc.get("galeria"):                        # R3.8: lo que queda fuera de la planta (en el patio, o el muro)
+                for k in partes:
+                    c_ = res["corridors"][k]
+                    fuera += abs(G.area(c_)) - sum(abs(G.area(q)) for q in G.subtract(pl_b, [c_])[1][0])
+                for pp in partes_patio:
+                    res["galerias"] += [G.pol_to_list(q) for q in G.subtract(pp, [pc["banda"]])[1][0]
+                                        if abs(G.area(q)) > 0.05]
             pc["_pas"] = len(res["pasillos"])
             res["pasillos"].append(_pasillo(pc, pb, bi, partes, W))
         _rectos(pieces, res["pasillos"])
@@ -419,6 +438,10 @@ def generate(data):
         pb["_neta"] = neta((pl_b, ph_b))
         bloques_pc.append((pieces, pb, pl_b, cpolys, del_bloque))
     res["metrics"]["wings"] = sum(len(b[0]) for b in bloques_pc)
+    galeria = sum(abs(G.area(g)) for g in res["galerias"])
+    if res["galerias"]:                                      # R3.8: la galería le resta superficie al patio
+        res["metrics"]["galeria_area"] = round(galeria, 1)
+        res["metrics"]["patio_area"] = round(res["metrics"].get("patio_area", 0.0) - galeria, 1)
     if res["dark_zones"]:
         dz_area = sum(abs(G.area(d_)) for d_ in res["dark_zones"])
         if dz_area - area_codos > 1.0:
@@ -605,9 +628,12 @@ def generate(data):
         if bad:
             res["warnings"].append("Planos con observaciones en: %s (clic en la unidad para ver el detalle)" % ", ".join(bad[:10]))
     _A = lambda ps: sum(abs(G.area(p)) for p in ps)
-    used = _A(res["corridors"]) + _A([c["poly"] for c in res["cores"]]) + _A([u["poly"] for u in res["units"]])
+    # R3.8: la galería (y el muro que cruza) está fuera de la planta: no cuenta como planta usada, y la circulación se
+    # mide sobre la planta más la galería (pasillos, con la galería, y núcleos / planta + galería)
+    used = _A(res["corridors"]) - fuera + _A([c["poly"] for c in res["cores"]]) + _A([u["poly"] for u in res["units"]])
     res["metrics"]["unused_area"] = round(max(0.0, gfa_plate - used - res["metrics"].get("dark_area", 0.0)), 1)
-    res["metrics"]["circulation_pct"] = round((_A(res["corridors"]) + _A([c["poly"] for c in res["cores"]])) / gfa_plate * 100, 1) if gfa_plate else 0
+    res["metrics"]["circulation_pct"] = round((_A(res["corridors"]) + _A([c["poly"] for c in res["cores"]])) /
+                                              (gfa_plate + galeria) * 100, 1) if gfa_plate else 0
     n_res = sum(1 for s_ in stories if s_["program"] == "Residential")
     if "Residential" in res["metrics"]["programs"]:
         res["metrics"]["programs"]["Residential"]["nsa"] = round(mm["nsa"] * n_res, 1)
