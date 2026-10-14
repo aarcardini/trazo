@@ -3,6 +3,7 @@
 Valores que usa el motor (`engine/standards.py`) y que se editan en la web en el grupo **Normativa** (riel de la izquierda).
 **Mínimo** = exigencia normativa encontrada. **Típico** = criterio de proyecto (no normativo) para que los espacios salgan "reales".
 Verificar siempre con la normativa vigente del departamento y del organismo correspondiente antes de usar en un proyecto.
+Las medidas de mercado (superficie típica de cada tipología, frente y fondo, mix de tipologías de la Vivienda Promovida y de otros mercados) están en `REFERENCIAS.md`.
 
 ## Vivienda
 
