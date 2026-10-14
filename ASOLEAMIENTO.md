@@ -1,6 +1,6 @@
 # Asoleamiento y orientación — referencias y método
 
-Investigación del 14 de octubre de 2026 para que Trazo compruebe, vivienda por vivienda, el **sol directo de invierno** que exige la Vivienda Promovida. Hoy el motor no sabe dónde está el norte: la propuesta agrega un parámetro `norte` y una comprobación en la ficha («cumple», «con tolerancia» o «sin sol en invierno»). Complementa a `STANDARDS.md`.
+Investigación del 14 de octubre de 2026 para que Trazo compruebe, vivienda por vivienda, el **sol directo de invierno** que exige la Vivienda Promovida. Hoy el motor no sabe dónde está el norte: la propuesta agrega un parámetro `norte` y una comprobación en la ficha («cumple», «con tolerancia» o «sin sol en invierno»). Complementa a `STANDARDS.md`. Decisión del usuario (14/10/2026): no es prioritario; para el proyecto alcanza con que cada local habitable (estar, comedor y dormitorios) tenga ventana, que el motor ya comprueba, y el comedor en línea con el estar comparte la suya. Queda como referencia para cuando se quiera verificar la Vivienda Promovida.
 
 Cómo leer las cifras: **(F)** de la fuente citada; **(D)** derivado; **(S)** criterio propio; **(†)** visto solo en el resumen de un buscador. Ángulos en grados; horas en hora local de Uruguay (UTC−3, sin cambio de hora).
 
