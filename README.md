@@ -124,6 +124,13 @@ Trazo lee un **DXF de texto**: en la web, **Proyecto → Abrir DXF…**, y la ma
 
 **Qué se lee:** líneas, polilíneas (LWPOLYLINE y POLYLINE, también con arcos), arcos y círculos (como tramos rectos de 5°), puntos, splines (aproximadas) y bloques (INSERT, con su escala y su giro; un solo nivel). **Qué no:** textos, cotas, rellenos, sólidos y mallas 3D, referencias externas (XREF), bloques dentro de bloques, el espacio papel (las hojas) ni las capas apagadas o congeladas. Lo que Trazo no lee se avisa a la derecha, con el nombre de la entidad y de su capa, antes de los avisos del resultado y con el prefijo «DXF:». Si no encuentra ninguna figura cerrada, dice cómo preparar el terreno.
 
+## Base de tipologías (planos reales)
+Para mejorar los planos del motor con tipologías y plantas reales, los planos se preparan fuera de Trazo como DXF con la convención de `TIPOLOGIAS.md` (capas `Trazo_Unidad`, `Trazo_Estancias`, `Trazo_Entrada`…, metros, pasillo común abajo; el archivo tiene el prompt para un proyecto de Claude que los homogeneiza). Cada DXF se mira y se controla con:
+```bash
+python tools/ver_dxf.py plano.dxf          # escribe plano.svg e imprime el informe de control
+```
+El SVG muestra las estancias con su superficie, la entrada, las ventanas, la fachada, el norte y los datos; el informe dice lo que la convención no admite (estancias sin etiqueta, vivienda sin entrada, superficie que no coincide…). Un ejemplo válido: `tests/dxf/tipologia_2d.dxf`.
+
 ## Actualizar Trazo
 Cuando haya cambios nuevos en GitHub (por ejemplo, después de aceptar un PR):
 - **GitHub Desktop:** pulsa **Fetch origin** y luego **Pull origin**.
@@ -165,6 +172,9 @@ Si algo falla en Rhino, ejecuta el script y elige **Diagnostico**. Si no se resu
 - **Pasillo y núcleos**: eje (automático o dibujado), ancho de pasillo, núcleos (ancho, fondo incluyendo pasillo, cantidad), distancias de evacuación (salida única / múltiple) y núcleos extra automáticos.
 - **Mix**: tipos con m² objetivo y %, ancho mínimo, muro medianero; métricas Match Score, Fit y Unidades únicas.
 - **Planos**: distribución día/noche con pasillo interno, puertas y grafo de conexiones verificado.
+
+## Novedades v2.57
+- **Visor y control de los DXF de tipologías (R5.16, primer paso).** `python tools/ver_dxf.py plano.dxf` dibuja un DXF de la convención de `TIPOLOGIAS.md` como SVG (capas con color, estancias con su superficie, entrada, ventanas, fachada, norte, datos) e imprime el informe de control: polilíneas abiertas, estancias sin etiqueta o con una que no está en la lista, estancias fuera de su vivienda o superpuestas, vivienda sin entrada, habitables que no tocan la fachada, `superficie_muros` distinta de la medida y datos que faltan; termina con 1 si hay errores. Ejemplo válido: `tests/dxf/tipologia_2d.dxf`. `TIPOLOGIAS.md` agrega la verificación visual y qué precisión esperar según el origen del plano (vectorial, imagen con cotas, imagen sin cotas, DWG). No cambia el motor ni la web.
 
 ## Novedades v2.56
 - **Extender una vivienda al espacio vacío (R4.13 b).** Pedido del usuario: cuando queda planta sin usar al lado de una vivienda, poder estirarla sobre ese vacío con un clic.

@@ -68,6 +68,17 @@ observaciones: (lo que no encaja en la convención)
 8. Unidades en metros (`$INSUNITS` = 6), Z = 0, sin SPLINE, HATCH, cotas ni bloques anidados; nombres de capa exactos.
 9. Metadatos completos; lo deducido, marcado como `estimado`.
 
+**Verificación visual y qué esperar de cada origen.** Un plano redibujado puede *parecer* correcto sin serlo (un tabique corrido, una puerta en el lado equivocado), así que con cada DXF se entrega también **una imagen de lo dibujado** (SVG o PNG) para compararla con el original de un vistazo, y en el repositorio se vuelve a mirar y a controlar con `python tools/ver_dxf.py plano.dxf`: escribe `plano.svg` (capas con color, estancias con su superficie, entrada, ventanas, norte, datos) e imprime el informe de control (polilíneas abiertas, estancias sin etiqueta o con una que no está en la lista, estancias fuera de su vivienda o superpuestas, vivienda sin entrada, habitables que no tocan la fachada, `superficie_muros` distinta de la medida, datos que faltan); termina con 1 si hay errores. El archivo `tests/dxf/tipologia_2d.dxf` es un ejemplo completo y válido de la convención (una vivienda de 1 dormitorio de 8,00 × 7,00 m): sirve de modelo para el proyecto que prepara los planos. Lo que se puede esperar según el origen:
+
+| Origen | Cómo se procesa | Precisión | Para qué sirve |
+|---|---|---|---|
+| DXF o PDF vectorial (las líneas se pueden seleccionar en el visor) | la geometría se extrae con código, se escala y se clasifica por capa; hay que revisar la clasificación (muro, mueble, cota) y cerrar las estancias | `alta` | todo: calibrar medidas de estancias, pruebas de regresión, catálogo |
+| Imagen o PDF escaneado **con cotas** o con la superficie publicada | la planta se **redibuja por estimación** (rectángulos con las medidas deducidas de las cotas o de la superficie); errores de 5–10 % en medidas | `media` | tipología, mix, superficies, organización (núcleo húmedo, entrada, estar y comedor en línea), pasillos y núcleos de la planta entera |
+| Imagen **sin cotas** ni superficie | igual, con la escala deducida de una puerta o una cama; `estimado` lo dice | `baja` | solo la organización y la tipología; no para calibrar medidas |
+| DWG | no se puede leer: exportar a DXF ASCII (AutoCAD 2000 o R12) desde Rhino o AutoCAD | — | — |
+
+Para plantas enteras conviene pedir primero solo contornos de unidades, pasillo, núcleos, patios y entradas (lo más fácil de ver y lo más útil para estudiar circulaciones) y estanciar solo las unidades con cotas. Las tipologías que más importen se calcan mejor a mano en Rhino sobre la imagen, con las capas de la convención (10–15 minutos por unidad): el proyecto de Claude solo valida y arma los metadatos.
+
 ## 2. Prompt para el proyecto de Claude que prepara los planos
 
 Copiar como instrucciones del proyecto (tal cual, incluida la convención de la sección 1, pegada al final).
@@ -77,17 +88,18 @@ Copiar como instrucciones del proyecto (tal cual, incluida la convención de la 
 Eres un dibujante técnico que prepara planos de vivienda para alimentar una base de datos de tipologías. Recibes planos de apartamentos y de plantas enteras de edificios de vivienda colectiva (en DXF, PDF, imágenes PNG o JPG, o descripciones con medidas) y los devuelves **homogeneizados en un DXF por plano**, siguiendo al pie de la letra la **Convención Trazo** que está al final de estas instrucciones. Trabajas en español neutro, con el usuario, que es arquitecto.
 
 Qué hacer con cada plano que te den:
-1. **Identificar la fuente y la escala.** Si el archivo es DXF, úsalo directamente. Si es PDF vectorial, extrae la geometría. Si es una imagen, busca cotas; si no hay, deduce la escala con un elemento conocido (una puerta interior de 0,70–0,80 m, un inodoro de 0,70 m de fondo, una cama de 1,40 × 1,90) y declara el supuesto en `escala_original` y `estimado`. Si te dan un DWG, pide que lo exporten a DXF ASCII (AutoCAD 2000 o R12): no puedes leerlo.
+1. **Identificar la fuente y la escala.** Si el archivo es DXF, úsalo directamente. Si es PDF vectorial, extrae la geometría con código (no la redibujes). Si es una imagen o un PDF escaneado, **redibuja** la planta por estimación con las cotas o la superficie publicada y dilo en `precision` (`media`); si no hay cotas, busca cotas; si no hay, deduce la escala con un elemento conocido (una puerta interior de 0,70–0,80 m, un inodoro de 0,70 m de fondo, una cama de 1,40 × 1,90) y declara el supuesto en `escala_original` y `estimado`. Si te dan un DWG, pide que lo exporten a DXF ASCII (AutoCAD 2000 o R12): no puedes leerlo.
 2. **Orientar.** Rota el plano para que el pasillo común quede horizontal y abajo (en una unidad) o para que el pasillo principal quede horizontal (en una planta). Lleva el origen a la esquina inferior izquierda. Dibuja el norte en `Trazo_Norte` si la fuente lo da; si no, anótalo como desconocido.
 3. **Trazar.** El contorno de cada vivienda en `Trazo_Unidad` (eje de los muros divisorios y del muro al pasillo, cara exterior de la fachada); cada estancia en `Trazo_Estancias` por la cara interior de sus muros, con su etiqueta de la lista; puertas, entrada, ventanas, fachadas y medianeras en sus capas; en una planta entera, además el terreno, los patios, los pasillos comunes y los núcleos. Dibuja el equipamiento en `Trazo_Equipamiento` si el original lo tiene. Redondea a 0,01 m y ajusta a 0,05 m cuando el original lo permita.
 4. **Medir y comprobar.** Calcula la superficie del contorno y de cada estancia; completa los metadatos de `Trazo_Datos`; pasa la lista de control de la convención (nueve puntos) y corrige lo que falle. No ajustes el dibujo para que coincida con una superficie publicada: dibuja lo que se ve y anota la diferencia.
-5. **Entregar.** El DXF como archivo de texto, con el nombre de la convención; la fila para `indice.csv`; y una nota corta con lo estimado, lo que no encajó y lo que no pudiste leer. Nunca inventes lo que no se ve: márcalo como estimado o déjalo fuera y dilo.
+5. **Entregar.** El DXF como archivo de texto, con el nombre de la convención; **una imagen de lo que dibujaste** (SVG o PNG, con las estancias y sus etiquetas) para compararla con el original; la fila para `indice.csv`; y una nota corta con lo estimado, lo que no encajó y lo que no pudiste leer. Nunca inventes lo que no se ve: márcalo como estimado o déjalo fuera y dilo.
 
 Reglas:
 - Un DXF por plano; en una planta entera, todas las viviendas en el mismo archivo. Si el usuario quiere además cada vivienda de esa planta como unidad suelta, genera un `U_…` por cada una, ya rotado con su pasillo abajo.
 - Solo las capas y las etiquetas de la convención. Si algo no encaja, usa lo más parecido y explícalo en `observaciones`; no inventes capas ni nombres.
 - Formato DXF ASCII; LWPOLYLINE (código 70 = 1 para cerrada) o POLYLINE/VERTEX/SEQEND; LINE, ARC, CIRCLE y TEXT. Nada de SPLINE, HATCH, DIMENSION ni bloques anidados. HEADER con `$INSUNITS` = 6. Escribe el archivo completo (HEADER, TABLES con las capas, ENTITIES, EOF) y revisa que los pares código/valor estén bien formados.
 - Precisión: las medidas de un DXF o de un PDF vectorial con cotas son `alta`; de una imagen con cotas, `media`; de una imagen sin cotas, `baja`. Dilo en los metadatos.
+- Un ejemplo completo y válido de la convención está en el repositorio de Trazo: `tests/dxf/tipologia_2d.dxf` (una vivienda de 1 dormitorio de 8,00 × 7,00 m, con todas las capas y los datos). Imítalo en la estructura del archivo. Después, el usuario pasa cada DXF por `tools/ver_dxf.py`, que dibuja el plano y marca los errores de la lista de control: lo que ese control rechace vuelve a ti para corregirlo.
 - Derechos: de proyectos del usuario, todo; de planos publicados (revistas, portales, concursos), solo la geometría y las medidas, con la fuente anotada; no copies textos, logos ni rótulos.
 - Si recibes varios planos de un mismo edificio, usa el mismo `proyecto` en todos y numera las unidades (`_01`, `_02`…).
 - Cuando dudes de una medida que cambia el resultado (el fondo de la vivienda, el ancho del pasillo), pregunta antes de entregar; para el resto, decide, anótalo y sigue.
@@ -96,8 +108,9 @@ Convención Trazo: (pegar aquí la sección 1 completa de `TIPOLOGIAS.md`).
 
 ---
 
-## 3. Qué hará Trazo con los archivos (R5.16, pendiente)
+## 3. Qué hará Trazo con los archivos (R5.16)
 
+- Hecho (v2.57): `tools/ver_dxf.py`, el visor y control de cada DXF (SVG + informe; ver arriba), y el ejemplo `tests/dxf/tipologia_2d.dxf`.
 - `data/tipologias/` guarda los DXF y el `indice.csv`.
 - `engine/tipologias.py` (solo biblioteca estándar, sobre `dxf_lector`): lee cada DXF, arma por vivienda `{tipologia, dormitorios, frente, fondo, area_muros, estancias: [{nombre, kind, area, rect, fachada}], entrada, puertas, ventanas, fachadas, crujia, fuente, precision}` y por planta `{terreno, patios, pasillos, nucleos, unidades}`; guarda el catálogo en `data/tipologias/catalogo.json`.
 - Usos, en orden: (a) tablas de calibración contra `standards.py` (superficie de cada estancia por tipología, fondo de cocina y baño, `estar_por_dorms`, frente × fondo típicos, pasillos y viviendas por núcleo en las plantas); (b) pruebas de regresión: para cada tipología con precisión alta, el motor arma la vivienda con su frente × fondo y se compara la distribución (qué estancias, dónde cae el núcleo húmedo, la entrada) con la real; (c) catálogo: cuando el frente × fondo y la tipología de una vivienda del mix coinciden con una guardada, el motor puede usar esa distribución en lugar de calcularla (opción del usuario).

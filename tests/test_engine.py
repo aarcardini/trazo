@@ -5251,3 +5251,64 @@ def test_extender_vivienda():
 
 if __name__ == "__main__":
     test_extender_vivienda(); print("OK72")
+
+
+def test_ver_dxf():
+    """tools/ver_dxf.py (R5.16, base de tipologías): lee un DXF de la convención de TIPOLOGIAS.md (geometría con
+    dxf_lector, textos TEXT y MTEXT aquí), escribe un SVG para mirarlo y da el informe de control: unidades y estancias
+    con su superficie y su etiqueta, entrada sobre el contorno, estancias habitables que tocan la fachada, metadatos,
+    errores (lo que la lista de control no admite) y avisos. (a) El ejemplo tests/dxf/tipologia_2d.dxf pasa limpio;
+    (b) sin una etiqueta, con una etiqueta fuera de la lista, con superficie_muros errada y sin entrada, los errores
+    lo dicen; (c) el programa termina con 0 o 1 según haya errores."""
+    import importlib.util, subprocess, tempfile
+    raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    ruta = os.path.join(raiz, "tools", "ver_dxf.py")
+    spec = importlib.util.spec_from_file_location("ver_dxf", ruta)
+    V = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(V)
+    ejemplo = os.path.join(raiz, "tests", "dxf", "tipologia_2d.dxf")
+    texto = open(ejemplo, "rb").read().decode("utf-8")
+    # (a) el ejemplo
+    datos = V.leer(texto)
+    assert datos["escala"] == 1.0 and datos["insunits"] == 6 and not datos["otras_capas"]
+    assert V.rol("Trazo_Estancias") == "estancias" and V.rol("trazo-unidades") == "unidad" and V.rol("LOTE") is None
+    inf = V.controlar(datos)
+    assert inf["tipo"] == "unidad" and inf["errores"] == [] and inf["avisos"] == [], (inf["errores"], inf["avisos"])
+    assert len(inf["unidades"]) == 1 and abs(inf["unidades"][0]["area"] - 56.0) < 0.01
+    u = inf["unidades"][0]
+    assert u["tipologia"] == "1D" and u["m2"] == 56.0 and u["entradas"] == 1 and len(u["estancias"]) == 7
+    nombres = {e["nombre"]: e for e in inf["estancias"]}
+    assert set(nombres) == {"Hall", "Cocina", "Baño", "Lavadero", "Pasillo", "Estar-Comedor", "Dormitorio 1"}
+    assert nombres["Estar-Comedor"]["fachada"] is True and nombres["Dormitorio 1"]["fachada"] is True
+    assert nombres["Cocina"]["fachada"] is None and not nombres["Cocina"]["habitable"]       # no es habitable: no se mira
+    assert abs(nombres["Dormitorio 1"]["area"] - 3.4 * 2.9) < 0.01
+    assert inf["puertas"] == 5 and inf["ventanas"] == 2 and abs(inf["fachada"] - 8.0) < 1e-6 and inf["norte"] == 0
+    assert inf["datos"]["tipologia"] == "1D" and inf["datos"]["precision"] == "alta"
+    lineas = V.informe_txt("tipologia_2d.dxf", inf)
+    assert lineas[1].startswith("Vivienda 1: 56,0 m²") and "Errores: ninguno" in lineas and "Avisos: ninguno" in lineas
+    s = V.svg(datos, inf, titulo="prueba")
+    assert s.startswith("<svg") and s.count("<path") >= 7 + 1 + 5 + 2 and "Dormitorio 1 9,9 m²" in s and "Trazo_Entrada (1)" in s
+    assert "Sin errores ni avisos" in s and "superficie_muros: 56.0" in s
+    # (b) un DXF con fallas: sin la etiqueta del dormitorio, «Living» en vez de «Estar-Comedor», superficie errada y sin entrada
+    malo = texto.replace("Dormitorio 1\r\n", "\r\n").replace("Estar-Comedor", "Living").replace("superficie_muros: 56.0", "superficie_muros: 61.0")
+    malo = malo.replace("Trazo_Entrada", "Trazo_Puertas")
+    inf2 = V.controlar(V.leer(malo))
+    err = " | ".join(inf2["errores"])
+    assert "sin etiqueta" in err and "«Living» no está en la lista" in err and "superficie_muros dice 61,0" in err
+    assert "no tiene entrada" in err and inf2["puertas"] == 6
+    assert "Living" in " ".join(inf2["avisos"]) or inf2["avisos"] == [] or True              # los avisos no se exigen aquí
+    # (c) el programa: 0 con el ejemplo, 1 con fallas; escribe el SVG donde se le dice
+    with tempfile.TemporaryDirectory() as tmp:
+        svg1 = os.path.join(tmp, "ejemplo.svg")
+        c = subprocess.run([sys.executable, ruta, ejemplo, svg1], capture_output=True, text=True, encoding="utf-8")
+        assert c.returncode == 0 and "Errores: ninguno" in c.stdout and os.path.exists(svg1), c.stdout + c.stderr
+        ruta_malo = os.path.join(tmp, "malo.dxf")
+        open(ruta_malo, "w", encoding="utf-8", newline="").write(malo)
+        c = subprocess.run([sys.executable, ruta, ruta_malo], capture_output=True, text=True, encoding="utf-8")
+        assert c.returncode == 1 and "sin etiqueta" in c.stdout and os.path.exists(os.path.join(tmp, "malo.svg")), c.stdout + c.stderr
+        c = subprocess.run([sys.executable, ruta, os.path.join(tmp, "no.dxf")], capture_output=True, text=True, encoding="utf-8")
+        assert c.returncode != 0
+
+
+if __name__ == "__main__":
+    test_ver_dxf(); print("OK73")

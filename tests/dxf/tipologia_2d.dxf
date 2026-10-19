@@ -1,0 +1,790 @@
+  0
+SECTION
+  2
+HEADER
+  9
+$INSUNITS
+ 70
+6
+  0
+ENDSEC
+  0
+SECTION
+  2
+TABLES
+  0
+TABLE
+  2
+LAYER
+  0
+LAYER
+  2
+Trazo_Datos
+ 70
+0
+ 62
+7
+  6
+CONTINUOUS
+  0
+LAYER
+  2
+Trazo_Norte
+ 70
+0
+ 62
+7
+  6
+CONTINUOUS
+  0
+LAYER
+  2
+Trazo_Unidad
+ 70
+0
+ 62
+7
+  6
+CONTINUOUS
+  0
+LAYER
+  2
+Trazo_Estancias
+ 70
+0
+ 62
+7
+  6
+CONTINUOUS
+  0
+LAYER
+  2
+Trazo_Puertas
+ 70
+0
+ 62
+7
+  6
+CONTINUOUS
+  0
+LAYER
+  2
+Trazo_Entrada
+ 70
+0
+ 62
+7
+  6
+CONTINUOUS
+  0
+LAYER
+  2
+Trazo_Ventanas
+ 70
+0
+ 62
+7
+  6
+CONTINUOUS
+  0
+LAYER
+  2
+Trazo_Fachada
+ 70
+0
+ 62
+7
+  6
+CONTINUOUS
+  0
+LAYER
+  2
+Trazo_Medianeras
+ 70
+0
+ 62
+7
+  6
+CONTINUOUS
+  0
+LAYER
+  2
+Trazo_Equipamiento
+ 70
+0
+ 62
+7
+  6
+CONTINUOUS
+  0
+ENDTAB
+  0
+ENDSEC
+  0
+SECTION
+  2
+ENTITIES
+  0
+LWPOLYLINE
+  8
+Trazo_Unidad
+ 90
+4
+ 70
+1
+ 10
+0.00
+ 20
+0.00
+ 10
+8.00
+ 20
+0.00
+ 10
+8.00
+ 20
+7.00
+ 10
+0.00
+ 20
+7.00
+  0
+TEXT
+  8
+Trazo_Unidad
+ 10
+3.60
+ 20
+3.85
+ 40
+0.25
+  1
+1D 56.0
+  0
+LWPOLYLINE
+  8
+Trazo_Estancias
+ 90
+4
+ 70
+1
+ 10
+0.10
+ 20
+0.10
+ 10
+1.90
+ 20
+0.10
+ 10
+1.90
+ 20
+3.80
+ 10
+0.10
+ 20
+3.80
+  0
+TEXT
+  8
+Trazo_Estancias
+ 10
+0.60
+ 20
+1.95
+ 40
+0.18
+  1
+Hall
+  0
+LWPOLYLINE
+  8
+Trazo_Estancias
+ 90
+4
+ 70
+1
+ 10
+2.00
+ 20
+0.10
+ 10
+4.40
+ 20
+0.10
+ 10
+4.40
+ 20
+3.80
+ 10
+2.00
+ 20
+3.80
+  0
+TEXT
+  8
+Trazo_Estancias
+ 10
+2.80
+ 20
+1.95
+ 40
+0.18
+  1
+Cocina
+  0
+LWPOLYLINE
+  8
+Trazo_Estancias
+ 90
+4
+ 70
+1
+ 10
+4.50
+ 20
+0.10
+ 10
+6.10
+ 20
+0.10
+ 10
+6.10
+ 20
+2.40
+ 10
+4.50
+ 20
+2.40
+  0
+TEXT
+  8
+Trazo_Estancias
+ 10
+4.90
+ 20
+1.25
+ 40
+0.18
+  1
+Baño
+  0
+LWPOLYLINE
+  8
+Trazo_Estancias
+ 90
+4
+ 70
+1
+ 10
+6.20
+ 20
+0.10
+ 10
+7.90
+ 20
+0.10
+ 10
+7.90
+ 20
+2.40
+ 10
+6.20
+ 20
+2.40
+  0
+TEXT
+  8
+Trazo_Estancias
+ 10
+6.65
+ 20
+1.25
+ 40
+0.18
+  1
+Lavadero
+  0
+LWPOLYLINE
+  8
+Trazo_Estancias
+ 90
+4
+ 70
+1
+ 10
+4.50
+ 20
+2.50
+ 10
+7.90
+ 20
+2.50
+ 10
+7.90
+ 20
+3.80
+ 10
+4.50
+ 20
+3.80
+  0
+TEXT
+  8
+Trazo_Estancias
+ 10
+5.80
+ 20
+3.15
+ 40
+0.18
+  1
+Pasillo
+  0
+LWPOLYLINE
+  8
+Trazo_Estancias
+ 90
+4
+ 70
+1
+ 10
+0.10
+ 20
+3.90
+ 10
+4.40
+ 20
+3.90
+ 10
+4.40
+ 20
+6.80
+ 10
+0.10
+ 20
+6.80
+  0
+TEXT
+  8
+Trazo_Estancias
+ 10
+1.85
+ 20
+5.35
+ 40
+0.18
+  1
+Estar-Comedor
+  0
+LWPOLYLINE
+  8
+Trazo_Estancias
+ 90
+4
+ 70
+1
+ 10
+4.50
+ 20
+3.90
+ 10
+7.90
+ 20
+3.90
+ 10
+7.90
+ 20
+6.80
+ 10
+4.50
+ 20
+6.80
+  0
+TEXT
+  8
+Trazo_Estancias
+ 10
+5.80
+ 20
+5.35
+ 40
+0.18
+  1
+Dormitorio 1
+  0
+LINE
+  8
+Trazo_Entrada
+ 10
+0.50
+ 20
+0.00
+ 11
+1.30
+ 21
+0.00
+  0
+LINE
+  8
+Trazo_Puertas
+ 10
+5.00
+ 20
+2.45
+ 11
+5.70
+ 21
+2.45
+  0
+LINE
+  8
+Trazo_Puertas
+ 10
+6.60
+ 20
+2.45
+ 11
+7.30
+ 21
+2.45
+  0
+LINE
+  8
+Trazo_Puertas
+ 10
+6.00
+ 20
+3.85
+ 11
+6.80
+ 21
+3.85
+  0
+LINE
+  8
+Trazo_Puertas
+ 10
+1.95
+ 20
+1.00
+ 11
+1.95
+ 21
+1.70
+  0
+LINE
+  8
+Trazo_Puertas
+ 10
+4.45
+ 20
+5.00
+ 11
+4.45
+ 21
+5.80
+  0
+LINE
+  8
+Trazo_Ventanas
+ 10
+0.80
+ 20
+7.00
+ 11
+2.80
+ 21
+7.00
+  0
+LINE
+  8
+Trazo_Ventanas
+ 10
+5.30
+ 20
+7.00
+ 11
+6.80
+ 21
+7.00
+  0
+LINE
+  8
+Trazo_Fachada
+ 10
+0.00
+ 20
+7.00
+ 11
+8.00
+ 21
+7.00
+  0
+LINE
+  8
+Trazo_Medianeras
+ 10
+0.00
+ 20
+0.00
+ 11
+0.00
+ 21
+7.00
+  0
+LINE
+  8
+Trazo_Medianeras
+ 10
+8.00
+ 20
+0.00
+ 11
+8.00
+ 21
+7.00
+  0
+LINE
+  8
+Trazo_Norte
+ 10
+9.00
+ 20
+0.00
+ 11
+9.00
+ 21
+2.00
+  0
+LWPOLYLINE
+  8
+Trazo_Equipamiento
+ 90
+4
+ 70
+1
+ 10
+5.00
+ 20
+4.20
+ 10
+6.40
+ 20
+4.20
+ 10
+6.40
+ 20
+6.10
+ 10
+5.00
+ 20
+6.10
+  0
+TEXT
+  8
+Trazo_Equipamiento
+ 10
+5.10
+ 20
+5.10
+ 40
+0.15
+  1
+Cama 1.40x1.90
+  0
+TEXT
+  8
+Trazo_Datos
+ 10
+10.00
+ 20
+7.00
+ 40
+0.2
+  1
+fuente: ejemplo de la convención (tests/dxf)
+  0
+TEXT
+  8
+Trazo_Datos
+ 10
+10.00
+ 20
+6.60
+ 40
+0.2
+  1
+ciudad: Montevideo
+  0
+TEXT
+  8
+Trazo_Datos
+ 10
+10.00
+ 20
+6.20
+ 40
+0.2
+  1
+proyecto: Ejemplo
+  0
+TEXT
+  8
+Trazo_Datos
+ 10
+10.00
+ 20
+5.80
+ 40
+0.2
+  1
+anio: 2026
+  0
+TEXT
+  8
+Trazo_Datos
+ 10
+10.00
+ 20
+5.40
+ 40
+0.2
+  1
+tipo: unidad
+  0
+TEXT
+  8
+Trazo_Datos
+ 10
+10.00
+ 20
+5.00
+ 40
+0.2
+  1
+nivel: planta tipo
+  0
+TEXT
+  8
+Trazo_Datos
+ 10
+10.00
+ 20
+4.60
+ 40
+0.2
+  1
+tipologia: 1D
+  0
+TEXT
+  8
+Trazo_Datos
+ 10
+10.00
+ 20
+4.20
+ 40
+0.2
+  1
+dormitorios: 1
+  0
+TEXT
+  8
+Trazo_Datos
+ 10
+10.00
+ 20
+3.80
+ 40
+0.2
+  1
+superficie_util: 49.9
+  0
+TEXT
+  8
+Trazo_Datos
+ 10
+10.00
+ 20
+3.40
+ 40
+0.2
+  1
+superficie_muros: 56.0
+  0
+TEXT
+  8
+Trazo_Datos
+ 10
+10.00
+ 20
+3.00
+ 40
+0.2
+  1
+frente: 8.00
+  0
+TEXT
+  8
+Trazo_Datos
+ 10
+10.00
+ 20
+2.60
+ 40
+0.2
+  1
+fondo: 7.00
+  0
+TEXT
+  8
+Trazo_Datos
+ 10
+10.00
+ 20
+2.20
+ 40
+0.2
+  1
+crujia: doble
+  0
+TEXT
+  8
+Trazo_Datos
+ 10
+10.00
+ 20
+1.80
+ 40
+0.2
+  1
+norte: 0
+  0
+TEXT
+  8
+Trazo_Datos
+ 10
+10.00
+ 20
+1.40
+ 40
+0.2
+  1
+escala_original: DXF
+  0
+TEXT
+  8
+Trazo_Datos
+ 10
+10.00
+ 20
+1.00
+ 40
+0.2
+  1
+precision: alta
+  0
+ENDSEC
+  0
+EOF
