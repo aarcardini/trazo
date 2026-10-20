@@ -6,6 +6,26 @@ from engine.layout import generate
 def run(fp, h=15, **p):
     return generate({"footprint": fp, "height": h, "stage": "plans", "params": p})
 
+def calibracion_anterior(f):
+    """R5.16 (v2.60): las medidas por defecto de la planta se calibraron con la base de tipologías (pasillo de 1,5 m, frente
+    mínimo de 3,5 m, fondo máximo de 16 m, escalera de 1,00 m con ascensor). Las pruebas de geometría exacta escritas antes
+    (posiciones de núcleos y puertas, superficies, fondos) siguen midiendo la lógica del motor con las medidas de antes
+    (2,0 m, 5,0 m, 14 m y 1,20 m); las medidas nuevas las cubren test_calibracion_planta y las referencias de samples/."""
+    import functools
+
+    @functools.wraps(f)
+    def con_medidas_anteriores(*a, **k):
+        from engine import layout as LY, standards as ST
+        params, escalera = dict(LY.DEFAULT_PARAMS), ST.DEFAULTS["nucleo"]["escalera_ancho_con_ascensor"]
+        LY.DEFAULT_PARAMS.update(corridor_width=2.0, min_unit_width=5.0, max_unit_depth=14.0)
+        ST.DEFAULTS["nucleo"]["escalera_ancho_con_ascensor"] = 1.20
+        try:
+            return f(*a, **k)
+        finally:
+            LY.DEFAULT_PARAMS.update(params)
+            ST.DEFAULTS["nucleo"]["escalera_ancho_con_ascensor"] = escalera
+    return con_medidas_anteriores
+
 def test_bar():
     r = run([[0,0],[60,0],[60,16],[0,16]])
     m = r["metrics"]
@@ -307,6 +327,7 @@ if __name__ == "__main__":
     test_patios(); print("OK14")
 
 
+@calibracion_anterior
 def test_patios_interiores():
     """Patios rodeados de edificio (v2.6, R1.3): el bloque es un anillo dividido en alas alrededor del patio, con un
     pasillo que da la vuelta, viviendas con luz hacia el patio y solo los núcleos que pide la evacuación."""
@@ -413,6 +434,7 @@ if __name__ == "__main__":
     test_geometria_robusta(); print("OK17")
 
 
+@calibracion_anterior
 def test_sin_restos():
     """R3.1: un pasillo dibujado que termina antes de la fachada ya no deja una franja suelta entre el núcleo de la
     punta y el borde: el núcleo se apoya contra la fachada y la vivienda del otro lado crece (sin pasar la evacuación)."""
@@ -439,6 +461,7 @@ if __name__ == "__main__":
     test_sin_restos(); print("OK18")
 
 
+@calibracion_anterior
 def test_codos():
     """R3.2: en el codo de una L el núcleo va a la esquina interior, que no tiene luz, y la esquina exterior queda para
     las viviendas; ninguna vivienda queda con estancias a oscuras y lo que no recibe luz se marca «Sin luz natural»."""
@@ -554,6 +577,7 @@ if __name__ == "__main__":
     test_cruces(); print("OK20")
 
 
+@calibracion_anterior
 def test_lavadero():
     """Corrección (v2.11): un lavadero de 0,90 m (el mínimo para su puerta) quedaba «sin acceso» cuando el cálculo daba
     0,8999… m, según dónde estuviera la vivienda: 1 de cada 10 viviendas con puntaje 0 sin motivo."""
@@ -644,7 +668,7 @@ def test_nucleos_editables():
     más ancho y menos profundo). Los núcleos dados como punto siguen igual. La web los edita con un clic."""
     from engine import geometry as G, standards as ST, layout as LY
     S = ST.merged(None)["nucleo"]
-    sw, sl, _ = ST.stair_box(S, 3.0)
+    sw, sl, _ = ST.stair_box(S, 3.0, True)                                    # con ascensor (v2.60: tramos de 1,00 m)
     w90, d90 = ST.core_size(S, 3.0, 1, 2.0, giro=90)
     w0, d0 = ST.core_size(S, 3.0, 1, 2.0)
     assert w90 > w0 and d90 < d0 and abs(w90 - (sl + S["ascensor_ducto"][0] + S["muro"] + S["ducto_instalaciones"] + S["muro"])) < 0.01
@@ -753,14 +777,14 @@ def test_proyectos():
     from engine import layout as LY, standards as ST
     s = json.load(open(os.path.join(os.path.dirname(__file__), "..", "samples", "L_polilinea.json"), encoding="utf-8"))
     std = copy.deepcopy(ST.DEFAULTS)            # la web manda todas las medidas: las de /api/standards con las cambiadas
-    std["nucleo"]["escalera_ancho"] = 1.4       # una medida cambiada: escalera más ancha
+    std["nucleo"]["escalera_ancho_con_ascensor"] = 1.4       # una medida cambiada: escalera más ancha (el edificio lleva ascensor)
     params = {"corridor_width": 1.8, "core_count": 2, "centerlines": s["centerlines"], "cores_mode": "manual",
               "cores": [{"p": [8, 25], "giro": 90}, [40, 7]], "standards": std,
               "unit_mix": [{"name": "1 dorm", "area": 50, "percent": 40, "dorms": 1}, {"name": "2 dorm", "area": 75, "percent": 60, "dorms": 2}]}
     web = {"footprint": s["footprint"], "height": s["height"], "stage": "plans", "params": params}
     proyecto = dict(copy.deepcopy(web), trazo="proyecto", formato=1, version_motor=LY.VERSION,
                     guardado="2026-10-10T12:00:00.000Z", name="Prueba")
-    proyecto["params"]["standards"] = {"nucleo": {"escalera_ancho": 1.4}}     # el archivo guarda solo lo cambiado
+    proyecto["params"]["standards"] = {"nucleo": {"escalera_ancho_con_ascensor": 1.4}}     # el archivo guarda solo lo cambiado
     a = generate(copy.deepcopy(web))
     b = generate(json.loads(json.dumps(proyecto)))
     assert a["units"] and json.dumps(a, sort_keys=True) == json.dumps(b, sort_keys=True)
@@ -875,6 +899,7 @@ if __name__ == "__main__":
     test_variantes(); print("OK29")
 
 
+@calibracion_anterior
 def test_aviso_ancho():
     """Corrección (v2.19.1): el aviso de ancho mínimo muestra dos decimales. Con uno, una vivienda de 4,98 m avisaba
     «Unidad con ancho 5.0 m < mínimo 5.0 m», que parecía un error; ahora dice «4.98 m < mínimo 5.00 m»."""
@@ -912,7 +937,7 @@ def test_editar_viviendas():
     assert all(R[k]["poly"] == U[k]["poly"] for k in U if k not in (t["a"], t["b"]))
     assert R[t["a"]]["type"] == a["type"] and R[t["a"]]["rooms"] and not any("no se pudieron" in w for w in r["warnings"])
     r = run(barra, unit_edits=[{"op": "tabique", "p": mid, "a": hacia(100)}])          # no deja una vivienda sin ancho
-    assert min(u["width"] for u in r["units"]) >= 0.5 * 5.0 - 0.01
+    assert min(u["width"] for u in r["units"]) >= 0.5 * 3.5 - 0.01
     # unir: una sola vivienda con el ancho de las dos y el tabique
     r = run(barra, unit_edits=[{"op": "fusionar", "p": mid}])
     m = next(u for u in r["units"] if u["id"] == t["a"])
@@ -1713,6 +1738,7 @@ def _cocina_comunicada(res):
     cuerpos = [G.bbox(q["poly"]) for q in res["equipamiento"] if q["room"] == k["id"] and q["kind"] in ("heladera", "mesada")]
     return EQ._alcanza(EQ._Estancia(B), cuerpos, acc, [], g=0.05)
 
+@calibracion_anterior
 def test_sin_placards():
     """v2.33 (criterio del usuario): el placard es el armario del dormitorio, no una estancia. La franja sin luz entre el
     pasillo interno y el pasillo común lleva baños (con ducha), lavadero y un depósito de hasta 4 m² (editable; 0 = sin
@@ -1787,6 +1813,7 @@ if __name__ == "__main__":
     test_sin_placards(); print("OK43")
 
 
+@calibracion_anterior
 def test_pasillo_sin_puntas():
     """R3.7 (pedido del usuario): el pasillo común termina en la última puerta. En la punta libre de un pasillo de borde
     (núcleo manual atrás y una sola medianera, como en la captura del predio de 10 x 28), la vivienda del extremo toma
@@ -2062,6 +2089,7 @@ if __name__ == "__main__":
     test_vestidor(); print("OK48")
 
 
+@calibracion_anterior
 def test_pasillo_por_tramo():
     """R10.8 (pedido del usuario): el ancho del pasillo común se puede fijar tramo por tramo (clic en el tramo en la web;
     «ancho=1.4» en la polilínea desde Rhino); los demás siguen con el general. Cada tramo trae su largo, las viviendas
@@ -2143,6 +2171,7 @@ if __name__ == "__main__":
     test_pasillo_por_tramo(); print("OK49")
 
 
+@calibracion_anterior
 def test_pasillo_por_tramo_casos():
     """R10.8, casos de la revisión: pasillos paralelos de distinto ancho (la línea media entre sus bordes), un punto en
     un empalme o un cruce (va al tramo en cuyo medio está), el núcleo de punta junto a un pasillo más ancho que llega,
@@ -2392,6 +2421,7 @@ if __name__ == "__main__":
     test_desfase(); print("OK53")
 
 
+@calibracion_anterior
 def test_superficie_con_muros():
     """R10.8 (norma nacional, art. 3): cada vivienda trae «area_muros», su superficie con los muros: hasta la cara exterior
     del muro exterior en la fachada y en la medianera (criterio del usuario: el muro entero), hasta el eje del muro con
@@ -2526,6 +2556,7 @@ if __name__ == "__main__":
     test_superficie_con_muros(); print("OK54")
 
 
+@calibracion_anterior
 def test_cocina_integrada():
     """R10.8 (norma nacional, art. 27; criterio del usuario): la cocina integrada al estar sin ventana propia se dibuja con
     5 m² como máximo, en todos los casos (monoambiente, vivienda profunda, también con el hall en x0, poco profunda y
@@ -2736,6 +2767,7 @@ if __name__ == "__main__":
     test_cocina_integrada(); print("OK55")
 
 
+@calibracion_anterior
 def test_superficie_minima():
     """R10.8 (norma nacional, «Hecho cuando»): la vivienda con muros contra la superficie mínima del art. 3 (32, 44, 56 y
     68 m² con 1 a 4 dormitorios; el estudio cuenta como dormitorio, art. 6; con más de 4, 12 m² más por cada uno): por
@@ -2788,6 +2820,7 @@ if __name__ == "__main__":
     test_superficie_minima(); print("OK56")
 
 
+@calibracion_anterior
 def test_proporcion_y_divisoria():
     """R10.8 (norma nacional): art. 14, la profundidad de dormitorios, estar, comedor y estudio de hasta 3 veces su lado
     menor (si no se avisaron ya por su medida o por no tener fachada) y la del estar con el comedor interior, desde la
@@ -2853,6 +2886,7 @@ if __name__ == "__main__":
     test_proporcion_y_divisoria(); print("OK57")
 
 
+@calibracion_anterior
 def test_rincones():
     """R5.11 (criterio del usuario): la tira sin luz junto al pasillo común de una vivienda muy profunda es una banda de
     servicios. Con fondo para la mesada, la cocina integrada (5 m² como máximo, art. 27) corre desde el hall, que va a x0
@@ -3463,8 +3497,8 @@ def test_medidas_tipeadas():
     assert 'pw, wmin = params["party_wall"], 0.5 * params["min_unit_width"]' in \
         open(os.path.join(base, "engine", "units.py"), encoding="utf-8").read()                    # el mismo mínimo que usa el motor
     assert "selTab={a:t0.a,b:t0.b,u:selUnit}" in js.split("const tt=e.target.closest&&e.target.closest('[data-tab]');", 1)[1].split("\n", 1)[0]
-    assert 'id="min_unit_width" value="5"' in html and 'id="party_wall" value="0.3"' in html   # los valores con que la web mide
-    assert layout.DEFAULT_PARAMS["min_unit_width"] == 5.0 and layout.DEFAULT_PARAMS["party_wall"] == 0.30
+    assert 'id="min_unit_width" value="3.5"' in html and 'id="party_wall" value="0.3"' in html   # los valores con que la web mide
+    assert layout.DEFAULT_PARAMS["min_unit_width"] == 3.5 and layout.DEFAULT_PARAMS["party_wall"] == 0.30
 
     # ---- lo que hace la web, en Python
     def a_local(p, S):                                   # S = (x, y, ángulo): el SCP
@@ -3570,7 +3604,7 @@ def test_medidas_tipeadas():
         wA, wB = s - pw / 2 - min(dot(p) for p in A["poly"]), max(dot(p) for p in B["poly"]) - s - pw / 2
         return (wA if abs(wA - A["width"]) <= 0.006 else A["width"]), (wB if abs(wB - B["width"]) <= 0.006 else B["width"])
 
-    def pedir_frente(r, t, id_, v, forzar=False, pw=0.3, min_w=5.0):  # como frenteTipeado: el cambio de unit_edits (None si no entra)
+    def pedir_frente(r, t, id_, v, forzar=False, pw=0.3, min_w=3.5):  # como frenteTipeado: el cambio de unit_edits (None si no entra)
         wA, wB = frentes_tab(r, t, pw)
         tot, mn, esA = wA + wB, 0.5 * min_w, id_ == t["a"]
         if not forzar and (v < mn - 1e-9 or v > tot - mn + 1e-9):
@@ -3588,7 +3622,7 @@ def test_medidas_tipeadas():
         t = r0["tabiques"][k]
         visto.add(tuple(round(c, 2) for c in t["dir"]))
         wA, wB = frentes_tab(r0, t)
-        tot, mn = wA + wB, 2.5
+        tot, mn = wA + wB, 1.75                          # la mitad del frente mínimo (3,5 m)
         assert abs(wA - ancho_de(r0, t["a"])) < 0.006 and abs(wB - ancho_de(r0, t["b"])) < 0.006   # la geometría y el reparto coinciden
         for id_, v in ((t["a"], round(mn + 0.37 * (tot - 2 * mn), 2)), (t["b"], round(mn + 0.71 * (tot - 2 * mn), 2))):
             r1 = run(s["footprint"], h=s["height"], unit_edits=[pedir_frente(r0, t, id_, v)])
@@ -4052,6 +4086,7 @@ if __name__ == "__main__":
     test_equipamiento_orden(); print("OK64")
 
 
+@calibracion_anterior
 def test_patios_editables():
     """R4.12: patios editables en la web. Clic en un patio (automático o manual) abre su ficha (ancho y fondo en los ejes
     del edificio, posición en el SCP actual) y se arrastra en la planta como los núcleos; al primer cambio los patios
@@ -4207,6 +4242,7 @@ def test_patios_editables():
 if __name__ == "__main__":
     test_patios_editables(); print("OK65")
 
+@calibracion_anterior
 def test_tabla_csv():
     """R7.2: la tabla de viviendas en CSV (engine/tabla_viviendas.py y GET /api/csv), para abrirla en Excel o LibreOffice en
     español: UTF-8 con BOM, separador «;», coma decimal y CRLF; una fila por vivienda y por nivel residencial (la planta tipo
@@ -4417,6 +4453,7 @@ if __name__ == "__main__":
     test_alas_unidas(); print("OK67")
 
 
+@calibracion_anterior
 def test_puerta_en_la_punta():
     """R3.7b: en una punta libre del pasillo común (sin unión, núcleo ni conector), la vivienda del extremo pone el hall
     —y su puerta— en la punta si el plano no empeora: el pasillo termina en la última puerta en vez de seguir unos
@@ -4604,7 +4641,7 @@ console.log(JSON.stringify(salida));
 """ % (previas, seccion)
         open(os.path.join(tmp, "arnes.js"), "w", encoding="utf-8").write(arnes)
 
-        def en_node(res, casos, min_w=5.0, pw=0.3):
+        def en_node(res, casos, min_w=3.5, pw=0.3):
             open(os.path.join(tmp, "entrada.json"), "w", encoding="utf-8").write(
                 json.dumps({"result": res, "casos": casos, "min_unit_width": min_w, "party_wall": pw}))
             p = subprocess.run([node, os.path.join(tmp, "arnes.js"), os.path.join(tmp, "entrada.json")],
@@ -4740,6 +4777,7 @@ if __name__ == "__main__":
     test_medidas_en_vivo(); print("OK69")
 
 
+@calibracion_anterior
 def test_atajos_y_cotas():
     """R9.8: atajos de teclado y cotas en la planta (solo web; el motor no cambia).
     Atajos (en la planta 2D; nunca con un campo de texto o una lista con el foco ni con Ctrl, Alt o Cmd): L, N, M, P y S
@@ -5005,7 +5043,7 @@ def test_galeria():
            {"name": "1 dorm", "area": 60, "percent": 25, "dorms": 1}, {"name": "Mono", "area": 32, "percent": 25, "dorms": 0}]
     std = {"vivienda": {"dorm_principal": {"min_area": 8, "min_side": 2.6, "typ_area": 11.5, "typ": [3.2, 3.6]},
                         "estudio": {"min_area": 0, "min_side": 0, "typ_area": 0, "typ": [0, 0]}}}
-    base = dict(corridor_width=2, core_width=5.45, core_depth=7.02, core_count=2, egress_single=18, egress_multi=30,
+    base = dict(corridor_width=2, core_auto=False, core_width=5.45, core_depth=7.02, core_count=2, egress_single=18, egress_multi=30,
                 min_unit_width=5, party_wall=0.3, max_unit_depth=14, outer_wall=0.35, unit_mix=mix, standards=std,
                 medianeras=[{"a": [30, 0], "b": [30, 45], "retiro": 0}, {"a": [0, 45], "b": [0, 0], "retiro": 0}],
                 cores_mode="manual", cores=[[3, 11], [3.075, 39.325], [25, 3.075], [25, 31.125]],
@@ -5111,6 +5149,7 @@ if __name__ == "__main__":
     test_galeria(); print("OK71")
 
 
+@calibracion_anterior
 def test_extender_vivienda():
     """R4.13b: extender una vivienda al espacio vacío. Cada vivienda del resultado trae «extensible»: los lados de su
     franja (x0, x1, en el marco de su pieza) con planta libre de 0,30 m o más, con el largo y un punto de mundo dentro
@@ -5589,11 +5628,11 @@ def test_tipologias():
     est = {c["estancia"]: c for c in cm["estancias"]}
     assert est["Dormitorio 1"]["tipico_area"] == 11.5 and est["Dormitorio 1"]["n"] > 30 and est["Cocina integrada"]["tope_area"] == 5.0
     assert [c["estar_por_dorms"] for c in cm["zona_estar"]] == [18.0, 18.0, 20.0, 24.0, 27.0]
-    assert cm["plantas"]["ancho_pasillo"]["motor"] == 2.0
+    assert cm["plantas"]["ancho_pasillo"]["motor"] == 1.5                 # v2.60: el de la base (1,50 m), antes 2,0 m
     nm = cm["plantas"]["nucleo"]["motor"]               # el núcleo del motor: sin el palier (como Trazo_Nucleos) y con él
-    assert nm["ascensores"] == 1 and 22 < nm["giro_0"]["area_sin_palier"] < 25 and 18 < nm["giro_90"]["area_sin_palier"] < 21
+    assert nm["ascensores"] == 1 and 18 < nm["giro_0"]["area_sin_palier"] < 21 and 15 < nm["giro_90"]["area_sin_palier"] < 18   # v2.60: 19,5 y 16,7 m² (antes 23,5 y 19,6)
     for g in ("giro_0", "giro_90"):
-        assert nm[g]["area_sin_palier"] < nm[g]["area_con_palier"] and 27 < nm[g]["area_con_palier"] < 28, nm[g]
+        assert nm[g]["area_sin_palier"] < nm[g]["area_con_palier"] and 22 < nm[g]["area_con_palier"] < 27, nm[g]
     assert nm["giro_0"]["caja_sin_palier"][0] < nm["giro_90"]["caja_sin_palier"][0]      # el giro 90 es más ancho y menos fondo
     assert nm["giro_90"]["caja_sin_palier"][1] < nm["giro_0"]["caja_sin_palier"][1]
     assert cm["plantas"]["nucleo"]["medida"]["area"] < nm["giro_90"]["area_sin_palier"]
@@ -5646,3 +5685,71 @@ def test_tipologias():
 
 if __name__ == "__main__":
     test_tipologias(); print("OK75")
+
+
+def test_calibracion_planta():
+    """R5.16 (v2.60, usos a): los parámetros de la planta se calibraron con la base de tipologías de Montevideo
+    (data/tipologias/RESUMEN.md, 4.4): pasillo común de 1,5 m (antes 2,0), frente mínimo de la vivienda de 3,5 m (antes
+    5,0), fondo máximo de 16 m (antes 14) y escalera del edificio con ascensor de 1,00 m de tramo (NNE, art. 31 A.1; antes
+    1,20 m): el núcleo sin palier baja de 23,5 a 19,5 m² (giro 0) y de 19,6 a 16,7 m² (giro 90). Los proyectos guardados
+    conservan sus valores y la web trae los mismos valores en sus controles."""
+    import copy, re
+    from engine import layout as LY, standards as ST, programs as PR, geometry as G
+    D, N = LY.DEFAULT_PARAMS, ST.DEFAULTS["nucleo"]
+    # los valores nuevos, y la escalera con ascensor como clave aparte (la de sin ascensor sigue en 1,20 m)
+    assert (D["corridor_width"], D["min_unit_width"], D["max_unit_depth"]) == (1.5, 3.5, 16.0), D
+    assert N["escalera_ancho"] == 1.20 and N["escalera_ancho_con_ascensor"] == 1.00, N
+    # stair_box: con ascensor, dos tramos de 1,00 m; sin él (o sin decir), de 1,20 m; las contrahuellas no cambian
+    sw0, sl0, r0 = ST.stair_box(N, 3.0)
+    sw1, sl1, r1 = ST.stair_box(N, 3.0, con_ascensor=True)
+    assert ST.stair_box(N, 3.0, False) == (sw0, sl0, r0) and r0 == r1 == 18
+    assert abs(sw0 - (2 * 1.20 + N["ojo"] + 2 * N["muro"])) < 1e-9 and abs(sw1 - (2 * 1.00 + N["ojo"] + 2 * N["muro"])) < 1e-9
+    assert abs((sw0 - sw1) - 0.40) < 1e-9 and abs((sl0 - sl1) - 0.40) < 1e-9     # el descanso y la meseta miden lo que el tramo
+    assert ST.ancho_escalera(N) == 1.20 and ST.ancho_escalera(N, True) == 1.00
+    # core_size: sin ascensor, la escalera sola de 1,20 m; con ascensor, la de 1,00 m (el ascensor, su ducto y el palier no cambian)
+    w, d = ST.core_size(N, 3.0, 0, 1.5)
+    assert abs(w - sw0) < 0.011 and abs(d - (sl0 + 1.5)) < 0.011, (w, d)
+    asc = N["ascensor_ducto"][0] + N["muro"] + N["ducto_instalaciones"] + N["muro"]
+    fondo_asc = N["palier"] + N["ascensor_ducto"][1] + N["muro"]
+    w, d = ST.core_size(N, 3.0, 1, 1.5)
+    assert abs(w - (sw1 + asc)) < 0.011 and abs(d - (max(sl1, fondo_asc) + 1.5)) < 0.011, (w, d)
+    con12 = copy.deepcopy(N)
+    con12["escalera_ancho_con_ascensor"] = 1.20                 # la escalera de antes: 0,40 m más ancha (y más larga, en giro 0)
+    w12, d12 = ST.core_size(con12, 3.0, 1, 1.5)
+    assert abs((w12 - w) - 0.40) < 0.011 and abs((d12 - d) - 0.40) < 0.011, (w, d, w12, d12)
+    w90, d90 = ST.core_size(N, 3.0, 1, 1.5, giro=90)
+    w90_12, d90_12 = ST.core_size(con12, 3.0, 1, 1.5, giro=90)
+    assert abs((w90_12 - w90) - 0.40) < 0.011 and abs(d90_12 - d90) < 0.011, (w90, d90, w90_12, d90_12)
+    # core_parts: con un ascensor la escalera mide 2 × 1,00 m + ojo + muros y lo dice; sin ascensor, 1,20 m
+    for n_elev, ancho in ((1, 1.00), (0, 1.20)):
+        w, d = ST.core_size(N, 3.0, n_elev, 1.5)
+        partes = PR.core_parts((0.0, -0.75, w, -0.75 + d), 1, 1.5, N, 3.0, n_elev)
+        esc = next(p for p in partes if p["kind"] == "stair")
+        x0, y0, x1, y1 = G.bbox([tuple(q) for q in esc["poly"]])
+        assert abs((x1 - x0) - (2 * ancho + N["ojo"] + 2 * N["muro"])) < 1e-6, (n_elev, x1 - x0)
+        assert "ancho %.2f m" % ancho in esc["name"], esc["name"]
+        peldanos = [l for l in esc["lines"] if abs(l[0][1] - l[1][1]) < 1e-9]       # cada peldaño cruza un tramo
+        assert peldanos and all(abs(abs(l[1][0] - l[0][0]) - ancho) < 1e-6 for l in peldanos), (n_elev, peldanos[:2])
+    # el edificio: con ascensor (15 m, último nivel a 12 m) la caja de la escalera es la de 1,00 m; sin él (12 m, último nivel
+    # a 9 m), la de 1,20 m
+    barra = [[0, 0], [60, 0], [60, 16], [0, 16]]
+    con, sin = run(barra, h=15), run(barra, h=12)
+    assert con["metrics"]["core"]["elevators"] == 1 and sin["metrics"]["core"]["elevators"] == 0
+    assert con["metrics"]["core"]["stair_box"] == [round(sw1, 2), round(sl1, 2)], con["metrics"]["core"]
+    assert sin["metrics"]["core"]["stair_box"] == [round(sw0, 2), round(sl0, 2)], sin["metrics"]["core"]
+    assert abs(con["cores"][0]["frente"] - ST.core_size(N, 3.0, 1, 1.5)[0]) < 0.011
+    # el pasillo de 1,5 m es el de los resultados nuevos; un proyecto que guardó 2,0 m lo conserva
+    assert all(abs(ps["ancho"] - 1.5) < 1e-9 and not ps["propio"] for ps in con["pasillos"])
+    assert all(abs(ps["ancho"] - 2.0) < 1e-9 for ps in run(barra, h=15, corridor_width=2.0)["pasillos"])
+    assert all(u["depth"] <= 16.0 + 0.5 for u in con["units"]) and min(u["width"] for u in con["units"]) >= 3.5 - 0.01
+    # web: los controles traen los mismos valores por defecto que el motor y la medida nueva se lista en Normativa
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    for ident in ("corridor_width", "min_unit_width", "max_unit_depth"):
+        m = re.search(r'id="%s" value="([^"]+)"' % ident, html)
+        assert m and float(m.group(1)) == D[ident], (ident, m and m.group(1))
+    assert "escalera_ancho_con_ascensor:'Ancho de tramo con ascensor (m)'" in html and "escalera_ancho:'Ancho de tramo sin ascensor (m)'" in html
+    assert "escalera_ancho_con_ascensor" not in re.search(r"const STD_ANTES=(\{.*?\}\}\});", html).group(1)   # clave nueva: sin valor viejo
+    assert ST.merged({"nucleo": {"escalera_ancho": 1.4}})["nucleo"]["escalera_ancho_con_ascensor"] == 1.00    # un proyecto viejo la toma sola
+
+if __name__ == "__main__":
+    test_calibracion_planta(); print("OK76")

@@ -1,7 +1,7 @@
 {
  "ejemplo": "samples/L_polilinea.json",
  "nombre": "L con polilínea",
- "version_motor": "2.42",
+ "version_motor": "2.60",
  "metricas": {
   "unidades": 9,
   "unidades_totales": 45,
@@ -13,14 +13,14 @@
   "ascensores": 1,
   "tramos": 2,
   "area_planta": 1053.5,
-  "eficiencia_planta": 72.3,
-  "eficiencia_total": 68.3,
-  "sin_usar": 22.5,
-  "circulacion": 25.5,
+  "eficiencia_planta": 76.4,
+  "eficiencia_total": 72.1,
+  "sin_usar": 32.3,
+  "circulacion": 20.5,
   "match_score": 94.4,
-  "fit_m2": 8.6,
-  "calidad_planos": 100,
-  "evacuacion_max": 17.9,
-  "nsa_total": 3809.5
+  "fit_m2": 10.6,
+  "calidad_planos": 94,
+  "evacuacion_max": 18.0,
+  "nsa_total": 4023.5
  }
 }

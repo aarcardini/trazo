@@ -68,6 +68,7 @@ DEFAULTS = {
     },
     "nucleo": {
         "escalera_ancho": 1.20,          # ancho de cada tramo (IT 19)
+        "escalera_ancho_con_ascensor": 1.00,   # ancho de cada tramo con ascensor (NNE, art. 31 A.1; R5.16, v2.60)
         "contrahuella": 0.175,           # 16-18 cm
         "huella": 0.29,                  # 2a + b = 0,64
         "ojo": 0.10,                     # separación entre tramos
@@ -204,9 +205,17 @@ def merged(over):
     return out
 
 
-def stair_box(S, floor_h):
-    """Caja de escalera de dos tramos (ida y vuelta). Devuelve (ancho, largo, nº de contrahuellas)."""
-    n = S["escalera_ancho"]
+def ancho_escalera(S, con_ascensor=False):
+    """Ancho de cada tramo de la escalera: el de «escalera_ancho» (1,20 m, IT 19) y, si el edificio lleva ascensor, el de
+    «escalera_ancho_con_ascensor» (1,00 m, NNE art. 31 A.1; R5.16, v2.60). S: standards["nucleo"]."""
+    return S.get("escalera_ancho_con_ascensor", S["escalera_ancho"]) if con_ascensor else S["escalera_ancho"]
+
+
+def stair_box(S, floor_h, con_ascensor=False):
+    """Caja de escalera de dos tramos (ida y vuelta). Devuelve (ancho, largo, nº de contrahuellas).
+    con_ascensor: el edificio lleva ascensor, la escalera tiene el ancho de «escalera_ancho_con_ascensor» (también el
+    descanso y la meseta, que miden lo que el tramo)."""
+    n = ancho_escalera(S, con_ascensor)
     risers = int(math.ceil(floor_h / S["contrahuella"] - 1e-9))
     per = int(math.ceil(risers / 2.0))
     run = (per - 1) * S["huella"]
@@ -247,7 +256,7 @@ def core_size(S, floor_h, n_elev, corridor_w, giro=0):
     """Frente y fondo del núcleo (fondo incluye el pasillo) a partir de escalera y ascensores.
     giro 0: la escalera sube perpendicular al pasillo; giro 90: a lo largo del pasillo (núcleo más ancho y menos
     profundo, para alas de poco fondo)."""
-    sw, sl, _ = stair_box(S, floor_h)
+    sw, sl, _ = stair_box(S, floor_h, n_elev > 0)
     ew, ed = S["ascensor_ducto"]
     asc = n_elev * (ew + S["muro"]) + (S["ducto_instalaciones"] + S["muro"] if n_elev else 0)
     fondo_asc = (S["palier"] + ed + S["muro"]) if n_elev else 0
