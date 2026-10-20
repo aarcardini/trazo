@@ -173,6 +173,9 @@ Si algo falla en Rhino, ejecuta el script y elige **Diagnostico**. Si no se resu
 - **Mix**: tipos con m² objetivo y %, ancho mínimo, muro medianero; métricas Match Score, Fit y Unidades únicas.
 - **Planos**: distribución día/noche con pasillo interno, puertas y grafo de conexiones verificado.
 
+## Novedades v2.57.1
+- **Base de tipologías: primer lote (R5.16).** `data/tipologias/` trae 67 DXF de seis proyectos de Montevideo preparados con la convención de `TIPOLOGIAS.md` (49 viviendas: 4 monoambientes, 19 de 1 dormitorio, 13 de 2, 11 de 3 y 2 de 4; 18 plantas enteras), su `indice.csv`, una nota por proyecto y `CRITERIOS.md` (lo decidido al prepararlos y lo que se apartó de la convención). Todos pasan el control del visor salvo los niveles superiores de los dúplex, que no tienen puerta al palier. Corrección del visor: el fondo del SVG decía `100%%` y el navegador lo ignoraba.
+
 ## Novedades v2.57
 - **Visor y control de los DXF de tipologías (R5.16, primer paso).** `python tools/ver_dxf.py plano.dxf` dibuja un DXF de la convención de `TIPOLOGIAS.md` como SVG (capas con color, estancias con su superficie, entrada, ventanas, fachada, norte, datos) e imprime el informe de control: polilíneas abiertas, estancias sin etiqueta o con una que no está en la lista, estancias fuera de su vivienda o superpuestas, vivienda sin entrada, habitables que no tocan la fachada, `superficie_muros` distinta de la medida y datos que faltan; termina con 1 si hay errores. Ejemplo válido: `tests/dxf/tipologia_2d.dxf`. `TIPOLOGIAS.md` agrega la verificación visual y qué precisión esperar según el origen del plano (vectorial, imagen con cotas, imagen sin cotas, DWG). No cambia el motor ni la web.
 

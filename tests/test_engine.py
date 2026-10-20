@@ -5288,6 +5288,7 @@ def test_ver_dxf():
     assert lineas[1].startswith("Vivienda 1: 56,0 m²") and "Errores: ninguno" in lineas and "Avisos: ninguno" in lineas
     s = V.svg(datos, inf, titulo="prueba")
     assert s.startswith("<svg") and s.count("<path") >= 7 + 1 + 5 + 2 and "Dormitorio 1 9,9 m²" in s and "Trazo_Entrada (1)" in s
+    assert '<rect width="100%" height="100%"' in s and "%%" not in s   # v2.57.1: el fondo decía 100%% y el navegador lo ignoraba
     assert "Sin errores ni avisos" in s and "superficie_muros: 56.0" in s
     # (b) un DXF con fallas: sin la etiqueta del dormitorio, «Living» en vez de «Estar-Comedor», superficie errada y sin entrada
     malo = texto.replace("Dormitorio 1\r\n", "\r\n").replace("Estar-Comedor", "Living").replace("superficie_muros: 56.0", "superficie_muros: 61.0")

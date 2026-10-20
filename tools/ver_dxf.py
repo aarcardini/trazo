@@ -342,7 +342,7 @@ def svg(datos, inf, ancho=1000, titulo=""):
     Y = lambda y: arriba + (y1 + margen - y) * s
     out = ['<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d" '
            'font-family="Helvetica, Arial, sans-serif">' % (ancho, alto, ancho, alto),
-           '<rect width="100%%" height="100%%" fill="#fff"/>',
+           '<rect width="100%" height="100%" fill="#fff"/>',
            '<text x="10" y="22" font-size="15" font-weight="bold">%s</text>' % html.escape(titulo or "")]
 
     def camino(ptsl, cerrada):
