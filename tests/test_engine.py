@@ -5477,3 +5477,172 @@ def test_base_tipologias():
 
 if __name__ == "__main__":
     test_base_tipologias(); print("OK74")
+
+
+def test_tipologias():
+    """engine/tipologias.py (R5.16): el lector de la base de tipologías arma el catálogo (viviendas, plantas y resumen)
+    a partir de los DXF de data/tipologias/ con tools/ver_dxf.py. (a) Lee los 67 archivos (49 viviendas y 18 plantas) sin
+    avisos; (b) una vivienda: U_MVD_M5_2D_8.52x7.17_01 (2D, 2 dormitorios, 8,52 × 7,17, 61,1 m² con muros, 9 estancias; el
+    Estar toca la fachada y el Comedor toma la luz del ambiente abierto; `kind` de plans.py); (c) un monoambiente tiene
+    su zona `Dormir` (kind «sleep», sin dormitorios); (d) los niveles de una vivienda en varios niveles comparten
+    `vivienda_id` y el resumen la cuenta una vez; (e) una planta con palier (P_MVD_M5_tipo): ancho de pasillo, viviendas
+    por núcleo y circulación razonables (en %, como las del motor); el ancho de una puerta en la punta de un pasillo es el
+    ancho y no el largo; (f) `escribir` produce un catalogo.json igual al guardado en data/tipologias/ (salvo `version` y
+    `resumen.comparacion`, que dependen del motor: si la base cambia, hay que correr `python -m engine.tipologias`) y un
+    RESUMEN.md, con «\\n», sin escribir en data/tipologias/; (g) un DXF suelto (tests/dxf/tipologia_2d.dxf) se lee como
+    vivienda: 1D, 7 estancias, Dormitorio 1 de 9,9 m²; (h) `main` lee una carpeta cualquiera (sin indice.csv) y escribe
+    el catálogo y el resumen ahí."""
+    import contextlib, io, shutil, tempfile
+    from engine import tipologias as T
+    from engine import layout as LY
+    raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    carpeta = os.path.join(raiz, "data", "tipologias")
+    # (a) toda la base
+    cat = T.leer_base(carpeta)
+    assert cat["version"] == LY.VERSION and cat["avisos"] == [], (cat["version"], cat["avisos"])
+    assert cat["archivos"] >= 67 and len(cat["viviendas"]) >= 49 and len(cat["plantas"]) >= 18
+    assert cat["archivos"] == len(cat["viviendas"]) + len(cat["plantas"])
+    assert all(v["archivo"].startswith("U_") for v in cat["viviendas"]) and all(p["archivo"].startswith("P_") for p in cat["plantas"])
+    # (b) una vivienda
+    por_archivo = {v["archivo"]: v for v in cat["viviendas"]}
+    v = por_archivo["U_MVD_M5_2D_8.52x7.17_01.dxf"]
+    assert v["tipologia"] == "2D" and v["dormitorios"] == 2 and v["proyecto"] == "M5" and v["precision"] == "alta"
+    assert v["nivel"] is None and v["vivienda_id"] == "M5_01" and v["anio"] is None and v["crujia"] == "simple"
+    assert v["frente"] == 8.52 and v["fondo"] == 7.17 and abs(v["area_muros"] - 61.1) < 0.2, (v["frente"], v["fondo"], v["area_muros"])
+    assert abs(v["superficie_util"] - 54.9) < 0.2 and len(v["contorno"]) == 4 and len(v["estancias"]) == 9
+    e = {x["nombre"]: x for x in v["estancias"]}
+    assert abs(e["Dormitorio 1"]["area"] - 12.3) < 0.15 and abs(e["Cocina integrada"]["area"] - 8.1) < 0.15
+    assert abs(e["Toilette"]["area"] - 3.1) < 0.15
+    assert e["Dormitorio 1"]["kind"] == "bedroom" and e["Cocina integrada"]["kind"] == "kitchen" and e["Toilette"]["kind"] == "bath"
+    assert e["Estar"]["kind"] == "living" and e["Comedor"]["kind"] == "dining" and e["Hall"]["kind"] == "hall"
+    assert e["Pasillo"]["kind"] == "hallway" and e["Baño en suite"]["kind"] == "bath"
+    assert e["Estar"]["fachada"] is True and e["Estar"]["abierto"] is False          # toca la fachada
+    assert e["Comedor"]["fachada"] is False and e["Comedor"]["abierto"] is True      # luz del ambiente abierto
+    assert e["Cocina integrada"]["fachada"] is False and e["Cocina integrada"]["abierto"] is True
+    assert e["Hall"]["fachada"] is False and e["Hall"]["abierto"] is False
+    x0, y0, x1, y1 = e["Dormitorio 2"]["rect"]
+    assert abs((x1 - x0) - e["Dormitorio 2"]["ancho"]) < 1e-9 and abs((y1 - y0) - e["Dormitorio 2"]["fondo"]) < 1e-9
+    assert v["entrada"]["lado"] == "abajo" and 0.7 < v["entrada"]["ancho"] < 1.1 and v["puertas"] == 5
+    assert v["ventanas"]["n"] == 3 and v["fachadas"] == [{"largo": 8.4, "rotulo": "Calle"}] and v["medianeras"] > 7.0
+    assert v["exteriores"][0]["nombre"].startswith("Terraza") and 0 <= v["norte"] < 360
+    # (c) un monoambiente
+    m = por_archivo["U_MVD_M5_Mono_4.44x6.45_05.dxf"]
+    assert m["tipologia"] == "Mono" and m["dormitorios"] == 0
+    assert [x["kind"] for x in m["estancias"] if x["nombre"] == "Dormir"] == ["sleep"]
+    assert not [x for x in m["estancias"] if x["kind"] == "bedroom"]
+    # (d) viviendas en varios niveles
+    ids = {}
+    for x in cat["viviendas"]:
+        ids.setdefault(x["vivienda_id"], []).append(x)
+    varios = {k: l for k, l in ids.items() if len(l) > 1}
+    assert len(varios) == 5 and all(k.startswith("Maua_") for k in varios), sorted(varios)
+    for k, l in varios.items():
+        assert sorted(x["nivel"] for x in l) == [1, 2] and len({x["tipologia"] for x in l}) == 1, k
+    n_res = cat["resumen"]["viviendas"]
+    assert n_res["archivos"] == len(cat["viviendas"]) and n_res["n"] == len(ids) < len(cat["viviendas"])
+    por = cat["resumen"]["por_tipologia"]
+    assert list(por) == ["Mono", "1D", "2D", "3D", "4D"] and sum(d["n"] for d in por.values()) == len(ids)
+    for t in por:
+        assert por[t]["n"] == sum(1 for l in ids.values() if l[0]["tipologia"] == t), t
+    k = sorted(varios)[0]
+    suma = sum(x["area_muros"] for x in varios[k])
+    assert suma > max(x["area_muros"] for x in varios[k]) + 5      # el resumen suma los niveles (una sola vez)
+    d2 = por["2D"]
+    assert d2["area_muros"]["min"] <= d2["area_muros"]["mediana"] <= d2["area_muros"]["max"]
+    assert d2["estancias"]["Dormitorio 1"]["n"] == d2["n"] and set(d2["precision"]) <= {"alta", "media", "baja"}
+    assert por["Mono"]["zona_estar"]["mediana"] > 10 and d2["estancias"]["Baño"]["ancho"]["mediana"] > 1.0
+    # (e) una planta con palier
+    pl = {p["archivo"]: p for p in cat["plantas"]}
+    p = pl["P_MVD_M5_tipo.dxf"]
+    mt = p["metricas"]
+    assert p["nivel"] == "tipo" and p["proyecto"] == "M5" and mt["viviendas"] == 6 and mt["nucleos"] == 2 and mt["con_palier"]
+    assert 1.0 <= mt["ancho_pasillo"]["mediana"] <= 3.0 and mt["ancho_pasillo"]["n"] == 6, mt["ancho_pasillo"]
+    assert mt["viviendas_por_nucleo"] == 3.0 and 5 <= mt["circulacion_pct"] <= 40 and 40 <= mt["eficiencia"] <= 100
+    assert abs(p["planta"] - (p["terreno"]["area"] - sum(q["area"] for q in p["patios"]))) < 0.5
+    assert len(p["viviendas"]) == 6 and {q["tipologia"] for q in p["viviendas"]} == {"Mono", "1D", "2D"}
+    assert all(q["entrada"] and q["estancias"] for q in p["viviendas"]) and len(p["pasillos"]) == 2
+    assert [n["nombre"] for n in p["nucleos"]] == ["Nucleo 1", "Nucleo 2"] and all(n["area"] > 5 for n in p["nucleos"])
+    assert any(o["nombre"].startswith("Terraza") for o in p["otros"])
+    sinp = pl["P_MVD_Maua_2.dxf"]["metricas"]                   # nivel superior de dúplex: sin palier
+    assert not sinp["con_palier"] and sinp["ancho_pasillo"] is None and sinp["largo_pasillo_por_vivienda"] is None
+    # el ancho es el del pasillo también con la puerta en la punta (la cuerda perpendicular daría el largo)
+    pas = [[(0.0, 0.0), (10.0, 0.0), (10.0, 1.5), (0.0, 1.5)]]
+    lado = T.ancho_pasillo_en(pas, (4.0, 0.0), (1.0, 0.0))        # puerta de costado, en el muro de abajo
+    punta = T.ancho_pasillo_en(pas, (10.0, 0.75), (0.0, 1.0))     # puerta en la punta del pasillo
+    assert abs(lado - 1.5) < 1e-6 and abs(punta - 1.5) < 0.01, (lado, punta)
+    assert T.ancho_pasillo_en(pas, (4.0, 5.0), (1.0, 0.0)) is None                # lejos de todo pasillo
+    # núcleos: sin rótulos, los polígonos a menos de 0,30 m son uno; con rótulos, cada polígono va al «Nucleo n» más cercano
+    a, b, c = [(0, 0), (2, 0), (2, 3), (0, 3)], [(2.1, 0), (4, 0), (4, 3), (2.1, 3)], [(10, 0), (12, 0), (12, 3), (10, 3)]
+    ns = T._nucleos({"textos": []}, [a, b, c])
+    assert [n["partes"] for n in ns] == [2, 1] and [n["nombre"] for n in ns] == ["Nucleo 1", "Nucleo 2"]
+    assert abs(ns[0]["area"] - 11.7) < 0.01 and ns[0]["ancho"] == 4.0 and ns[0]["fondo"] == 3.0
+    rot = [{"rol": "nucleos", "texto": "Nucleo 1", "p": (1.0, 1.0)}, {"rol": "nucleos", "texto": "Escalera", "p": (3.0, 1.0)},
+           {"rol": "nucleos", "texto": "Nucleo 2", "p": (11.0, 1.0)}]
+    ns = T._nucleos({"textos": rot}, [c, a, b])
+    assert [(n["nombre"], n["partes"]) for n in ns] == [("Nucleo 1", 2), ("Nucleo 2", 1)], ns
+    pr = cat["resumen"]["plantas"]
+    assert pr["n"] == len(cat["plantas"]) and 1.0 <= pr["ancho_pasillo"]["mediana"] <= 3.0 and pr["nucleo"]["area"] > 5
+    cm = cat["resumen"]["comparacion"]
+    assert [c["tipologia"] for c in cm["viviendas"]] == ["Mono", "1D", "2D", "3D", "4D"]
+    assert [c["referencias"] for c in cm["viviendas"]] == [30, 42, 58, 78, 100]
+    assert [c["superficie_min"] for c in cm["viviendas"]] == [32, 32, 44, 56, 68] and cm["viviendas"][2]["mix_motor"] == 75
+    est = {c["estancia"]: c for c in cm["estancias"]}
+    assert est["Dormitorio 1"]["tipico_area"] == 11.5 and est["Dormitorio 1"]["n"] > 30 and est["Cocina integrada"]["tope_area"] == 5.0
+    assert [c["estar_por_dorms"] for c in cm["zona_estar"]] == [18.0, 18.0, 20.0, 24.0, 27.0]
+    assert cm["plantas"]["ancho_pasillo"]["motor"] == 2.0
+    nm = cm["plantas"]["nucleo"]["motor"]               # el núcleo del motor: sin el palier (como Trazo_Nucleos) y con él
+    assert nm["ascensores"] == 1 and 22 < nm["giro_0"]["area_sin_palier"] < 25 and 18 < nm["giro_90"]["area_sin_palier"] < 21
+    for g in ("giro_0", "giro_90"):
+        assert nm[g]["area_sin_palier"] < nm[g]["area_con_palier"] and 27 < nm[g]["area_con_palier"] < 28, nm[g]
+    assert nm["giro_0"]["caja_sin_palier"][0] < nm["giro_90"]["caja_sin_palier"][0]      # el giro 90 es más ancho y menos fondo
+    assert nm["giro_90"]["caja_sin_palier"][1] < nm["giro_0"]["caja_sin_palier"][1]
+    assert cm["plantas"]["nucleo"]["medida"]["area"] < nm["giro_90"]["area_sin_palier"]
+    # (f) escribir: igual al catálogo guardado, en una carpeta temporal
+    tmp = tempfile.mkdtemp()
+    try:
+        antes = sorted(os.listdir(carpeta))
+        ruta_json, ruta_md = T.escribir(cat, tmp)
+        assert os.path.dirname(ruta_json) == tmp and os.path.dirname(ruta_md) == tmp
+        crudo = open(ruta_json, "rb").read()
+        assert crudo.endswith(b"}\n") and b"\r" not in crudo and b"\r" not in open(ruta_md, "rb").read()
+        nuevo = json.loads(crudo.decode("utf-8"))
+        assert nuevo == json.loads(json.dumps(cat)), "el JSON escrito no vuelve igual"
+        guardado = json.load(open(os.path.join(carpeta, "catalogo.json"), encoding="utf-8"))
+        for d in (nuevo, guardado):
+            d.pop("version")
+            d["resumen"].pop("comparacion")
+        assert nuevo == guardado, "data/tipologias/catalogo.json no coincide con la base: correr `python -m engine.tipologias`"
+        md = open(ruta_md, encoding="utf-8").read()
+        assert md.startswith("# Base de tipologías") and "v" + LY.VERSION in md.splitlines()[0]
+        assert "Generado por `python -m engine.tipologias`; no editar a mano." in md
+        for t in ("Mono", "1D", "2D", "3D", "4D"):
+            assert "| " + t + " |" in md
+        assert "## 4. Comparación con `standards.py` y `REFERENCIAS.md`" in md and "," in md
+        assert sorted(os.listdir(carpeta)) == antes           # la prueba no toca data/tipologias/
+        # (h) main sobre una carpeta cualquiera, sin indice.csv
+        mini = os.path.join(tmp, "mini")
+        os.mkdir(mini)
+        for f in ("U_MVD_M5_Mono_4.44x6.45_05.dxf", "P_MVD_M5_tipo.dxf"):
+            shutil.copy(os.path.join(carpeta, f), mini)
+        sal = io.StringIO()
+        with contextlib.redirect_stdout(sal):
+            assert T.main(["tipologias", mini]) == 0
+        assert "2 archivos" in sal.getvalue() and "1 viviendas y 1 plantas" in sal.getvalue(), sal.getvalue()
+        c2 = json.load(open(os.path.join(mini, "catalogo.json"), encoding="utf-8"))
+        assert len(c2["viviendas"]) == 1 and len(c2["plantas"]) == 1 and os.path.isfile(os.path.join(mini, "RESUMEN.md"))
+        assert isinstance(c2["viviendas"][0]["fuente"], str) and c2["viviendas"][0]["proyecto"] == "M5"
+        with contextlib.redirect_stdout(io.StringIO()):
+            assert T.main(["tipologias", os.path.join(tmp, "no_existe")]) == 2
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    # (g) un DXF suelto
+    suelto = T.leer_vivienda(os.path.join(raiz, "tests", "dxf", "tipologia_2d.dxf"))
+    assert suelto["tipologia"] == "1D" and suelto["dormitorios"] == 1 and len(suelto["estancias"]) == 7
+    s = {x["nombre"]: x for x in suelto["estancias"]}
+    assert abs(s["Dormitorio 1"]["area"] - 9.9) < 0.1 and s["Estar-Comedor"]["fachada"] and s["Estar-Comedor"]["kind"] == "living"
+    assert suelto["vivienda_id"] == "tipologia_2d" and suelto["proyecto"] == "Ejemplo" and suelto["anio"] == 2026
+    assert abs(suelto["area_muros"] - 56.0) < 0.01 and suelto["fachadas"][0]["rotulo"] is None
+
+
+if __name__ == "__main__":
+    test_tipologias(); print("OK75")
