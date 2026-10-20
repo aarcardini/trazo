@@ -93,8 +93,8 @@
 - **Nicho de la heladera (105 y 108)**: está abierto al hall y a la cocina, y va con el `Hall`.
 - **Antebaño de la 104 y la 101**: va dentro del `Baño`.
 - **Pasillo de los dormitorios (503, 505, 502 y 501)**: no tiene puerta hacia el hall y va dentro del `Hall`.
-- **Comedor sin fachada**: el de la 106, la 103, la 102, la 107 y la 504 da `ver_dxf` el aviso del comedor interior, y
-  se acepta.
+- **Comedor sin fachada**: el de la 106, la 103, la 102, la 107 y la 504 daba `ver_dxf` el aviso del comedor interior, y
+  se aceptó. Desde la v2.58 el visor no lo da: el comedor es parte de un ambiente abierto que toca la fachada.
 - **Terrazas y terrazas de servicio**: van en `Trazo_Cotas`.
   - Las medidas son las del dibujo.
   - La carpeta da la superficie total de terrazas de cada unidad, y va en `observaciones`.
@@ -104,4 +104,4 @@
   - En las plantas y en las unidades sin girar, `norte: 45`.
   - En las giradas 180°, `norte: 225`.
 - **Formato**: igual que en los casos anteriores. Todos pasan `ver_dxf` sin errores y `ezdxf.recover` sin arreglos. Los
-  únicos avisos son los de los comedores interiores.
+  únicos avisos eran los de los comedores interiores (desde la v2.58 el visor no los da).

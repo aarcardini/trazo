@@ -82,9 +82,9 @@
 
 - **02 como `Mono`**: es un solo ambiente de 7,10 × 3,37 con la cama a la vista. La carpeta la vende como «dos
   ambientes / un dormitorio».
-  - Se siguió el mismo criterio que la 001 de Isla de Flores, todavía sin confirmar: `Mono` con la zona de la cama como
-    `Dormitorio 1`.
-  - Por eso `ver_dxf` avisa.
+  - Se siguió el mismo criterio que la 001 de Isla de Flores, decidido por el usuario: `Mono` con la zona de la cama
+    como `Dormir`.
+  - Con `Dormitorio 1`, `ver_dxf` avisaba; con `Dormir` (v2.58) no.
 - **Entrada de las clásicas (01 y 03)**: la puerta no está dibujada. El frente a la pasarela es todo vidriado, en dos
   paños.
   - Se tomó como entrada el paño que las fichas marcan con una flecha de corrediza (el de la derecha en la página).
@@ -106,4 +106,4 @@
     - en la planta tipo, lo libre al fondo del lote, sobre los patios del piso 1;
     - en el piso 1, el jardín.
 - **Formato**: igual que en los casos anteriores. Todos pasan `ver_dxf` sin errores y `ezdxf.recover` sin arreglos. Los
-  únicos avisos son los del estar y el comedor interiores y el de la Mono.
+  únicos avisos eran los del estar y el comedor interiores y el de la Mono (desde la v2.58 el visor no los da).

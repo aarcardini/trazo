@@ -2471,7 +2471,7 @@ AcDbText
  40
 0.2
   1
-Dormitorio 1
+Dormir
 100
 AcDbText
   0
@@ -9431,7 +9431,7 @@ AcDbText
  40
 0.25
   1
-observaciones: la carpeta da área interior 42.0 m2 (criterio APPCU), exteriores 25.45, comunes 9.64, total 77.09; monoambiente: la zona de dormir la separa un placard, sin muro (se etiquetó Dormitorio 1 para que se lea; por eso ver_dxf avisa que la etiqueta Mono no coincide); el plano general la marca «M» y la ficha la vende como «1 dormitorio con patio»; dos patios propios en Trazo_Cotas: el jardín 6,70 x 3,20 en el patio del edificio (arriba) y un patio 1,60 x 3,15 hacia la calle lateral (abajo); «doble acceso»: desde el hall (por el costado izquierdo) y desde la cochera 5 por el patio chico; unidad 001, en PB; barrio Palermo, esquina de Isla de Flores y una calle lateral
+observaciones: la carpeta da área interior 42.0 m2 (criterio APPCU), exteriores 25.45, comunes 9.64, total 77.09; monoambiente: la zona de dormir la separa un placard, sin muro (se etiqueta Dormir: es habitable pero no cuenta como dormitorio, así que la vivienda sigue siendo Mono); el plano general la marca «M» y la ficha la vende como «1 dormitorio con patio»; dos patios propios en Trazo_Cotas: el jardín 6,70 x 3,20 en el patio del edificio (arriba) y un patio 1,60 x 3,15 hacia la calle lateral (abajo); «doble acceso»: desde el hall (por el costado izquierdo) y desde la cochera 5 por el patio chico; unidad 001, en PB; barrio Palermo, esquina de Isla de Flores y una calle lateral
 100
 AcDbText
   0

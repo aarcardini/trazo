@@ -39,12 +39,12 @@ Se siguieron los mismos criterios que en el Mauá:
 
 ## Criterios que conviene revisar
 
-- **001 = `Mono` con un `Dormitorio 1`**. La zona de dormir está separada del estar por un placard, sin muro. El plano
+- **001 = `Mono` con una zona `Dormir`**. La zona de dormir está separada del estar por un placard, sin muro. El plano
   general la marca «M»; la ficha la vende como «1 dormitorio con patio».
   - Se siguió la convención («Mono si no hay dormitorio cerrado»), con `dormitorios: 0`.
-  - La zona se etiquetó `Dormitorio 1` para que se lea en Rhino. Por eso `ver_dxf` avisa que la etiqueta Mono no
-    coincide.
-  - Si preferís 1D, es cambiar la etiqueta, el nombre del archivo y la fila del índice.
+  - La zona se etiquetó primero `Dormitorio 1` para que se lea en Rhino, y `ver_dxf` avisaba que la etiqueta Mono no
+    coincidía. Decidido por el usuario: `Mono` con la zona como `Dormir` (habitable, no cuenta como dormitorio); desde
+    la v2.58 el visor no avisa.
 - **Plantas giradas 180°**: Isla de Flores queda arriba. El palier (1,50 × 3,75 m) queda vertical: es corto y no hay
   pasillo largo que poner horizontal.
 - **Núcleo**: son dos polígonos en `Trazo_Nucleos`, a cada lado del palier:

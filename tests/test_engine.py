@@ -5259,7 +5259,14 @@ def test_ver_dxf():
     con su superficie y su etiqueta, entrada sobre el contorno, estancias habitables que tocan la fachada, metadatos,
     errores (lo que la lista de control no admite) y avisos. (a) El ejemplo tests/dxf/tipologia_2d.dxf pasa limpio;
     (b) sin una etiqueta, con una etiqueta fuera de la lista, con superficie_muros errada y sin entrada, los errores
-    lo dicen; (c) el programa termina con 0 o 1 según haya errores."""
+    lo dicen; (c) el programa termina con 0 o 1 según haya errores. v2.58 (convención al día con CRITERIOS.md):
+    (d) «Dormir» es la zona de dormir de un monoambiente: habitable, no cuenta como dormitorio y los exteriores propios
+    ya no son estancias; (e) un archivo `-N2` (nivel superior de una vivienda en varios niveles) no necesita entrada y
+    con `-N1` o más no se compara la tipología con los dormitorios del nivel; una planta sin Trazo_Pasillo no avisa
+    de entrada; (f) el comedor, el estar o la cocina integrada de un ambiente abierto no avisan de fachada si otro
+    local contiguo del ambiente (en cadena) la toca, los dormitorios y estudios cerrados sí; (g) las polilíneas
+    cerradas con texto de Trazo_Cotas salen como «otros recintos»; (h) sin Trazo_Norte, `norte: desconocido` en los
+    datos no avisa «sin norte» (sin ese dato, sí)."""
     import importlib.util, subprocess, tempfile
     raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     ruta = os.path.join(raiz, "tools", "ver_dxf.py")
@@ -5298,6 +5305,120 @@ def test_ver_dxf():
     assert "sin etiqueta" in err and "«Living» no está en la lista" in err and "superficie_muros dice 61,0" in err
     assert "no tiene entrada" in err and inf2["puertas"] == 6
     assert "Living" in " ".join(inf2["avisos"]) or inf2["avisos"] == [] or True              # los avisos no se exigen aquí
+    # variantes por reemplazo de texto sobre el ejemplo (cada valor es una línea entera del DXF, con CRLF)
+    def cambiar(t, viejo, nuevo):
+        assert t.count("\r\n%s\r\n" % viejo) == 1, viejo
+        return t.replace("\r\n%s\r\n" % viejo, "\r\n%s\r\n" % nuevo)
+
+    def agregar(t, *entidades):                      # entidades nuevas al final de ENTITIES
+        antes, fin, despues = t.rpartition("  0\r\nENDSEC")
+        return antes + "".join(entidades) + fin + despues
+
+    def poli(capa, pts):
+        return "  0\r\nLWPOLYLINE\r\n  8\r\n%s\r\n 90\r\n%d\r\n 70\r\n1\r\n" % (capa, len(pts)) + \
+            "".join(" 10\r\n%.2f\r\n 20\r\n%.2f\r\n" % p for p in pts)
+
+    def rotulo(capa, p, t):
+        return "  0\r\nTEXT\r\n  8\r\n%s\r\n 10\r\n%.2f\r\n 20\r\n%.2f\r\n 40\r\n0.25\r\n  1\r\n%s\r\n" % (capa, p[0], p[1], t)
+
+    def sin_linea(t, capa):                          # quita la LINE de esa capa (la única del ejemplo)
+        a = t.index("  0\r\nLINE\r\n  8\r\n%s\r\n" % capa)
+        b = t.index("  0\r\n", a + 6)
+        assert t[a:b].count("\r\n") == 12
+        return t[:a] + t[b:]
+
+    def sin_entrada(t):
+        return sin_linea(t, "Trazo_Entrada")
+
+    def aviso(inf_, trozo):
+        return any(trozo in a for a in inf_["avisos"])
+
+    # (d) v2.58: monoambiente con zona de dormir. «Dormir» es habitable, necesita ventana y no cuenta como dormitorio:
+    # la vivienda es Mono con 0 dormitorios, sin el aviso «etiquetada Mono y tiene 1 dormitorio»
+    mono = cambiar(cambiar(cambiar(cambiar(texto, "Dormitorio 1", "Dormir"), "1D 56.0", "Mono 56.0"), "tipologia: 1D", "tipologia: Mono"),
+                   "dormitorios: 1", "dormitorios: 0")
+    inf3 = V.controlar(V.leer(mono))
+    assert inf3["errores"] == [] and inf3["avisos"] == [], (inf3["errores"], inf3["avisos"])
+    n3 = {e["nombre"]: e for e in inf3["estancias"]}
+    assert "Dormitorio 1" not in n3 and n3["Dormir"]["habitable"] and n3["Dormir"]["fachada"] is True
+    assert inf3["unidades"][0]["tipologia"] == "Mono" and "Dormir 9,9 m² (fachada)" in " ".join(V.informe_txt("m.dxf", inf3))
+    assert aviso(V.controlar(V.leer(cambiar(texto, "1D 56.0", "Mono 56.0"))), "etiquetada «Mono» y tiene 1 dormitorio")
+    assert aviso(V.controlar(V.leer(cambiar(texto, "Dormitorio 1", "Dormir"))), "etiquetada «1D» y tiene 0 dormitorios")   # Dormir no cuenta
+    assert 'Dormir 9,9 m²' in V.svg(V.leer(mono), inf3) and V.RELLENO["Dormir"] == V.RELLENO["Dormitorio"]
+    # Balcón, Terraza y Patio ya no son estancias: van fuera de la vivienda, en Trazo_Cotas
+    for exterior in ("Balcón", "Terraza", "Patio"):
+        err3 = " | ".join(V.controlar(V.leer(cambiar(texto, "Lavadero", exterior)))["errores"])
+        assert "«%s» no está en la lista" % exterior in err3 and "Trazo_Cotas" in err3, err3
+    assert "Trazo_Cotas" not in " | ".join(inf2["errores"])                           # la pista es solo para los exteriores
+    # (e) vivienda en varios niveles: el nivel superior (-N2…) no lleva Trazo_Entrada y la tipología es la de toda la vivienda
+    assert V.nivel_de("U_MVD_Maua_3D_5.79x9.43_05-N2.dxf") == 2 and V.nivel_de("x/U_a_1D_1x1_01-N1.dxf") == 1
+    assert V.nivel_de("U_MVD_Maua_1D_5.79x9.43_01.dxf") is None and V.nivel_de("") is None and V.nivel_de("N2.dxf") is None
+    n2 = sin_entrada(texto)
+    inf4 = V.controlar(V.leer(n2), "U_x_1D_8x7_01-N2.dxf")
+    assert inf4["errores"] == [] and inf4["avisos"] == [] and inf4["unidades"][0]["entradas"] == 0 and inf4["nivel"] == 2
+    assert any("nivel superior (-N2) sin puerta al palier" in n for n in inf4["notas"])
+    assert any("nivel superior (-N2) sin puerta al palier" in l for l in V.informe_txt("U_x_1D_8x7_01-N2.dxf", inf4))
+    assert any("no tiene entrada" in e for e in V.controlar(V.leer(n2), "U_x_1D_8x7_01.dxf")["errores"])      # sin sufijo, es error
+    assert any("no tiene entrada" in e for e in V.controlar(V.leer(n2))["errores"])
+    # la tipología no se compara con los dormitorios del nivel (con -N1 tampoco); con una entrada, -N1 se controla igual
+    sin_dorm = cambiar(texto, "Dormitorio 1", "Estudio")                                     # 1D, 0 dormitorios en el nivel
+    assert aviso(V.controlar(V.leer(sin_dorm), "U_x_1D_8x7_01.dxf"), "etiquetada «1D» y tiene 0 dormitorios")
+    for sufijo in ("-N1", "-N2"):
+        inf5 = V.controlar(V.leer(sin_dorm), "U_x_1D_8x7_01%s.dxf" % sufijo)
+        assert not aviso(inf5, "etiquetada") and inf5["errores"] == [] and any("toda la vivienda" in n for n in inf5["notas"])
+    inf6 = V.controlar(V.leer(texto), "U_x_1D_8x7_01-N1.dxf")
+    assert inf6["unidades"][0]["entradas"] == 1 and inf6["avisos"] == [] and not any("sin puerta" in n for n in inf6["notas"])
+    # una planta sin Trazo_Pasillo (piso al que no se entra) no avisa de entrada; con Trazo_Pasillo, sí
+    piso = agregar(n2, poli("Trazo_Terreno", [(-1, -1), (9, -1), (9, 8), (-1, 8)]))
+    inf7 = V.controlar(V.leer(piso), "P_x_2.dxf")
+    assert inf7["tipo"] == "planta" and not aviso(inf7, "no tiene entrada") and inf7["errores"] == []
+    assert any("planta sin palier" in l for l in V.informe_txt("P_x_2.dxf", inf7))
+    inf8 = V.controlar(V.leer(agregar(piso, poli("Trazo_Pasillo", [(0, -1), (8, -1), (8, 0), (0, 0)]))), "P_x_1.dxf")
+    assert aviso(inf8, "la vivienda 1 no tiene entrada") and not any("planta sin palier" in n for n in inf8["notas"])
+    # (f) ambiente abierto: el comedor interior no es una falla de fachada si es contiguo (en cadena) a un local del ambiente que la toca
+    inf9 = V.controlar(V.leer(cambiar(texto, "Cocina", "Comedor")))                           # contigua al Estar-Comedor, con fachada
+    c9 = [e for e in inf9["estancias"] if e["nombre"] == "Comedor"][0]
+    assert inf9["errores"] == [] and inf9["avisos"] == [] and c9["fachada"] is False and c9["abierto"]
+    assert any("sin fachada propia: ambiente abierto" in l for l in V.informe_txt("c.dxf", inf9))
+    inf10 = V.controlar(V.leer(cambiar(texto, "Baño", "Comedor")))                            # no es contigua a ningún local del ambiente
+    assert aviso(inf10, "«Comedor» no toca ninguna fachada") and not [e for e in inf10["estancias"] if e["abierto"]]
+    cadena = cambiar(cambiar(cambiar(texto, "Lavadero", "Comedor"), "Pasillo", "Cocina integrada"), "Cocina", "Comedor")
+    inf11 = V.controlar(V.leer(cadena))                                                       # Comedor-Cocina integrada-Comedor-Estar-Comedor
+    assert inf11["errores"] == [] and not aviso(inf11, "no toca") and sum(1 for e in inf11["estancias"] if e["abierto"]) == 2   # los dos Comedor
+    cortada = cambiar(cambiar(texto, "Lavadero", "Comedor"), "Pasillo", "Cocina integrada")     # la Cocina cerrada corta la cadena
+    assert aviso(V.controlar(V.leer(cortada)), "«Comedor» no toca ninguna fachada")
+    for dormir_ok, nombre_c in ((True, "Dormir"), (False, "Dormitorio 2"), (False, "Estudio")):   # Dormir sí; dormitorio y estudio cerrados, no
+        inf12 = V.controlar(V.leer(cambiar(texto, "Cocina", nombre_c)))
+        assert aviso(inf12, "«%s» no toca ninguna fachada" % nombre_c) != dormir_ok, (nombre_c, inf12["avisos"])
+    assert V._contiguas([(0, 0), (2, 0), (2, 1), (0, 1)], [(0.1, 1.1), (2.0, 1.1), (2.0, 2), (0.1, 2)])          # muro de 10 cm entre las dos
+    assert not V._contiguas([(0, 0), (2, 0), (2, 1), (0, 1)], [(2.1, 1.1), (3, 1.1), (3, 2), (2.1, 2)])          # solo se tocan en la esquina
+    assert not V._contiguas([(0, 0), (2, 0), (2, 1), (0, 1)], [(1.7, 1.1), (2.0, 1.1), (2.0, 2), (1.7, 2)])      # tramo de 0,30 m: menos de 0,60
+    assert not V._contiguas([(0, 0), (2, 0), (2, 1), (0, 1)], [(0, 1.8), (2, 1.8), (2, 3), (0, 3)])              # separadas 0,80 m
+    # (g) Trazo_Cotas: la polilínea cerrada con un texto dentro (balcón, terraza, cochera, amenity) sale como «otro recinto»
+    cotas = agregar(texto, poli("Trazo_Cotas", [(8.0, 1.0), (9.0, 1.0), (9.0, 6.8), (8.0, 6.8)]), rotulo("Trazo_Cotas", (8.2, 3.0), "Balcón"),
+                    poli("Trazo_Cotas", [(10.0, 0.0), (11.0, 0.0), (11.0, 1.0), (10.0, 1.0)]),       # cerrada sin texto: no es un recinto
+                    rotulo("Trazo_Cotas", (12.0, 12.0), "texto suelto"))
+    dc = V.leer(cotas)
+    assert not dc["otras_capas"]
+    inf13 = V.controlar(dc)
+    assert [(r["nombre"], round(r["area"], 2)) for r in inf13["recintos"]] == [("Balcón", 5.8)] and inf13["errores"] == []
+    assert any(l == "Otros recintos: Balcón 5,8 m²" for l in V.informe_txt("c.dxf", inf13))
+    assert not any(l.startswith("Otros recintos") for l in V.informe_txt("e.dxf", inf))
+    sc = V.svg(dc, inf13)
+    assert "Balcón · 5,8 m²" in sc and V.RECINTO in sc and "Trazo_Cotas (" in sc
+    # (h) norte: sin Trazo_Norte se avisa, salvo que los datos digan `norte: desconocido` (la fuente no lo trae)
+    sin_n = sin_linea(texto, "Trazo_Norte")
+    inf14 = V.controlar(V.leer(sin_n))
+    assert inf14["norte"] is None and not inf14["norte_desconocido"] and aviso(inf14, "sin norte")
+    assert any(l.endswith("norte: no") for l in V.informe_txt("n.dxf", inf14))
+    for dato in ("norte: desconocido", "norte: Desconocido (la carpeta no trae el símbolo)", "norte:desconocido"):
+        inf15 = V.controlar(V.leer(cambiar(sin_n, "norte: 0", dato)))
+        assert inf15["norte"] is None and inf15["norte_desconocido"] and inf15["avisos"] == [] and inf15["errores"] == [], dato
+        assert any(l.endswith("norte: desconocido") for l in V.informe_txt("n.dxf", inf15))
+    assert aviso(V.controlar(V.leer(cambiar(sin_n, "norte: 0", "norte: 15"))), "sin norte")        # un ángulo sin línea no basta
+    inf16 = V.controlar(V.leer(cambiar(texto, "norte: 0", "norte: desconocido")))                  # con la línea, manda la línea
+    assert inf16["norte"] == 0 and not inf16["norte_desconocido"] and inf16["avisos"] == []
+    assert any(l.endswith("norte: 0°") for l in V.informe_txt("n.dxf", inf16))
     # (c) el programa: 0 con el ejemplo, 1 con fallas; escribe el SVG donde se le dice
     with tempfile.TemporaryDirectory() as tmp:
         svg1 = os.path.join(tmp, "ejemplo.svg")
@@ -5309,7 +5430,50 @@ def test_ver_dxf():
         assert c.returncode == 1 and "sin etiqueta" in c.stdout and os.path.exists(os.path.join(tmp, "malo.svg")), c.stdout + c.stderr
         c = subprocess.run([sys.executable, ruta, os.path.join(tmp, "no.dxf")], capture_output=True, text=True, encoding="utf-8")
         assert c.returncode != 0
+        # v2.58: el nivel superior de una vivienda en varios niveles (-N2, sin Trazo_Entrada) no es un error; sin el sufijo, sí
+        ruta_n2 = os.path.join(tmp, "U_x_1D_8x7_01-N2.dxf")
+        open(ruta_n2, "w", encoding="utf-8", newline="").write(n2)
+        c = subprocess.run([sys.executable, ruta, ruta_n2], capture_output=True, text=True, encoding="utf-8")
+        assert c.returncode == 0 and "Errores: ninguno" in c.stdout and "nivel superior" in c.stdout, c.stdout + c.stderr
+        ruta_n0 = os.path.join(tmp, "U_x_1D_8x7_01.dxf")
+        open(ruta_n0, "w", encoding="utf-8", newline="").write(n2)
+        c = subprocess.run([sys.executable, ruta, ruta_n0], capture_output=True, text=True, encoding="utf-8")
+        assert c.returncode == 1 and "no tiene entrada" in c.stdout, c.stdout + c.stderr
 
 
 if __name__ == "__main__":
     test_ver_dxf(); print("OK73")
+
+
+def test_base_tipologias():
+    """data/tipologias/ (R5.16): todos los DXF de la base pasan el control de tools/ver_dxf.py sin errores (solo se
+    permiten avisos), los nombres de archivo coinciden uno a uno con la columna `archivo` de indice.csv, su `tipo` con
+    el prefijo (U_ unidad, P_ planta), y ningún monoambiente (zona de dormir `Dormir`) avisa de dormitorios, y todos tienen `Trazo_Norte` o `norte: desconocido`."""
+    import csv, importlib.util
+    raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    spec = importlib.util.spec_from_file_location("ver_dxf", os.path.join(raiz, "tools", "ver_dxf.py"))
+    V = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(V)
+    carpeta = os.path.join(raiz, "data", "tipologias")
+    archivos = sorted(f for f in os.listdir(carpeta) if f.lower().endswith(".dxf"))
+    assert len(archivos) >= 67, len(archivos)
+    fallas = {}
+    for nombre in archivos:
+        inf = V.controlar(V.leer(V.texto_del_archivo(os.path.join(carpeta, nombre))), nombre)
+        if inf["errores"]:
+            fallas[nombre] = inf["errores"]
+        assert not any("etiquetada «Mono»" in a for a in inf["avisos"]), (nombre, inf["avisos"])
+        assert not any("sin norte" in a for a in inf["avisos"]), (nombre, "sin Trazo_Norte ni `norte: desconocido`")
+        assert inf["tipo"] == ("unidad" if nombre.startswith("U_") else "planta"), (nombre, inf["tipo"])
+    assert not fallas, fallas
+    with open(os.path.join(carpeta, "indice.csv"), encoding="utf-8-sig", newline="") as f:
+        filas = list(csv.DictReader(f, delimiter=";"))
+    del_indice = [r["archivo"] for r in filas]
+    assert len(del_indice) == len(set(del_indice)), "archivos repetidos en indice.csv"
+    assert set(del_indice) == set(archivos), (sorted(set(archivos) - set(del_indice)), sorted(set(del_indice) - set(archivos)))
+    for r in filas:
+        assert r["tipo"] == ("unidad" if r["archivo"].startswith("U_") else "planta"), r["archivo"]
+
+
+if __name__ == "__main__":
+    test_base_tipologias(); print("OK74")

@@ -2233,7 +2233,7 @@ AcDbText
  40
 0.2
   1
-Dormitorio 1
+Dormir
 100
 AcDbText
   0
@@ -10389,7 +10389,7 @@ AcDbText
  40
 0.25
   1
-observaciones: la carpeta (ficha de la pág. 16) da área interior 35.41 m2, exterior 3.02, comunes (circulación y acceso) 4.49, total 42.92 (criterios APPCU); edificio norte, junto al núcleo: un solo ambiente de 7,10 x 3,37 (cama, estar, comedor y cocina) con el baño y el hall de entrada al fondo, contra la escalera; Mono según la convención (no hay dormitorio cerrado), aunque la carpeta la vende como «dos ambientes / un dormitorio»: la zona de la cama va como Dormitorio 1 para que se lea, por eso ver_dxf avisa; balcón 0,84 x 3,56 arriba; se entra por una puerta de 1,20 desde la pasarela (abajo); unidad norte derecha de cada piso (3 en los pisos 2 a 4); en el piso 1 es igual con un patio de 3,82 x 3,37 (la carpeta: 35,40 m2 interiores, pág. 10), en P_MVD_GR1591_1; GR 1591, en un barrio universitario cerca de la Rambla (el dossier no da la dirección); lote de 10,95 x 31,21 m (por las caras exteriores de los muros de lindero) con dos volúmenes de 5 pisos (norte y sur) separados por un patio central con pasarelas
+observaciones: la carpeta (ficha de la pág. 16) da área interior 35.41 m2, exterior 3.02, comunes (circulación y acceso) 4.49, total 42.92 (criterios APPCU); edificio norte, junto al núcleo: un solo ambiente de 7,10 x 3,37 (cama, estar, comedor y cocina) con el baño y el hall de entrada al fondo, contra la escalera; Mono según la convención (no hay dormitorio cerrado), aunque la carpeta la vende como «dos ambientes / un dormitorio»: la zona de la cama va como Dormir (habitable, no cuenta como dormitorio); balcón 0,84 x 3,56 arriba; se entra por una puerta de 1,20 desde la pasarela (abajo); unidad norte derecha de cada piso (3 en los pisos 2 a 4); en el piso 1 es igual con un patio de 3,82 x 3,37 (la carpeta: 35,40 m2 interiores, pág. 10), en P_MVD_GR1591_1; GR 1591, en un barrio universitario cerca de la Rambla (el dossier no da la dirección); lote de 10,95 x 31,21 m (por las caras exteriores de los muros de lindero) con dos volúmenes de 5 pisos (norte y sur) separados por un patio central con pasarelas
 100
 AcDbText
   0
