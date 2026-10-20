@@ -19,8 +19,8 @@ Precisión **alta**. Nada se midió a ojo.
 
 - **Espacio de estar abierto**: se separa en `Estar`, `Comedor` y `Cocina integrada`, como polígonos contiguos sin muro
   entre ellos. Los límites se trazaron según dónde están el sofá, la mesa y la mesada en la ficha de la unidad
-  (`estimado` lo dice). Por eso `ver_dxf` avisa que algunos comedores (o el estar de los tríplex) no tocan la fachada:
-  son parte del mismo ambiente.
+  (`estimado` lo dice). Por eso `ver_dxf` avisaba que algunos comedores (o el estar de los tríplex) no tocan la fachada:
+  son parte del mismo ambiente. Desde la v2.58 el visor no lo avisa si otro local del ambiente toca la fachada.
 - **`Trazo_Equipamiento`**: lleva los muebles y artefactos de la ficha de cada unidad (1:100), calzada sobre la planta.
   - El calce se hizo correlacionando los muros, con 97-99 % de coincidencia.
   - Los muebles van en color 9 y los artefactos en color 8.
@@ -42,9 +42,9 @@ Precisión **alta**. Nada se midió a ojo.
   cara exterior de la fachada, y `ver_dxf` da error si una estancia queda fuera de su vivienda. Sus medidas están en
   `observaciones`.
 - **Escaleras interiores**: se etiquetaron `Pasillo`, porque la lista de etiquetas no tiene «Escalera».
-- **Niveles superiores** (`-N2`): no tienen `Trazo_Entrada`, así que `ver_dxf` da el error «no tiene entrada». También
-  avisa que la etiqueta (la tipología de toda la vivienda, por ejemplo `3D`) no coincide con los dormitorios de ese
-  nivel.
+- **Niveles superiores** (`-N2`): no tienen `Trazo_Entrada`, así que `ver_dxf` daba el error «no tiene entrada». También
+  avisaba que la etiqueta (la tipología de toda la vivienda, por ejemplo `3D`) no coincidía con los dormitorios de ese
+  nivel. Desde la v2.58 el visor lee el sufijo `-N` y no da ninguno de los dos.
 - **Piso 11**: es la azotea de los tríplex. Son terrazas descubiertas con la llegada de la escalera y no tienen
   superficie cerrada, así que no llevan DXF (está anotado en `_09`).
 - **PB y subsuelo**: no tienen viviendas (hall, cowork y cocheras). No se dibujaron.

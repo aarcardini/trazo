@@ -4,8 +4,11 @@ Reúne en un solo lugar lo que se decidió al preparar los planos y todo lo que 
 (`TIPOLOGIAS.md`) o de la fuente, en los seis casos procesados hasta ahora. Sale de `claude/criterios_aplicados.md` y de
 las notas de cada caso (`data/tipologias/*_nota.md`).
 
-Lo marcado **[usuario]** lo decidió o lo pidió el usuario. Lo marcado **[pendiente]** está sin confirmar. El resto lo
-decidió Claude y el usuario no lo objetó.
+Lo marcado **[usuario]** lo decidió o lo pidió el usuario. Lo marcado **[pendiente]** estaba sin confirmar: los dos que
+había se decidieron (ver «Para confirmar»). El resto lo decidió Claude y el usuario no lo objetó.
+
+Desde la v2.58, `TIPOLOGIAS.md` y `tools/ver_dxf.py` incorporan estos criterios como regla; este documento queda como
+registro de cómo se prepararon los archivos del primer lote.
 
 ## Los casos
 
@@ -61,10 +64,12 @@ decidió Claude y el usuario no lo objetó.
     - En el `U_` del tipo, muebles, artefactos y zonas salen de la ficha.
 - **Nombre del local según su amueblamiento**: un local cerrado amueblado con escritorio es `Estudio`, no dormitorio, y
   la tipología cuenta solo los `Dormitorio`. Si la fuente anuncia otra cosa, se anota en `observaciones`.
-- **Único local cerrado amueblado como oficina [pendiente]**: queda `Dormitorio 1`, no `Estudio`, para que la vivienda
-  no pase a `Mono` con un cuarto cerrado. El amueblamiento se anota en `observaciones` (la 101 de Barrios Amorín).
-- **Monoambiente con zona de dormir [pendiente]**: tipología `Mono` y `dormitorios: 0`, como pide la convención, con la
-  zona de dormir etiquetada `Dormitorio 1` para que se lea.
+- **Único local cerrado amueblado como oficina [usuario]**: queda `Dormitorio 1`, no `Estudio`, para que la vivienda
+  no pase a `Mono` con un cuarto cerrado. El amueblamiento se anota en `observaciones` (la 101 de Barrios Amorín). Si
+  hay otros dormitorios, el local amueblado como oficina es `Estudio`.
+- **Monoambiente con zona de dormir [usuario]**: tipología `Mono` y `dormitorios: 0`, como pide la convención, con la
+  zona de dormir etiquetada `Dormir`, etiqueta nueva: habitable (necesita ventana) y no cuenta como dormitorio. Se
+  etiquetó `Dormitorio 1` al preparar los archivos y se cambió a `Dormir` en la v2.58.
   - Casos: la 001 de Isla de Flores y la 02 de GR 1591, que las fuentes venden como «1 dormitorio»; la 205 de M5, que se
     vende como monoambiente pero la ficha rotula el ambiente «dormitorio».
 - **Tabique corredizo entre estar y dormitorio**: cuenta como cerramiento. Cada hoja que abre va como una puerta.
@@ -173,14 +178,16 @@ decidió Claude y el usuario no lo objetó.
 
 ## 2. Desviaciones de la convención
 
-Lo que no sigue `TIPOLOGIAS.md` al pie de la letra, y por qué.
+Lo que no seguía `TIPOLOGIAS.md` al pie de la letra, y por qué. Desde la v2.58 la mayoría ya es regla de la convención
+(los exteriores propios en `Trazo_Cotas`, los niveles de un dúplex, `Trazo_Terreno`, los núcleos partidos, las cocheras…);
+la tabla queda como registro de cómo estaban los archivos del primer lote.
 
 | Desviación | Dónde | Motivo |
 |---|---|---|
 | Balcones, terrazas y patios propios fuera del contorno, en `Trazo_Cotas`, aunque `Balcón`, `Terraza` y `Patio` están en la lista de estancias | todos los casos | el contorno va por la cara exterior de la fachada, y `ver_dxf` da error si una estancia queda fuera de su vivienda |
 | Escaleras interiores como `Pasillo` | dúplex y tríplex del Mauá | la lista de estancias no tiene «Escalera» |
-| `Mono` con un local `Dormitorio 1` | Isla de Flores 001, GR 1591 02, M5 205 | la convención pide `Mono` si no hay dormitorio cerrado; el rótulo es para que se lea en Rhino **[pendiente]** |
-| `Dormitorio 1` en un local amueblado como oficina | Barrios Amorín 101 | es el único local cerrado y la fuente la vende como «1 dormitorio» **[pendiente]** |
+| `Mono` con la zona de dormir etiquetada `Dormir` (antes `Dormitorio 1`) | Isla de Flores 001, GR 1591 02, M5 205 | la convención pide `Mono` si no hay dormitorio cerrado y el rótulo es para que se lea en Rhino; decidido **[usuario]**: etiqueta nueva `Dormir`, habitable y sin contar como dormitorio (ya en la convención) |
+| `Dormitorio 1` en un local amueblado como oficina | Barrios Amorín 101 | es el único local cerrado y la fuente la vende como «1 dormitorio»; decidido **[usuario]**: se queda `Dormitorio 1` y el amueblamiento va en `observaciones` (ya en la convención) |
 | `Estudio` donde la fuente anuncia un dormitorio | Mauá 102/103 (2D; la carpeta dice «3/4 dormitorios») | el local está amueblado con escritorio |
 | Niveles superiores sin `Trazo_Entrada` | Mauá, `-N2` de los dúplex y el tríplex | no tienen puerta al palier |
 | Pasillo común que no queda abajo en la unidad (entrada a un costado o arriba) | Mauá 301, 304, 305; Isla de Flores 201, 204, 001; Barrios Amorín 202, 203, 102; Aruma, las de esquina; M5 203, 204, 206 | la fachada principal manda arriba; cada archivo lo explica |
@@ -197,6 +204,10 @@ Lo que no sigue `TIPOLOGIAS.md` al pie de la letra, y por qué.
 | Precisión `media` | GR 1591, Aruma | plantas en imagen |
 
 ### Avisos y errores de `ver_dxf` aceptados
+
+Desde la v2.58 el visor ya no da estos avisos: el comedor o el estar interior de un ambiente abierto no avisa de fachada
+si otro local del ambiente la toca, `Dormir` no cuenta como dormitorio y los archivos `-N2` no piden entrada. La lista
+es lo que se aceptó mientras tanto.
 
 - **«no toca ninguna fachada»** del comedor (o del estar) interior, que es parte del mismo ambiente:
   - Mauá: algunos comedores y el estar de los tríplex;
@@ -278,7 +289,9 @@ Lo que no sigue `TIPOLOGIAS.md` al pie de la letra, y por qué.
 
 ## 4. Para confirmar
 
-- **[pendiente]** Monoambiente con zona de dormir como `Mono` con `Dormitorio 1` (Isla de Flores 001, GR 1591 02,
-  M5 205). Si se prefiere 1D, es cambiar la etiqueta, el nombre del archivo y la fila del índice.
-- **[pendiente]** Único local cerrado amueblado como oficina como `Dormitorio 1` (Barrios Amorín 101).
-- **Error menor de `tools/ver_dxf.py`**: escribe `width="100%%"` en el rectángulo de fondo del SVG; debería ser `100%`.
+Sin pendientes. Se decidieron los dos que había:
+
+- Monoambiente con zona de dormir (Isla de Flores 001, GR 1591 02, M5 205): `Mono` con la zona etiquetada `Dormir`.
+- Único local cerrado amueblado como oficina (Barrios Amorín 101): `Dormitorio 1`.
+
+El error menor de `tools/ver_dxf.py` (`width="100%%"` en el fondo del SVG) se corrigió en la v2.57.1.

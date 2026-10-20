@@ -92,11 +92,11 @@
 - **Paso del dormitorio principal** (201 y 501): de él salen el baño en suite y el dormitorio, sin puerta hacia este. Va
   dentro del `Dormitorio 1`.
 - **205**: la ficha la vende como monoambiente pero rotula el ambiente «dormitorio».
-  - Va como `Mono` con el ambiente como `Dormitorio 1`.
-  - Se acepta el aviso de `ver_dxf`.
+  - Va como `Mono` con el ambiente como `Dormir`.
+  - Decidido por el usuario; con `Dormir`, `ver_dxf` ya no avisa (v2.58).
 - **104**: su ficha repite por error las superficies de la 401. Se anota.
 - **Norte**: el símbolo apunta 56,6° a la izquierda de la vertical de la página.
   - En las plantas y en las unidades giradas, `norte: 237`.
   - En las demás, `norte: 57`.
 - **Formato**: igual que en los casos anteriores. Todos pasan `ver_dxf` sin errores y `ezdxf.recover` sin arreglos.
-  - Los avisos son los de los comedores interiores y el de la 205.
+  - Los avisos eran los de los comedores interiores y el de la 205 (desde la v2.58 el visor no los da).

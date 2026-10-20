@@ -9,6 +9,13 @@ las ventanas, el norte y una escala) e imprime el informe de control: capas enco
 superficie, etiquetas que faltan o no están en la lista, entradas, fachadas y metadatos. Termina con 1 si hay errores
 (lo que la lista de control de la convención no admite) y 0 si solo hay avisos. Solo biblioteca estándar; la geometría
 la lee `engine/dxf_lector.py` (LINE, polilíneas, arcos, círculos, bloques), y los textos (TEXT y MTEXT) se leen aquí.
+
+Según la convención (v2.58): `Dormir` es la zona de dormir de un monoambiente (habitable, no cuenta como dormitorio);
+un archivo con sufijo `-N2`, `-N3`… es un nivel superior de una vivienda en varios niveles (sin puerta al palier) y con
+`-N1` o más la tipología es la de toda la vivienda; una planta sin `Trazo_Pasillo` es un piso al que no se entra; el
+estar, el comedor o la cocina integrada de un ambiente abierto no avisan de fachada si otro local contiguo del mismo
+ambiente la toca; las polilíneas cerradas con texto de `Trazo_Cotas` (balcones, terrazas, cocheras…) se listan como
+«otros recintos»; sin `Trazo_Norte`, `norte: desconocido` en los datos no es un aviso.
 """
 import html
 import math
@@ -29,13 +36,17 @@ ALIAS = {"unidades": "unidad", "estancia": "estancias", "puerta": "puertas", "en
          "dato": "datos", "cota": "cotas", "footprint": "terreno"}
 CERRADAS = ("unidad", "estancias", "terreno", "patios", "pasillo", "nucleos")     # capas de polilíneas cerradas
 _CAPA = re.compile(r"^trazo[ _:-]+([a-z]+)(?![a-z0-9])")
-ETIQUETA = re.compile(r"^(Hall|Estar|Comedor|Estar-Comedor|Cocina|Cocina integrada|Pasillo|Dormitorio \d+|Baño|Baño \d+"
-                      r"|Baño en suite|Toilette|Lavadero|Depósito|Estudio|Vestidor|Balcón|Terraza|Patio)$")
-HABITABLE = re.compile(r"^(Estar|Comedor|Estar-Comedor|Dormitorio \d+|Estudio)$")
+ETIQUETA = re.compile(r"^(Hall|Estar|Comedor|Estar-Comedor|Cocina|Cocina integrada|Pasillo|Dormitorio \d+|Dormir|Baño"
+                      r"|Baño \d+|Baño en suite|Toilette|Lavadero|Depósito|Estudio|Vestidor)$")
+HABITABLE = re.compile(r"^(Estar|Comedor|Estar-Comedor|Dormitorio \d+|Dormir|Estudio)$")
+ABIERTA = re.compile(r"^(Estar|Comedor|Estar-Comedor|Cocina integrada|Dormir)$")   # locales de un ambiente abierto
+EXTERIOR = re.compile(r"^(Balc[oó]n|Terraza|Patio|Jard[ií]n)\b", re.I)    # van en Trazo_Cotas, no en Trazo_Estancias
+NIVEL = re.compile(r"-N(\d+)(?:\.dxf)?$", re.I)                          # sufijo de una vivienda en varios niveles
 TIPOLOGIA = re.compile(r"^(Mono|\dD)\s+([\d]+(?:[.,]\d+)?)")
 CLAVES = ("fuente", "ciudad", "tipo", "tipologia", "frente", "fondo", "superficie_muros", "precision")
 TOL_BORDE = 0.30       # m: una entrada «está» sobre el contorno si su medio queda a menos de esto
 TOL_FACHADA = 0.35     # m: una estancia «toca» la fachada si uno de sus lados queda a menos de esto (el muro)
+LARGO_CONTIGUA = 0.60  # m: dos estancias son contiguas si comparten un tramo de borde de esto o más (a menos de TOL_BORDE)
 
 
 # ------------------------------------------------------------------ lectura
@@ -145,6 +156,56 @@ def _toca(poly, segs, tol):
     return False
 
 
+def _contiguas(pa, pb, tol=TOL_BORDE, largo=LARGO_CONTIGUA):
+    """Dos polígonos son contiguos si comparten un borde: un lado de uno corre junto a un lado del otro (casi paralelo,
+    a menos de tol: el muro que los separa) en un tramo de `largo` o más."""
+    ba, bb = G.bbox(pa), G.bbox(pb)
+    if ba[0] > bb[2] + tol or bb[0] > ba[2] + tol or ba[1] > bb[3] + tol or bb[1] > ba[3] + tol:
+        return False
+    for i in range(len(pa)):
+        a, b = pa[i], pa[(i + 1) % len(pa)]
+        la = math.hypot(b[0] - a[0], b[1] - a[1])
+        if la < largo:
+            continue
+        ux, uy = (b[0] - a[0]) / la, (b[1] - a[1]) / la
+        for j in range(len(pb)):
+            c, d = pb[j], pb[(j + 1) % len(pb)]
+            lb = math.hypot(d[0] - c[0], d[1] - c[1])
+            if lb < largo:
+                continue
+            tc, tcn = (c[0] - a[0]) * ux + (c[1] - a[1]) * uy, (c[1] - a[1]) * ux - (c[0] - a[0]) * uy
+            td, tdn = (d[0] - a[0]) * ux + (d[1] - a[1]) * uy, (d[1] - a[1]) * ux - (d[0] - a[0]) * uy
+            if abs(tcn) > tol or abs(tdn) > tol or abs(tcn - tdn) > 0.12 * lb:        # lejos o no paralelos
+                continue
+            if min(la, max(tc, td)) - max(0.0, min(tc, td)) >= largo:
+                return True
+    return False
+
+
+def _ambientes_con_luz(estancias, fach):
+    """Índices de las estancias de un ambiente abierto (Estar, Comedor, Estar-Comedor, Cocina integrada, Dormir) que
+    tocan la fachada o se alcanzan desde una que la toca, en cadena, por bordes comunes dentro de la misma vivienda
+    (Cocina integrada -> Comedor -> Estar con fachada): el comedor o el estar interior de un ambiente abierto no es una
+    falla de fachada."""
+    grupo = [i for i, e in enumerate(estancias) if e["unidad"] is not None and e["nombre"] and ABIERTA.match(e["nombre"])]
+    con = {i for i in grupo if _toca(estancias[i]["pts"], fach, TOL_FACHADA)}
+    cola = list(con)
+    while cola:
+        i = cola.pop()
+        for j in grupo:
+            if j not in con and estancias[j]["unidad"] == estancias[i]["unidad"] \
+                    and _contiguas(estancias[i]["pts"], estancias[j]["pts"]):
+                con.add(j)
+                cola.append(j)
+    return con
+
+
+def nivel_de(nombre):
+    """El nivel de una vivienda en varios niveles según el sufijo del archivo (`…_08-N2.dxf` -> 2), o None."""
+    m = NIVEL.search(os.path.basename(nombre or ""))
+    return int(m.group(1)) if m else None
+
+
 def _texto_en(textos, r, poly):
     """El texto del rol r cuyo punto cae dentro del polígono (el primero), o None."""
     for t in textos:
@@ -165,9 +226,13 @@ def fmt(x, dec=1):
 
 
 # ------------------------------------------------------------------ control
-def controlar(datos):
-    """El informe: tipo, unidades, estancias, entradas, datos, errores y avisos."""
+def controlar(datos, nombre=""):
+    """El informe: tipo, unidades, estancias, entradas, datos, notas, errores y avisos. `nombre` es el del archivo: el
+    sufijo `-N1`, `-N2`… dice que es un nivel de una vivienda en varios niveles."""
     formas, textos = datos["formas"], datos["textos"]
+    nivel = nivel_de(nombre)
+    superior = nivel is not None and nivel >= 2
+    notas = []
     capas = {}
     for f in formas:
         capas[f["rol"]] = capas.get(f["rol"], 0) + 1
@@ -211,7 +276,7 @@ def controlar(datos):
         c = G.centroid(f["pts"])
         t = _texto_en(textos, "estancias", f["pts"])
         e = {"pts": f["pts"], "area": abs(G.area(f["pts"])), "nombre": t["texto"] if t else None, "c": c,
-             "unidad": None, "habitable": False, "fachada": None}
+             "unidad": None, "habitable": False, "fachada": None, "abierto": False}
         for k, u in enumerate(unidades):
             if G.point_in_poly(c, u["pts"]):
                 e["unidad"] = k
@@ -220,18 +285,25 @@ def controlar(datos):
         if e["nombre"] is None:
             errores.append("estancia de %s m² en (%s, %s) sin etiqueta" % (fmt(e["area"]), fmt(c[0], 2), fmt(c[1], 2)))
         elif not ETIQUETA.match(e["nombre"]):
-            errores.append("la etiqueta «%s» no está en la lista de la convención" % e["nombre"])
+            errores.append("la etiqueta «%s» no está en la lista de la convención%s" % (
+                e["nombre"], " (los exteriores propios van fuera de la vivienda, en Trazo_Cotas)" if EXTERIOR.match(e["nombre"]) else ""))
         else:
             e["habitable"] = bool(HABITABLE.match(e["nombre"]))
         if unidades and e["unidad"] is None:
             errores.append("la estancia «%s» no está dentro de ninguna vivienda" % (e["nombre"] or "?"))
         if e["habitable"]:
             e["fachada"] = _toca(f["pts"], fach, TOL_FACHADA) if fach else None
-            if e["fachada"] is False:
-                avisos.append("«%s» no toca ninguna fachada (Trazo_Fachada)" % e["nombre"])
         estancias.append(e)
     if estancias and not fach:
         avisos.append("no hay Trazo_Fachada: no se puede comprobar la luz de las estancias")
+    elif fach:
+        con_luz = _ambientes_con_luz(estancias, fach)
+        for i, e in enumerate(estancias):
+            if e["habitable"] and e["fachada"] is False:
+                if i in con_luz:
+                    e["abierto"] = True        # sin fachada propia, pero parte de un ambiente abierto que la tiene
+                else:
+                    avisos.append("«%s» no toca ninguna fachada (Trazo_Fachada)" % e["nombre"])
     for i in range(len(estancias)):
         for j in range(i + 1, len(estancias)):
             a, b = estancias[i], estancias[j]
@@ -244,8 +316,8 @@ def controlar(datos):
                 errores.append("las estancias de la vivienda %d suman %s m², más que su contorno (%s)" % (k, fmt(s), fmt(u["area"])))
             elif s < 0.6 * u["area"]:
                 avisos.append("las estancias de la vivienda %d suman %s m² de %s: falta más de un tercio" % (k, fmt(s), fmt(u["area"])))
-            dorms = sum(1 for e in u["estancias"] if e["nombre"] and e["nombre"].startswith("Dormitorio"))
-            if u["tipologia"] and u["tipologia"] != ("Mono" if dorms == 0 else "%dD" % dorms):
+            dorms = sum(1 for e in u["estancias"] if e["nombre"] and e["nombre"].startswith("Dormitorio"))   # «Dormir» no cuenta
+            if nivel is None and u["tipologia"] and u["tipologia"] != ("Mono" if dorms == 0 else "%dD" % dorms):
                 avisos.append("la vivienda %d está etiquetada «%s» y tiene %d dormitorio%s" % (k, u["tipologia"], dorms, "" if dorms == 1 else "s"))
     entradas = [f for f in formas if f["rol"] == "entrada" and not f["punto"] and len(f["pts"]) >= 2]
     for f in entradas:
@@ -254,9 +326,18 @@ def controlar(datos):
         for u in unidades:
             if _dist_contorno(m, u["pts"]) <= TOL_BORDE:
                 u["entradas"] += 1
+    sin_palier = tipo == "planta" and "pasillo" not in capas       # piso al que no se entra: sin Trazo_Pasillo
+    if nivel is not None:
+        notas.append("vivienda en varios niveles (-N%d): la tipología y los dormitorios son los de toda la vivienda, no "
+                     "se comparan con los del nivel" % nivel)
+    if sin_palier and unidades:
+        notas.append("planta sin palier (sin Trazo_Pasillo): las viviendas sin entrada no avisan")
     for k, u in enumerate(unidades, 1):
         if u["entradas"] == 0:
-            (errores if tipo == "unidad" else avisos).append("la vivienda %d no tiene entrada (Trazo_Entrada sobre su contorno)" % k)
+            if superior and tipo == "unidad":
+                notas.append("la vivienda %d es un nivel superior (-N%d) sin puerta al palier: no lleva Trazo_Entrada" % (k, nivel))
+            elif not sin_palier:
+                (errores if tipo == "unidad" else avisos).append("la vivienda %d no tiene entrada (Trazo_Entrada sobre su contorno)" % k)
         elif u["entradas"] > 1:
             avisos.append("la vivienda %d tiene %d entradas" % (k, u["entradas"]))
     meta = {}
@@ -277,14 +358,21 @@ def controlar(datos):
             a, b = f["pts"][0], f["pts"][-1]
             norte = math.degrees(math.atan2(-(b[0] - a[0]), b[1] - a[1])) % 360     # antihorario desde +Y
             break
-    if norte is None:
+    desconocido = norte is None and meta.get("norte", "").strip().lower().startswith("desconocido")
+    if norte is None and not desconocido:             # `norte: desconocido` (la fuente no lo trae) no es un olvido
         avisos.append("sin norte (una línea en Trazo_Norte)")
     largo_fachada = sum(math.hypot(b[0] - a[0], b[1] - a[1]) for a, b in fach)
-    return {"tipo": tipo, "escala": datos["escala"], "capas": capas, "otras_capas": datos["otras_capas"],
-            "unidades": unidades, "estancias": estancias, "entradas": len(entradas),
+    recintos = []                      # balcones, terrazas, cocheras, amenities: polilíneas cerradas de Trazo_Cotas con su texto
+    for f in formas:
+        if f["rol"] == "cotas" and f["cerrada"] and not f["punto"] and len(f["pts"]) >= 3:
+            t = _texto_en(textos, "cotas", f["pts"])
+            if t:
+                recintos.append({"pts": f["pts"], "nombre": t["texto"], "area": abs(G.area(f["pts"])), "c": G.centroid(f["pts"])})
+    return {"tipo": tipo, "nivel": nivel, "recintos": recintos, "notas": notas, "escala": datos["escala"], "capas": capas,
+            "otras_capas": datos["otras_capas"], "unidades": unidades, "estancias": estancias, "entradas": len(entradas),
             "puertas": sum(1 for f in formas if f["rol"] == "puertas"),
             "ventanas": sum(1 for f in formas if f["rol"] == "ventanas"), "fachada": largo_fachada,
-            "datos": meta, "norte": norte, "errores": errores, "avisos": avisos}
+            "datos": meta, "norte": norte, "norte_desconocido": desconocido, "errores": errores, "avisos": avisos}
 
 
 def informe_txt(nombre, inf):
@@ -298,14 +386,21 @@ def informe_txt(nombre, inf):
             k, fmt(u["area"]), (" (etiqueta «%s»)" % u["etiqueta"]) if u["etiqueta"] else "", u["entradas"], len(u["estancias"])))
         for e in u["estancias"]:
             lineas.append("  %s %s m²%s" % (e["nombre"] or "(sin etiqueta)", fmt(e["area"]),
-                                           " (fachada)" if e["fachada"] else (" (sin fachada)" if e["fachada"] is False else "")))
+                                           " (fachada)" if e["fachada"] else
+                                           ((" (sin fachada propia: ambiente abierto)" if e.get("abierto") else " (sin fachada)")
+                                            if e["fachada"] is False else "")))
     sueltas = [e for e in inf["estancias"] if e["unidad"] is None]
     if sueltas:
         lineas.append("Estancias fuera de las viviendas: " + ", ".join("%s %s m²" % (e["nombre"] or "?", fmt(e["area"])) for e in sueltas))
+    if inf["recintos"]:
+        lineas.append("Otros recintos: " + "; ".join("%s %s m²" % (r["nombre"], fmt(r["area"])) for r in inf["recintos"]))
     lineas.append("Puertas: %d; ventanas: %d; fachada: %s m; norte: %s" % (
-        inf["puertas"], inf["ventanas"], fmt(inf["fachada"]), ("%s°" % fmt(inf["norte"], 0)) if inf["norte"] is not None else "no"))
+        inf["puertas"], inf["ventanas"], fmt(inf["fachada"]),
+        ("%s°" % fmt(inf["norte"], 0)) if inf["norte"] is not None else ("desconocido" if inf["norte_desconocido"] else "no")))
     if inf["datos"]:
         lineas.append("Datos: " + "; ".join("%s: %s" % (k, v) for k, v in inf["datos"].items()))
+    if inf["notas"]:
+        lineas.append("Notas: " + "; ".join(inf["notas"]))
     lineas.append("Errores: " + ("; ".join(inf["errores"]) if inf["errores"] else "ninguno"))
     lineas.append("Avisos: " + ("; ".join(inf["avisos"]) if inf["avisos"] else "ninguno"))
     return lineas
@@ -315,7 +410,8 @@ def informe_txt(nombre, inf):
 RELLENO = {"Dormitorio": "#dbe9ff", "Estar": "#fff1c2", "Comedor": "#fff1c2", "Estar-Comedor": "#fff1c2",
            "Cocina": "#ffd9b3", "Cocina integrada": "#ffd9b3", "Baño": "#d8f5e3", "Baño en suite": "#d8f5e3",
            "Toilette": "#d8f5e3", "Hall": "#eeeeee", "Pasillo": "#eeeeee", "Lavadero": "#e8dcf5", "Depósito": "#e8dcf5",
-           "Vestidor": "#e8dcf5", "Estudio": "#dbe9ff", "Balcón": "#e3f2d9", "Terraza": "#e3f2d9", "Patio": "#e3f2d9"}
+           "Vestidor": "#e8dcf5", "Estudio": "#dbe9ff", "Dormir": "#dbe9ff"}
+RECINTO = "fill:#f3f8ee;stroke:#7d9a6c;stroke-width:0.8"     # polilínea cerrada con texto de Trazo_Cotas
 ESTILO = {"terreno": "fill:none;stroke:#333;stroke-width:3", "patios": "fill:#e3f2d9;stroke:#6a9a4a;stroke-width:1",
           "pasillo": "fill:#dddddd;stroke:#888;stroke-width:1", "nucleos": "fill:#9a9a9a;stroke:#444;stroke-width:1",
           "unidad": "fill:none;stroke:#1a1a1a;stroke-width:2.2", "muros": "fill:#444;stroke:none",
@@ -361,6 +457,8 @@ def svg(datos, inf, ancho=1000, titulo=""):
                 base = (nombre or "").split(" ")[0] if nombre else ""
                 relleno = RELLENO.get(nombre or "", RELLENO.get(base, "#ffffff"))
                 estilo = "fill:%s;stroke:#555;stroke-width:1" % relleno
+            elif r == "cotas" and any(rc["pts"] is f["pts"] for rc in inf["recintos"]):
+                estilo = RECINTO
             else:
                 estilo = ESTILO[r]
             out.append('<path d="%s" style="%s"/>' % (camino(f["pts"], f["cerrada"]), estilo))
@@ -369,6 +467,9 @@ def svg(datos, inf, ancho=1000, titulo=""):
         texto = (e["nombre"] or "¿?") + " " + fmt(e["area"]) + " m²"
         out.append('<text x="%.1f" y="%.1f" font-size="11" text-anchor="middle" fill="%s">%s</text>'
                    % (X(cx), Y(cy) + 4, "#a00" if not e["nombre"] else "#222", html.escape(texto)))
+    for rc in inf["recintos"]:                        # otros recintos (Trazo_Cotas): nombre y superficie, en su centro
+        out.append('<text x="%.1f" y="%.1f" font-size="10" text-anchor="middle" fill="#4f6b3f">%s</text>'
+                   % (X(rc["c"][0]), Y(rc["c"][1]) + 3, html.escape("%s · %s m²" % (rc["nombre"][:44], fmt(rc["area"])))))
     for k, u in enumerate(inf["unidades"], 1):        # etiqueta de la vivienda, arriba de su contorno
         bx = G.bbox(u["pts"])
         out.append('<text x="%.1f" y="%.1f" font-size="12" font-weight="bold" text-anchor="middle">%s</text>'
@@ -386,7 +487,8 @@ def svg(datos, inf, ancho=1000, titulo=""):
         out.append('<text x="%d" y="%d" font-size="11">%s</text>' % (px, y, html.escape(("%s: %s" % (k, v))[:48])))
     y += 22
     out.append('<text x="%d" y="%d" font-size="12" font-weight="bold">Control</text>' % (px, y))
-    for linea, color in [(e, "#a00") for e in inf["errores"]] + [(a, "#865") for a in inf["avisos"]]:
+    for linea, color in [(e, "#a00") for e in inf["errores"]] + [(a, "#865") for a in inf["avisos"]] \
+            + [(n, "#567") for n in inf["notas"]]:
         for trozo in [linea[i:i + 46] for i in range(0, len(linea), 46)][:3]:
             y += 14
             out.append('<text x="%d" y="%d" font-size="10" fill="%s">%s</text>' % (px, y, color, html.escape(trozo)))
@@ -409,17 +511,21 @@ def svg(datos, inf, ancho=1000, titulo=""):
 
 
 # ------------------------------------------------------------------ programa
-def procesar(ruta_dxf, ruta_svg=None, ancho=1000):
-    """Lee el DXF, escribe el SVG (junto al DXF si no se da otra ruta) y devuelve (informe, líneas de texto, ruta_svg)."""
+def texto_del_archivo(ruta_dxf):
+    """El texto de un DXF: UTF-8 y, si no lo es, Windows-1252 (los DXF de AutoCAD 2000 declaran `$DWGCODEPAGE` ANSI_1252)."""
     with open(ruta_dxf, "rb") as f:
         crudo = f.read()
     try:
-        texto = crudo.decode("utf-8")
+        return crudo.decode("utf-8")
     except UnicodeDecodeError:
-        texto = crudo.decode("cp1252", errors="replace")
-    datos = leer(texto)
-    inf = controlar(datos)
+        return crudo.decode("cp1252", errors="replace")
+
+
+def procesar(ruta_dxf, ruta_svg=None, ancho=1000):
+    """Lee el DXF, escribe el SVG (junto al DXF si no se da otra ruta) y devuelve (informe, líneas de texto, ruta_svg)."""
     nombre = os.path.basename(ruta_dxf)
+    datos = leer(texto_del_archivo(ruta_dxf))
+    inf = controlar(datos, nombre)
     ruta_svg = ruta_svg or os.path.splitext(ruta_dxf)[0] + ".svg"
     with open(ruta_svg, "w", encoding="utf-8") as f:
         f.write(svg(datos, inf, ancho, titulo="%s · %s" % (nombre, inf["tipo"])))

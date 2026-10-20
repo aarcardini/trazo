@@ -65,6 +65,7 @@
   - Por el criterio del Mauá, ese local sería `Estudio` y la vivienda quedaría `Mono`.
   - Lo dejé `Dormitorio 1` porque es el único local cerrado, la carpeta la vende como «1 dormitorio» y en los pisos de
     arriba el mismo lugar tiene cama.
+  - Decidido por el usuario: queda `Dormitorio 1`, con el amueblamiento en `observaciones`.
   - El estar, sin sofá, va como `Estar-Comedor`.
 - **Tabiques corredizos** (201 y 101, entre el estar y el dormitorio): tienen dos hojas a los lados de un paño fijo y se
   dibujaron como dos puertas.
@@ -81,4 +82,4 @@
   - 102: los patios arriba.
   - En la 201 y la 101 la entrada queda abajo. En las demás queda a un costado, y cada archivo lo dice.
 - **Formato**: igual que en los casos anteriores. Todos pasan `ver_dxf` sin errores y `ezdxf.recover` sin arreglos. Los
-  únicos avisos son el del comedor interior de la 203.
+  únicos avisos eran el del comedor interior de la 203 (desde la v2.58 el visor no lo da).
