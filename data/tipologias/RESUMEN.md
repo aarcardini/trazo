@@ -1,4 +1,4 @@
-# Base de tipologías — resumen (Trazo v2.60)
+# Base de tipologías — resumen (Trazo v2.61)
 
 Se leyeron 67 archivos de `data/tipologias/`: 49 viviendas (44 distintas: las de varios niveles cuentan una vez, con la suma de sus niveles) y 18 plantas enteras. Las superficies son m² con muros (el contorno de la vivienda por el eje de los muros divisorios y la cara exterior de la fachada) y las medidas, metros; cada celda con rango da la mediana y, entre paréntesis, el mínimo y el máximo. El ancho y el fondo de una estancia son los de su caja alineada con los ejes del dibujo (ancho a lo largo de la fachada), de las estancias rectangulares.
 
@@ -74,10 +74,10 @@ Medida: mediana de la superficie con muros. «Norma» es `vivienda.superficie_mi
 
 | Tipología | n | Medida (m²) | Norma (m²) | ANV (m²) | Propuesta (m²) | Mix del motor (m²) | Medida / propuesta | Frente × fondo medido (m) | Frente × fondo propuesto (m) |
 |---|---|---|---|---|---|---|---|---|---|
-| Mono | 4 | 32,7 | 32 | 25–40 | 30 | — | +9 % | 3,4 × 9,6 | 5 × 6 |
-| 1D | 18 | 41,7 | 32 | 35–50 | 42 | — | -1 % | 4,4 × 8,9 | 6 × 7 |
-| 2D | 12 | 61,6 | 44 | 50–75 | 58 | 75 | +6 % | 8,5 × 7,4 | 8 × 7,25 |
-| 3D | 8 | 92,9 | 56 | 65–100 | 78 | 95 | +19 % | 7,7 × 11,8 | 10,5 × 7,4 |
+| Mono | 4 | 32,7 | 32 | 25–40 | 30 | 33 | +9 % | 3,4 × 9,6 | 5 × 6 |
+| 1D | 18 | 41,7 | 32 | 35–50 | 42 | 42 | -1 % | 4,4 × 8,9 | 6 × 7 |
+| 2D | 12 | 61,6 | 44 | 50–75 | 58 | 62 | +6 % | 8,5 × 7,4 | 8 × 7,25 |
+| 3D | 8 | 92,9 | 56 | 65–100 | 78 | 93 | +19 % | 7,7 × 11,8 | 10,5 × 7,4 |
 | 4D | 2 | 113,1 | 68 | 80–125 | 100 | — | +13 % | 13,4 × 12,0 | 12,5 × 8 |
 
 ### 4.2 Estancias
@@ -106,10 +106,10 @@ Estar + comedor (y, en el monoambiente, la zona de dormir: el motor la dibuja de
 | Tipología | n | Medida (m²) | `estar_por_dorms` (m²) | Medida / motor |
 |---|---|---|---|---|
 | Mono | 4 | 18,1 | 18,0 | 0 % |
-| 1D | 18 | 14,5 | 18,0 | -20 % |
-| 2D | 12 | 17,3 | 20,0 | -13 % |
-| 3D | 8 | 21,2 | 24,0 | -12 % |
-| 4D | 2 | 23,2 | 27,0 | -14 % |
+| 1D | 18 | 14,5 | 15,0 | -4 % |
+| 2D | 12 | 17,3 | 18,0 | -4 % |
+| 3D | 8 | 21,2 | 21,0 | +1 % |
+| 4D | 2 | 23,2 | 24,0 | -3 % |
 
 ### 4.4 Plantas y parámetros del motor
 

@@ -1,27 +1,29 @@
 {
  "ejemplo": "samples/entre_medianeras.json",
  "nombre": "Predio entre medianeras 10 x 28",
- "version_motor": "2.60",
+ "version_motor": "2.61",
  "metricas": {
-  "unidades": 2,
-  "unidades_totales": 12,
+  "unidades": 4,
+  "unidades_totales": 24,
   "por_tipo": {
+   "1 dorm": 2,
    "2 dorm": 1,
-   "3 dorm": 1
+   "Mono": 1
   },
-  "nucleos": 1,
+  "nucleos": 2,
   "ascensores": 1,
-  "tramos": 1,
-  "area_planta": 253.9,
-  "eficiencia_planta": 66.2,
-  "eficiencia_total": 60.0,
+  "tramos": 2,
+  "area_planta": 219.5,
+  "eficiencia_planta": 58.3,
+  "eficiencia_total": 51.2,
   "sin_usar": 0.0,
-  "circulacion": 38.1,
-  "match_score": 100.0,
-  "fit_m2": 10.0,
-  "calidad_planos": 60,
+  "circulacion": 60.4,
+  "match_score": 85.0,
+  "fit_m2": 12.8,
+  "calidad_planos": 20,
   "evacuacion_max": 6.8,
-  "nsa_total": 1008.0,
-  "sin_luz": 12.6
+  "nsa_total": 768.0,
+  "bloques": 2,
+  "patios_m2": 30.0
  }
 }

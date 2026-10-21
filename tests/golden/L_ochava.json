@@ -1,27 +1,29 @@
 {
  "ejemplo": "samples/L_ochava.json",
  "nombre": "Esquina en L con ochava",
- "version_motor": "2.60",
+ "version_motor": "2.61",
  "metricas": {
-  "unidades": 12,
-  "unidades_totales": 60,
+  "unidades": 18,
+  "unidades_totales": 90,
   "por_tipo": {
-   "2 dorm": 6,
-   "3 dorm": 6
+   "1 dorm": 10,
+   "2 dorm": 5,
+   "3 dorm": 1,
+   "Mono": 2
   },
   "nucleos": 3,
   "ascensores": 1,
   "tramos": 2,
   "area_planta": 1114.3,
-  "eficiencia_planta": 76.5,
-  "eficiencia_total": 72.5,
-  "sin_usar": 13.9,
+  "eficiencia_planta": 75.5,
+  "eficiencia_total": 71.5,
+  "sin_usar": 26.1,
   "circulacion": 21.5,
-  "match_score": 100.0,
-  "fit_m2": 13.9,
-  "calidad_planos": 85,
+  "match_score": 97.8,
+  "fit_m2": 5.2,
+  "calidad_planos": 70,
   "evacuacion_max": 17.7,
-  "nsa_total": 4265.0,
+  "nsa_total": 4204.0,
   "sin_luz": 7.9
  }
 }

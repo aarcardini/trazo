@@ -10296,7 +10296,7 @@
      "fondo": 9.56,
      "frente": 3.445,
      "medida": 32.71,
-     "mix_motor": null,
+     "mix_motor": 33,
      "n": 4,
      "rango_anv": [
       25,
@@ -10314,7 +10314,7 @@
      "fondo": 8.88,
      "frente": 4.41,
      "medida": 41.73,
-     "mix_motor": null,
+     "mix_motor": 42,
      "n": 18,
      "rango_anv": [
       35,
@@ -10332,7 +10332,7 @@
      "fondo": 7.41,
      "frente": 8.525,
      "medida": 61.6,
-     "mix_motor": 75,
+     "mix_motor": 62,
      "n": 12,
      "rango_anv": [
       50,
@@ -10350,7 +10350,7 @@
      "fondo": 11.825,
      "frente": 7.69,
      "medida": 92.87,
-     "mix_motor": 95,
+     "mix_motor": 93,
      "n": 8,
      "rango_anv": [
       65,
@@ -10392,28 +10392,28 @@
      "tipologia": "Mono"
     },
     {
-     "estar_por_dorms": 18.0,
+     "estar_por_dorms": 15.0,
      "medida": 14.46,
      "n": 18,
      "tipico_area": 20.0,
      "tipologia": "1D"
     },
     {
-     "estar_por_dorms": 20.0,
+     "estar_por_dorms": 18.0,
      "medida": 17.3,
      "n": 12,
      "tipico_area": 20.0,
      "tipologia": "2D"
     },
     {
-     "estar_por_dorms": 24.0,
+     "estar_por_dorms": 21.0,
      "medida": 21.16,
      "n": 8,
      "tipico_area": 20.0,
      "tipologia": "3D"
     },
     {
-     "estar_por_dorms": 27.0,
+     "estar_por_dorms": 24.0,
      "medida": 23.17,
      "n": 2,
      "tipico_area": 20.0,
@@ -11456,7 +11456,7 @@
    "n": 44
   }
  },
- "version": "2.60",
+ "version": "2.61",
  "viviendas": [
   {
    "anio": 2025,

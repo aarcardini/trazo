@@ -167,6 +167,8 @@ table{width:100%;border-collapse:collapse;font-size:12px}
   <header><b>Viviendas</b><small>Mix, accesibles y vestidores, medidas de la unidad y planos.</small><button class="x" onclick="grupo(null)" title="Cerrar (Esc)">×</button></header>
   <div class="cuerpo">
    <h2>Mix de unidades</h2>
+   <label title="Inversor: 10 % monoambientes, 55 % de 1 dormitorio, 30 % de 2 y 5 % de 3 · Equilibrado: 5 / 45 / 40 / 10 · Familiar: sin monoambientes, 25 / 55 / 20. Elegir uno reemplaza la tabla de abajo">Mix predeterminado <select id="mixPre" onchange="mixPredeterminado(this.value)"><option value="inversor">Inversor</option><option value="equilibrado">Equilibrado</option><option value="familiar">Familiar</option><option value="personalizado">Personalizado</option></select></label>
+   <div class="hint">Inversor: lo que se vende en Montevideo · Equilibrado: menos monoambiente · Familiar: usuario final</div>
    <div id="mix"></div><button class="s" onclick="addMix()">+ tipo</button>
    <h2>Medidas de la unidad</h2>
    <label>Ancho mínimo unidad <input type="number" id="min_unit_width" value="3.5" step="0.5"></label>
@@ -277,7 +279,12 @@ let terreno=null, terrenoUlt=null;   // terreno rectangular de la masa (frente, 
 let result=null, samples={}, massVer=0, view=null, lastStage=null, drag=null, coresManual=[], externa=null;
 let avisosDxf=[];   // R1.5: lo que avisó el lector al abrir un DXF (se muestran con los avisos del resultado)
 let nombre='', abierto=null, VER='', ediciones=[], interiores=[];   // ediciones: cambios en las viviendas (R4.4), en orden; interiores: dentro de ellas (R5.7: tabiques interiores y puertas), en orden;   // nombre de la masa o del proyecto; proyecto o archivo abierto (vuelve desde el selector); versión del motor
-let mix=[{name:'2 dorm',area:75,percent:50,dorms:2},{name:'3 dorm',area:95,percent:50,dorms:3}];
+let mix=[{name:'Mono',area:33,percent:10,dorms:0},{name:'1 dorm',area:42,percent:55,dorms:1},{name:'2 dorm',area:62,percent:30,dorms:2},{name:'3 dorm',area:93,percent:5,dorms:3}];   // «Inversor» (R10.12): el mismo que DEFAULT_PARAMS['unit_mix'] del motor
+// Mixes predeterminados (REFERENCIAS.md, sección 4; superficies con muros de la base de tipologías). El primero es el inicial.
+const MIX_PRE={inversor:JSON.parse(JSON.stringify(mix)),
+ equilibrado:[{name:'Mono',area:33,percent:5,dorms:0},{name:'1 dorm',area:42,percent:45,dorms:1},{name:'2 dorm',area:62,percent:40,dorms:2},{name:'3 dorm',area:93,percent:10,dorms:3}],
+ familiar:[{name:'1 dorm',area:42,percent:25,dorms:1},{name:'2 dorm',area:62,percent:55,dorms:2},{name:'3 dorm',area:93,percent:20,dorms:3}]};
+let mixPersonal=null;   // la última tabla propia: «Personalizado» vuelve a ella después de elegir un predeterminado
 let stories=null;
 /* Colores: cada programa tiene un color base; sus áreas internas son tonos de ese color. */
 function hexToHsl(hex){ const n=parseInt(hex.slice(1),16); let r=(n>>16&255)/255,g=(n>>8&255)/255,b=(n&255)/255; const mx=Math.max(r,g,b),mn=Math.min(r,g,b); let h=0,s=0,l=(mx+mn)/2;
@@ -299,8 +306,19 @@ const EVAC={ok:'#1a9d5b',saco:'#e8890c',fail:'#d63b3b'};   // puerta de cada viv
 /* ---------- paneles de entrada ---------- */
 const ACC_TIT='Vivienda accesible: puertas de dormitorios y baño de 0,82 m y baño con círculo de giro de 1,50 m, inodoro con transferencia y ducha a nivel';
 const VEST_TIT='Vestidor (opcional): a la entrada del dormitorio principal, de 1,20 a 1,50 m de fondo y con estantes; con la suite, entre el dormitorio y su baño. El principal ya no lleva placard. Si no entra, la ficha dice por qué';
-function renderMix(){ const col='grid-template-columns:1fr 46px 46px 40px 28px 30px 20px'; $('mix').innerHTML='<div class="mixrow" style="'+col+';color:var(--mut);font-size:11px"><span>Tipo</span><span>m²</span><span>%</span><span>Dorm.</span><span title="'+ACC_TIT+'">Acc.</span><span title="'+VEST_TIT+'">Vest.</span><span></span></div>'+mix.map((m,i)=>`<div class="mixrow" style="${col}"><input value="${m.name}" onchange="mix[${i}].name=this.value"><input type="number" value="${m.area}" title="m²" onchange="mix[${i}].area=+this.value"><input type="number" value="${m.percent}" title="%" onchange="mix[${i}].percent=+this.value"><input type="number" min="0" max="5" value="${m.dorms??''}" placeholder="auto" title="Dormitorios (vacío = según m²)" onchange="mix[${i}].dorms=this.value===''?null:+this.value"><input type="checkbox" data-acc="${i}" ${m.accesible?'checked':''} title="${ACC_TIT}" onchange="mix[${i}].accesible=this.checked||undefined"><input type="checkbox" data-vest="${i}" ${m.vestidor?'checked':''} title="${VEST_TIT}" onchange="mix[${i}].vestidor=this.checked||undefined"><button class="s" style="padding:0" onclick="mix.splice(${i},1);renderMix()">×</button></div>`).join(''); }
+function renderMix(){ const col='grid-template-columns:1fr 46px 46px 40px 28px 30px 20px'; $('mix').innerHTML='<div class="mixrow" style="'+col+';color:var(--mut);font-size:11px"><span>Tipo</span><span>m²</span><span>%</span><span>Dorm.</span><span title="'+ACC_TIT+'">Acc.</span><span title="'+VEST_TIT+'">Vest.</span><span></span></div>'+mix.map((m,i)=>`<div class="mixrow" style="${col}"><input value="${m.name}" onchange="mix[${i}].name=this.value;mixSel()"><input type="number" value="${m.area}" title="m²" onchange="mix[${i}].area=+this.value;mixSel()"><input type="number" value="${m.percent}" title="%" onchange="mix[${i}].percent=+this.value;mixSel()"><input type="number" min="0" max="5" value="${m.dorms??''}" placeholder="auto" title="Dormitorios (vacío = según m²)" onchange="mix[${i}].dorms=this.value===''?null:+this.value;mixSel()"><input type="checkbox" data-acc="${i}" ${m.accesible?'checked':''} title="${ACC_TIT}" onchange="mix[${i}].accesible=this.checked||undefined;mixSel()"><input type="checkbox" data-vest="${i}" ${m.vestidor?'checked':''} title="${VEST_TIT}" onchange="mix[${i}].vestidor=this.checked||undefined;mixSel()"><button class="s" style="padding:0" onclick="mix.splice(${i},1);renderMix()">×</button></div>`).join(''); mixSel(); }
 function addMix(){ mix.push({name:'Nuevo',area:60,percent:10}); renderMix(); legend(); }
+// Mix predeterminado (R10.12): el selector muestra el predeterminado que la tabla repite tal cual y, si no, «Personalizado»
+const mixClave=t=>JSON.stringify(t.map(m=>[m.name,+m.area,+m.percent,m.dorms??null,!!m.accesible,!!m.vestidor]));
+const copiaMix=t=>t.map(m=>Object.assign({},m));
+function mixActual(){ return Object.keys(MIX_PRE).find(k=>mixClave(MIX_PRE[k])===mixClave(mix))||'personalizado'; }
+function mixSel(){ const s=$('mixPre'); if(s) s.value=mixActual(); }
+function mixPredeterminado(k){   // reemplaza la tabla por la del predeterminado (o vuelve a la propia) y recalcula como resetStd
+  const antes=mixActual(); let nuevo;
+  if(k==='personalizado'){ if(antes!=='personalizado'&&mixPersonal) nuevo=mixPersonal; else { mixSel(); if(antes!=='personalizado') $('tag').textContent='Cambia la tabla del mix para armar uno propio'; return; } }
+  else if(MIX_PRE[k]) nuevo=MIX_PRE[k]; else return mixSel();
+  if(antes==='personalizado') mixPersonal=copiaMix(mix);   // no se pierde la tabla propia: «Personalizado» la devuelve
+  mix=copiaMix(nuevo); renderMix(); legend(); if(lastStage) run(lastStage,{keepView:true}); }
 function renderStories(){ if(!stories){ $('storyTable').innerHTML='<div class="w" style="color:var(--mut)">Todas Residential. Calcula la masa para editar.</div>'; return;}
  $('storyTable').innerHTML=stories.map((s,i)=>`<div class="mixrow" style="grid-template-columns:30px 1fr 60px"><span>${i}</span><select onchange="stories[${i}].program=this.value">${PROGS.map(p=>`<option value="${p.key}" ${p.key==s.program?'selected':''}>${p.label}</option>`).join('')}</select><input type="number" step="0.1" value="${s.height}" onchange="stories[${i}].height=+this.value"></div>`).join('');}
 let STD=null, STD_DEF=null, medianeras=[], medHover=null;
@@ -575,9 +593,10 @@ const STD_LABELS={predio:'Predio',retiro_ventanas:'Retiro de medianera para vent
  iluminacion:'Vano mínimo / superficie del local',alto:'Alto de ventana (m)',ancho_dormitorio:'Ancho típico en dormitorios (m)',ancho_estar:'Ancho típico en el estar (m)',mocheta:'Libre a una esquina o tabique (m)',proporcion_max:'Profundidad máx. / lado menor del local (art. 14)',ancho_cocina:'Ancho típico en la cocina con fachada (m)',vano_cocina:'Vano mínimo de la cocina con ventana (art. 24, m²)',
  puerta_accesible:'Accesible: puertas de dormitorios y baño (m)',giro:'Accesible: círculo de giro en el baño (m)',transferencia:'Accesible: transferencia junto al inodoro (m)',ducha_nivel:'Accesible: ducha a nivel (m)',bano_accesible:'Accesible: baño, frente × fondo (m)'};
 const STD_LISTA={asientos:1,placard_largo:1,pasillo_comun:1,pasillo_viviendas:1,superficie_min:1};   // listas (no medidas largo × fondo)
-// Mínimos que cambiaron en v2.27 (norma nacional de higiene de la vivienda) y su valor anterior: si el navegador o un
-// proyecto anterior guardó el valor viejo, vale el nuevo; un valor elegido a mano (distinto del viejo) se respeta.
-const STD_ANTES={vivienda:{dorm_principal:{min_area:10,min_side:2.5},dorm_secundario:{min_area:6.5},estar_comedor:{min_side:2.5},estudio:{min_area:6.5},bano:{min_area:2.4}}};
+// Medidas que cambiaron (mínimos de la norma nacional de higiene de la vivienda en v2.27; estar-comedor por dormitorios en v2.61)
+// y su valor anterior: si el navegador o un proyecto anterior guardó el valor viejo, vale el nuevo; un valor elegido a mano
+// (distinto del viejo) se respeta.
+const STD_ANTES={vivienda:{dorm_principal:{min_area:10,min_side:2.5},dorm_secundario:{min_area:6.5},estar_comedor:{min_side:2.5},estar_por_dorms:[18,18,20,24,27],estudio:{min_area:6.5},bano:{min_area:2.4}}};
 function mezclarStd(dst,src,antes){ for(const k in src){ if(!(k in dst)) continue; const a=antes?antes[k]:undefined;
   if(src[k]&&typeof src[k]==='object'&&!Array.isArray(src[k])&&dst[k]&&typeof dst[k]==='object'&&!Array.isArray(dst[k])) mezclarStd(dst[k],src[k],a);
   else if(a===undefined||JSON.stringify(src[k])!==JSON.stringify(a)) dst[k]=src[k]; } }
@@ -1439,7 +1458,7 @@ function abrirProyecto(p,archivo,opt){ opt=opt||{}; const no=t=>{ alert('Trazo: 
   for(const [k,v] of Object.entries(P)){ const e=$(k); if(e&&/^(INPUT|SELECT)$/.test(e.tagName)&&v!=null&&typeof v!=='object'){ if(e.type==='checkbox') e.checked=!!v; else e.value=v; } }   // cada parámetro simple vuelve a su control (mismo id)
   $('core_width').disabled=$('core_depth').disabled=$('core_auto').checked;
   if(Array.isArray(P.unit_mix)&&P.unit_mix.length){ mix=P.unit_mix.map(m=>Object.assign({},m)); renderMix(); legend(); }
-  if(STD_DEF){ STD=JSON.parse(JSON.stringify(STD_DEF)); mezclarStd(STD,P.standards||{},verMenor(p.version_motor,'2.27')?STD_ANTES:null); saveStd(); renderStd(); }   // las medidas del proyecto (guarda solo las cambiadas)
+  if(STD_DEF){ STD=JSON.parse(JSON.stringify(STD_DEF)); mezclarStd(STD,P.standards||{},verMenor(p.version_motor,'2.61')?STD_ANTES:null); saveStd(); renderStd(); }   // las medidas del proyecto (guarda solo las cambiadas)
   const otra=p.version_motor&&VER&&p.version_motor!==VER;
   return setMass({name:p.name,footprint:p.footprint,height:p.height,centerlines:P.centerlines,cores:P.cores,cores_mode:P.cores_mode,stories:P.stories,medianeras:P.medianeras,patios:P.patios,patios_galeria:P.patios_galeria,patios_mode:P.patios_mode,unit_edits:P.unit_edits,room_edits:P.room_edits,anchos_pasillo:P.anchos_pasillo,terreno:p.terreno,scp:p.scp},false,{label:(opt.variante?'Variante: '+archivo:'Proyecto: '+(p.name||archivo)),etapa:ETAPAS.includes(p.stage)?p.stage:'massing'})
    .then(()=>{ if(otra) $('tag').textContent+=' · guardado con Trazo v'+p.version_motor+' (ahora v'+VER+'): el resultado puede variar'; }); }

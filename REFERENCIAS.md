@@ -135,6 +135,8 @@ Cómo elegir: 1) destino (inversor con renta → Inversor; usuario final → Fam
 
 Comparación con el mix predeterminado de hoy (`unit_mix` = 2 dormitorios de 75 m² y 3 dormitorios de 95 m², 50 % cada uno): está en el máximo legal de la ANV para 2 dormitorios y cerca del máximo para 3, sin unidades chicas; es un mix «familiar de gama alta», no el de mercado. El mix «Inversor» pone ≈ 40 % más puertas por m² de planta que el «Familiar» (superficie media 46 contra 65 m²), lo que presiona la cantidad de núcleos por evacuación (D).
 
+Desde v2.61 el motor trae el mix «Inversor» por defecto (Mono 33 m² 10 %, 1 dorm. 42 m² 55 %, 2 dorm. 62 m² 30 %, 3 dorm. 93 m² 5 %; las superficies con muros son las medianas de la base de tipologías) y la web ofrece «Equilibrado» y «Familiar» como opciones en Viviendas → «Mix predeterminado» (con las superficies medianas de la base de tipologías en lugar de las de la tabla de arriba).
+
 ## 5. Métricas de edificio
 
 | Métrica | Valor de referencia | Fuente |

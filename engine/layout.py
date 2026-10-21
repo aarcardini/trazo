@@ -24,7 +24,7 @@ from .units import (_bisect_x, _chain_union, _is_rect, _segments, generate_unit_
                     superficie_con_muros)  # noqa: F401
 from .patios import (auto_patios, _anillo, split_blocks, make_patio_dark, _block_of, _block_of_line)  # noqa: F401
 
-VERSION = "2.60"
+VERSION = "2.61"
 
 DEFAULT_PARAMS = {
     # Masa
@@ -46,8 +46,12 @@ DEFAULT_PARAMS = {
     "egress_single": 18.0,      # fondo de saco máximo: con una sola dirección de salida (R3.6)
     "egress_multi": 30.0,       # recorrido máximo desde la puerta hasta el núcleo más cercano
     # Mix
-    "unit_mix": [{"name": "2 dorm", "area": 75, "percent": 50, "dorms": 2},
-                 {"name": "3 dorm", "area": 95, "percent": 50, "dorms": 3}],
+    # R10.12 (v2.61): mix «Inversor» de REFERENCIAS.md (lo que se vende en Montevideo, 2020-2025), con las superficies
+    # con muros medianas de la base de tipologías (data/tipologias/RESUMEN.md, 4.1). Equilibrado y Familiar: en la web
+    "unit_mix": [{"name": "Mono", "area": 33, "percent": 10, "dorms": 0},
+                 {"name": "1 dorm", "area": 42, "percent": 55, "dorms": 1},
+                 {"name": "2 dorm", "area": 62, "percent": 30, "dorms": 2},
+                 {"name": "3 dorm", "area": 93, "percent": 5, "dorms": 3}],
     "min_unit_width": 3.5,      # R5.16 (v2.60): la base de tipologías llega a 3,20 m; 14 de 44 viviendas miden menos de 5 m
     "party_wall": 0.30,
     "max_unit_depth": 16.0,     # R5.16 (v2.60): la base de tipologías llega a 15,9 m
