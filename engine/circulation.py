@@ -139,13 +139,18 @@ def _choose_single(short, params):
 def _ring_single(short, largo, puente, params):
     """Ala de un anillo alrededor de un patio: ¿pasillo de borde? Con pasillo central cada vivienda tiene la mitad
     del fondo, y en un ala corta que une otras dos el frente lo limita su largo. Pasillo de borde si con pasillo
-    central no entra un dormitorio; en un ala que une, la opción con viviendas más cercanas a la superficie del mix."""
+    central las viviendas quedan con menos fondo del que aprovecha un plano (R5.16b, v2.62: plans.fondo_min() + 0,5,
+    el pasillo interno, un dormitorio y el estar con la cocina delante; antes, fondo_min a secas, y con el pasillo de
+    1,5 m un ala de 10,3 m daba viviendas de 4,25 m de fondo con el estar bajo su lado mínimo y cuatro esquinas sin
+    luz); en un ala que une, la opción con viviendas más cercanas a la superficie media del mix (con el mix Inversor,
+    pasillo central en el ala de 12,3 × 8,7 m de patio_central: dos viviendas de 8,7 × 5,1 m en vez de una de
+    8,7 × 10,5; con el mix de 75 y 95 m², pasillo de borde, como antes)."""
     if params.get("loading", "auto") != "auto":
         return params["loading"] == "single"
     cw, pw = params["corridor_width"], params["party_wall"]
     d2 = (short - cw) / 2.0 - pw
     d1 = min(short - cw - pw, params["max_unit_depth"])
-    if d2 < P.fondo_min():
+    if d2 < P.fondo_min() + 0.5:
         return True
     if puente:
         avg = _avg_unit_area(params)

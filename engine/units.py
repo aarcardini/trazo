@@ -128,7 +128,75 @@ def _segments(loc, circ, params):
     return segs
 
 
+def _perfil(region):
+    """R5.16b: superficie de la franja entre dos x, rápida y exacta: el ancho transversal w(x) de un polígono es lineal
+    entre los x de sus vértices (cada tramo es un trapecio), así los cortes del reparto se resuelven sin bisecar la
+    geometría. Devuelve (area(x0, x1), corte(x0, a): el x1 con area(x0, x1) = a, o None si la franja no llega)."""
+    xs = sorted(set(p[0] for p in region))
+    T = [(p[1], p[0]) for p in region]                       # traspuesto: line_intervals corta por x
+    ancho = lambda x: sum(b - a for a, b in G.line_intervals(T, x))
+    tramos = []                                              # (x0, x1, w(x0), w(x1)) de cada tramo
+    for a, b in zip(xs, xs[1:]):
+        if b - a < 1e-9:
+            continue
+        q1, q3 = ancho(a + (b - a) / 4), ancho(a + 3 * (b - a) / 4)    # dos puntos interiores: w lineal entre ellos
+        tramos.append((a, b, 1.5 * q1 - 0.5 * q3, 1.5 * q3 - 0.5 * q1))
+
+    def area(x0, x1):
+        s = 0.0
+        for a, b, w0, w1 in tramos:
+            lo, hi = max(a, x0), min(b, x1)
+            if hi - lo <= 0:
+                continue
+            wl = w0 + (w1 - w0) * (lo - a) / (b - a)
+            wh = w0 + (w1 - w0) * (hi - a) / (b - a)
+            s += (wl + wh) / 2 * (hi - lo)
+        return s
+
+    def corte(x0, obj):
+        rem = obj
+        for a, b, w0, w1 in tramos:
+            if b <= x0:
+                continue
+            lo = max(a, x0)
+            wl = w0 + (w1 - w0) * (lo - a) / (b - a)
+            s = (w1 - w0) / (b - a)
+            entero = (wl + w1) / 2 * (b - lo)
+            if entero < rem - 1e-9:
+                rem -= entero
+                continue
+            if rem <= 0:
+                return lo
+            if abs(s) < 1e-12:
+                return lo + (rem / wl if wl > 1e-12 else 0.0)
+            return lo + (-wl + math.sqrt(max(0.0, wl * wl + 2 * s * rem))) / s
+        return None
+    return area, corte
+
+
+def _dorms_de(m):
+    """Dormitorios de un tipo del mix: los suyos o, sin «dorms», los que le tocan por su superficie."""
+    return int(m["dorms"]) if m.get("dorms") is not None else P.bedrooms_for(m["area"])
+
+
 def generate_unit_mix(circ, params, state=None):
+    """Reparte el mix en viviendas a lo largo de cada franja lateral de la pieza (_segments). R5.16b (v2.62), reparto por
+    el frente que pide el plano:
+    - Cada vivienda recibe al menos el frente que pide su plano, plans.frente_min(dormitorios, fondo de la franja):
+      el estar y los dormitorios en la fachada (facade_min) y, en una franja poco profunda, el hall, el baño y la cocina
+      en fila. Su ancho es el mayor entre ese frente y el que da su superficie objetivo (× el ajuste k de la franja) con
+      el fondo que la vivienda aprovecha, min(fondo de la franja, plans.fondo_sin_tira()); k es el que hace que las
+      viviendas llenen la franja justo (cuando ningún frente manda, k = superficie de la franja / suma de objetivos,
+      como antes). Si el frente manda, la vivienda queda más grande que su objetivo (lo muestra el fit del mix): nunca
+      más angosta.
+    - Un tipo que en esa franja, con su frente mínimo y el fondo entero, pasaría de 1,35 veces su superficie objetivo
+      no es apto para la franja: el reparto (por los porcentajes del mix, con el estado compartido entre piezas) elige
+      entre los aptos y, si ninguno lo es (una franja de 16 m de fondo), el que menos se pasa; el plano deja la tira
+      (fondo_sin_tira) sin uso, con aviso.
+    - La cantidad de viviendas es la que mejor ajusta las superficies a sus objetivos (como antes: la que da la
+      superficie media del mix, una más o una menos) entre las que caben con sus frentes mínimos; si ni una cabe
+      (la franja entera es más corta que el frente), va una sola con lo que hay.
+    Los tabiques entre vecinas (party_wall) se descuentan del frente de cada una."""
     loc = circ["loc_plate"]
     cw, pw = ancho_de(circ, params), params["party_wall"]
     mix = [m for m in params["unit_mix"] if m.get("percent", 0) > 0 and m.get("area", 0) > 0]
@@ -153,55 +221,168 @@ def generate_unit_mix(circ, params, state=None):
             continue
         avg = sum(m["_p"] * m["area"] for m in mix)
         n_max = max(1, int(length // max(params["min_unit_width"], 1.0)))
+        area_r, corte_r = _perfil(region)
+        D_seg = A_seg / length                                  # fondo medio de la franja
+        D_util = min(D_seg, P.fondo_sin_tira())                 # el fondo que el plano aprovecha entero
+        fmin = {m["name"]: P.frente_min(_dorms_de(m), D_seg) for m in mix}     # el frente que pide cada tipo
+        caben = [m for m in mix if fmin[m["name"]] <= length + 1e-6] or [min(mix, key=lambda m: fmin[m["name"]])]
+        aptos = [m for m in caben if fmin[m["name"]] * D_seg <= 1.35 * m["area"] + 1e-6] or \
+            [min(caben, key=lambda m: fmin[m["name"]] * D_seg / m["area"])]
+        menor = min(fmin[m["name"]] for m in aptos)
 
-        def plan(n):
-            pl, cnt = dict(placed), n_placed
+        def plan(n, ext, puro=True):
+            """Los n tipos siguientes del mix (los aptos para esta franja, por su cuota); con ext (R3.7), el de menos
+            dormitorios va a la punta de la vivienda al frente. Sin puro: si el tipo que toca por cuota no cabe con su
+            frente en lo que queda de franja para esta vivienda y las que siguen, va el de más cuota entre los aptos
+            que caben o, si ninguno, entre los demás tipos que caben (ver elegir)."""
+            pl, cnt, usado = dict(placed), n_placed, 0.0
             seq = []
-            for _ in range(n):
-                m = max(mix, key=lambda t: t["_p"] * (cnt + 1) - pl[t["name"]])
+            sitio = lambda i, usado: length - (n - 1) * pw - usado - (n - i - 1) * menor
+            for i in range(n):
+                cuota = lambda t: t["_p"] * (cnt + 1) - pl[t["name"]]
+                m = max(aptos, key=cuota)
+                if not puro and fmin[m["name"]] > sitio(i, usado) + 1e-6:
+                    posibles = [t for t in aptos if fmin[t["name"]] <= sitio(i, usado) + 1e-6] or \
+                        [t for t in caben if fmin[t["name"]] <= sitio(i, usado) + 1e-6]
+                    if posibles:
+                        m = max(posibles, key=cuota)
                 seq.append(m)
                 pl[m["name"]] += 1
                 cnt += 1
+                usado += fmin[m["name"]]
+            return ordenar(seq, ext)
+
+        def ordenar(seq, ext):
+            """Con ext (R3.7), el tipo de menos dormitorios va a la punta de la vivienda al frente."""
+            if ext and len(seq) > 1:
+                j = min(range(len(seq)), key=lambda i: (_dorms_de(seq[i]), i if ext[0] == 0 else -i))
+                otras = seq[:j] + seq[j + 1:]
+                seq = otras + [seq[j]] if ext[0] == 1 else [seq[j]] + otras
             return seq
 
-        def elegir(A):
-            n0 = max(1, int(round(A / avg)))
-            best = None
-            cands = sorted({min(max(1, n), n_max) for n in (n0 - 1, n0, n0 + 1)})
-            for n in cands:
-                seq = plan(n)
-                k = A / sum(m["area"] for m in seq)
-                sc = abs(math.log(k))
-                if best is None or sc < best[0]:
-                    best = (sc, seq, k)
-            if best is None:
-                seq = plan(1)
-                best = (0, seq, A / seq[0]["area"])
-            return best[1], best[2]
+        def minimo(idx, n, m, ext):
+            """Ancho mínimo del tramo [x, x1) de la vivienda idx: su frente más sus medios tabiques (la de la punta al
+            frente, R3.7, no: su largo lo miden fondo_frente y fondo_sin_tira)."""
+            if ext and idx == (n - 1 if ext[0] == 1 else 0):
+                return 0.0
+            return fmin[m["name"]] + (pw / 2 if idx > 0 else 0.0) + (pw / 2 if idx < n - 1 else 0.0)
 
         def cortes(seq, k, ext, corte=None):
-            """[(xs0, xe)] de cada vivienda; con ext = (e, franja), la de la punta e suma la franja del pasillo. corte:
-            el tabique de esa vivienda en un lugar fijo (no pasa de su fondo) y las demás se reparten lo que queda."""
+            """[(xs0, xe)] de cada vivienda (superficie objetivo × k, sin bajar de su frente mínimo; la última, hasta el
+            final); con ext = (e, franja), la de la punta e suma la franja del pasillo; corte: el tabique de esa vivienda
+            en un lugar fijo y las demás se reparten lo que queda. Devuelve también el exceso (hasta dónde llegaría la
+            última vivienda libre con su superficie × k, menos donde termina: > 0, no entran; < 0, sobra franja), si
+            algún frente mínimo mandó y la superficie de la franja del pasillo que suma la vivienda al frente."""
             n = len(seq)
-            out, x, kk = [], xmin, k
-            if corte is not None:
-                resto = sum(m["area"] for m in (seq[:-1] if ext[0] == 1 else seq[1:]))
-                if resto:
-                    kk = (G.strip_area(region, xmin, corte) if ext[0] == 1 else G.strip_area(region, corte, xmax)) / resto
+            out, x, forzado, banda = [], xmin, False, 0.0
+            fijo = (n - 2 if ext[0] == 1 else 0) if corte is not None else None    # el corte fijo: su x1
+            libre = n - 2 if (corte is not None and ext[0] == 1) else n - 1          # la última vivienda libre
+            exceso = 0.0
             for idx, m in enumerate(seq):
                 last = idx == n - 1
-                if last:
-                    x1 = xmax
-                elif corte is not None and idx == (n - 2 if ext[0] == 1 else 0):
-                    x1 = corte
-                elif ext and ext[0] == 0 and idx == 0:
-                    f = lambda t, x=x: G.strip_area(region, x, t) + G.strip_area(ext[1], x, t - pw / 2)
-                    x1 = _bisect_f(f, x, xmax, m["area"] * k) or xmax
+                al_frente = ext and idx == (n - 1 if ext[0] == 1 else 0)
+                x_ini = x + (pw / 2 if idx > 0 else 0.0)
+                if al_frente:                              # la franja del pasillo, desde su tabique hasta su x1
+                    area_de = lambda t, x_=x, xi=x_ini: area_r(x_, t) + G.strip_area(ext[1], xi, t - (0.0 if last else pw / 2))
                 else:
-                    x1 = _bisect_x(region, x, None, None, m["area"] * kk, xmax) or xmax
-                out.append((x + (pw / 2 if idx > 0 else 0), x1 - (0 if last else pw / 2)))
+                    area_de = lambda t, x_=x: area_r(x_, t)
+                nat = _bisect_f(area_de, x, xmax, m["area"] * k) if al_frente else corte_r(x, m["area"] * k)
+                if nat is None:                            # no llega: hasta dónde llegaría con el fondo útil
+                    nat = xmax + (m["area"] * k - area_de(xmax)) / max(D_util, 0.5)
+                piso = x + minimo(idx, n, m, ext)
+                if piso > nat + 1e-9:
+                    nat, forzado = piso, True
+                if idx == fijo:
+                    x1 = corte
+                elif last:
+                    x1 = xmax
+                else:
+                    x1 = min(nat, xmax)
+                if idx == libre:
+                    exceso = nat - x1
+                out.append((x_ini, x1 - (0.0 if last else pw / 2)))
+                if al_frente:
+                    banda = G.strip_area(ext[1], out[-1][0], out[-1][1])
                 x = x1
-            return out
+            return out, exceso, forzado, banda
+
+        def ajuste(seq, ext, corte=None):
+            """k de la franja: con el que las viviendas (superficie objetivo × k) la llenan justo. Si ningún frente
+            mínimo manda, k = superficie / suma de objetivos (con la franja del pasillo de la vivienda al frente, R3.7,
+            por iteración); si alguno manda, los demás se achican hasta que todo entra (bisección); None si ni con sus
+            frentes mínimos caben."""
+            if corte is not None:
+                libres = seq[:-1] if ext[0] == 1 else seq[1:]
+                A = area_r(xmin, corte) if ext[0] == 1 else area_r(corte, xmax)
+                S = sum(m["area"] for m in libres) or 1.0
+                k = A / S
+                forzado = cortes(seq, k, ext, corte)[2]
+            else:
+                S = sum(m["area"] for m in seq)
+                extra, k = 0.0, A_seg / S
+                for _ in range(12 if ext else 1):
+                    k = (A_seg + extra) / S
+                    _, _, forzado, banda = cortes(seq, k, ext)
+                    if not ext or abs(banda - extra) < 0.01:
+                        break
+                    extra = banda
+            if not forzado:
+                return k
+            if cortes(seq, 0.0, ext, corte)[1] > 1e-6:
+                return None
+            lo, hi = 0.0, k
+            for _ in range(50):
+                mid = (lo + hi) / 2.0
+                if cortes(seq, mid, ext, corte)[1] > 0:
+                    hi = mid
+                else:
+                    lo = mid
+            return lo
+
+        def elegir(ext, corte=None):
+            """(seq, k, cortes): la cantidad de viviendas que mejor ajusta las superficies a sus objetivos (la de la
+            superficie media, una más o una menos, como antes) entre las que caben con sus frentes mínimos siguiendo
+            la cuota del mix (si no caben, se baja). Si así alguna vivienda pasa de 1,35 veces su objetivo (la misma
+            tolerancia de los tipos aptos: en una franja corta, una sola de 100 m² para un tipo de 62), se prueba
+            cambiar una de ellas por un tipo más grande que quepa (lo que sobra de franja lo aprovecha ese tipo) y una
+            vivienda más con algún tipo cambiado por otro que cabe (plan sin puro), y se toma lo que ajusta mejor. Si
+            ni una cabe con su frente, va una sola con lo que hay."""
+            n0 = max(1, int(round(A_seg / avg)))
+
+            def probar(seq):
+                k = ajuste(seq, ext, corte)
+                if k is None:
+                    return None
+                cuts = cortes(seq, k, ext, corte)[0]
+                razones = [max(1e-9, area_r(a, b) + (G.strip_area(ext[1], a, b) if ext and i == (
+                    len(seq) - 1 if ext[0] == 1 else 0) else 0.0)) / D_seg * D_util / m["area"]
+                           for i, ((a, b), m) in enumerate(zip(cuts, seq))]
+                return (sum(abs(math.log(r_)) for r_ in razones) / len(seq), seq, k, cuts, max(razones))
+
+            best, vistos, n, mas = None, 0, min(n_max, n0 + 1), None
+            while n >= 1 and vistos < 3:
+                c = probar(plan(n, ext))
+                if c:
+                    if vistos == 0 and n < n_max:
+                        mas = probar(plan(n + 1, ext, False))       # una más, con algún tipo cambiado
+                    best = c if best is None or c[0] < best[0] else best
+                    vistos += 1
+                n -= 1
+            if best is None:                                   # ni una cabe con su frente: una sola con lo que hay
+                seq = plan(1, ext)
+                k = A_seg / seq[0]["area"]
+                return seq, k, cortes(seq, k, ext, corte)[0]
+            if best[4] > 1.35 + 1e-6:                          # alguna se pasa: un tipo más grande en su lugar
+                seq = best[1]
+                for j, m in enumerate(seq):
+                    for t in caben:
+                        if t["area"] > m["area"] + 1e-6:
+                            c = probar(ordenar(seq[:j] + [t] + seq[j + 1:], ext))
+                            if c and (mas is None or c[0] < mas[0]):
+                                mas = c
+                if mas and mas[0] < best[0]:
+                    best = mas
+            return best[1], best[2], best[3]
 
         # R3.7: en una punta libre de un pasillo de borde, la última vivienda suma la franja del pasillo (llega a todo el
         # ancho y el pasillo termina en su puerta): el reparto la cuenta para que las viviendas queden parejas. Esa
@@ -212,42 +393,30 @@ def generate_unit_mix(circ, params, state=None):
             for e, (xe_, banda) in frentes.items():
                 if (seg["x1"] >= xe_ - 0.05) if e == 1 else (seg["x0"] <= xe_ + 0.05):
                     ext = (e, banda)
-        extra = 0.0
-        for _ in range(12 if ext else 1):
-            seq, k = elegir(A_seg + extra)
-            if ext and len(seq) > 1:
-                dorms = lambda m: int(m["dorms"]) if m.get("dorms") is not None else P.bedrooms_for(m["area"])
-                j = min(range(len(seq)), key=lambda i: (dorms(seq[i]), i if ext[0] == 0 else -i))
-                otras = seq[:j] + seq[j + 1:]
-                seq = otras + [seq[j]] if ext[0] == 1 else [seq[j]] + otras
-            cuts = cortes(seq, k, ext)
+        corte = None
+        for _ in range(3):
+            seq, k, cuts = elegir(ext, corte)
             if not ext:
                 break
             a_, b_ = cuts[-1] if ext[0] == 1 else cuts[0]
             if b_ - a_ < fondo_frente() or (b_ - a_ > P.fondo_sin_tira() and len(seq) == 1):
-                ext, extra = None, 0.0                       # no da para una vivienda al frente: reparto de siempre
-                seq, k = elegir(A_seg)
-                cuts = cortes(seq, k, None)
-                break
-            if b_ - a_ > P.fondo_sin_tira():               # la del frente, con el fondo que el plano aprovecha
+                ext, corte = None, None                      # no da para una vivienda al frente: reparto de siempre
+                continue
+            if b_ - a_ > P.fondo_sin_tira() and corte is None:   # la del frente, con el fondo que el plano aprovecha
                 corte = xmax - P.fondo_sin_tira() - pw / 2 if ext[0] == 1 else xmin + P.fondo_sin_tira() + pw / 2
-                cuts = cortes(seq, k, ext, corte)
-                break
-            nuevo = G.strip_area(ext[1], a_, b_)
-            if abs(nuevo - extra) < 0.01:
-                break
-            extra = nuevo
+                continue
+            break
         L_min = P.HALL_W + 0.3                           # R3.7: lo que la última necesita del pasillo que queda
         for pt in circ.get("puntas", []):
             if pt["lado"] != side or len(cuts) < 2:
                 continue
             if pt["e"] == 1 and cuts[-1][1] > pt["s0"] and pt["s0"] - cuts[-1][0] < L_min:
                 c = pt["s0"] - L_min
-                if c - pw - cuts[-2][0] >= 0.5 * params["min_unit_width"]:
+                if c - pw - cuts[-2][0] >= max(0.5 * params["min_unit_width"], fmin[seq[-2]["name"]]):
                     cuts[-2], cuts[-1] = (cuts[-2][0], c - pw), (c, cuts[-1][1])
             elif pt["e"] == 0 and cuts[0][0] < pt["s1"] and cuts[0][1] - pt["s1"] < L_min:
                 c = pt["s1"] + L_min
-                if cuts[1][1] - (c + pw) >= 0.5 * params["min_unit_width"]:
+                if cuts[1][1] - (c + pw) >= max(0.5 * params["min_unit_width"], fmin[seq[1]["name"]]):
                     cuts[0], cuts[1] = (cuts[0][0], c), (c + pw, cuts[1][1])
         for m in seq:
             placed[m["name"]] += 1

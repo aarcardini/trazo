@@ -1,4 +1,4 @@
-# Base de tipologías — resumen (Trazo v2.61)
+# Base de tipologías — resumen (Trazo v2.62)
 
 Se leyeron 67 archivos de `data/tipologias/`: 49 viviendas (44 distintas: las de varios niveles cuentan una vez, con la suma de sus niveles) y 18 plantas enteras. Las superficies son m² con muros (el contorno de la vivienda por el eje de los muros divisorios y la cara exterior de la fachada) y las medidas, metros; cada celda con rango da la mediana y, entre paréntesis, el mínimo y el máximo. El ancho y el fondo de una estancia son los de su caja alineada con los ejes del dibujo (ancho a lo largo de la fachada), de las estancias rectangulares.
 
