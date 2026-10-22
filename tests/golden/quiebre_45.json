@@ -1,29 +1,29 @@
 {
  "ejemplo": "samples/quiebre_45.json",
  "nombre": "Barra con quiebre a 45° (no ortogonal)",
- "version_motor": "2.64",
+ "version_motor": "2.65",
  "metricas": {
-  "unidades": 16,
-  "unidades_totales": 80,
+  "unidades": 18,
+  "unidades_totales": 90,
   "por_tipo": {
-   "1 dorm": 8,
-   "2 dorm": 4,
-   "3 dorm": 2,
+   "1 dorm": 10,
+   "2 dorm": 5,
+   "3 dorm": 1,
    "Mono": 2
   },
   "nucleos": 3,
   "ascensores": 1,
   "tramos": 2,
   "area_planta": 1213.1,
-  "eficiencia_planta": 77.2,
-  "eficiencia_total": 73.2,
-  "sin_usar": 48.5,
+  "eficiencia_planta": 76.9,
+  "eficiencia_total": 72.9,
+  "sin_usar": 52.5,
   "circulacion": 20.0,
-  "match_score": 90.0,
-  "fit_m2": 6.3,
-  "calidad_planos": 97,
+  "match_score": 97.8,
+  "fit_m2": 4.9,
+  "calidad_planos": 93,
   "evacuacion_max": 20.3,
-  "nsa_total": 4684.0,
+  "nsa_total": 4664.0,
   "sin_luz": 7.4
  }
 }

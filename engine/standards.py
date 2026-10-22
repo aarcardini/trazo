@@ -35,9 +35,15 @@ import math
 DEFAULTS = {
     "vivienda": {
         # estancia: área mínima (m²), lado mínimo (m), área típica (m²), medidas típicas [frente, fondo]
-        "dorm_principal": {"min_area": 8.5, "min_side": 2.60, "typ_area": 11.5, "typ": [3.20, 3.60]},
-        "dorm_secundario": {"min_area": 7.0, "min_side": 2.00, "typ_area": 9.0, "typ": [2.80, 3.20]},
-        "estar_comedor": {"min_area": 10.0, "min_side": 2.60, "typ_area": 20.0, "typ": [3.60, 5.50]},
+        # R5.16b (v2.65): el frente típico (typ[0]) del estar y de los dormitorios es el que piden los planos reales de la
+        # base de tipologías con el estar y los dormitorios uno al lado del otro en la fachada (data/tipologias/
+        # COMPARACION.md, 5.1: estar 2,95 m, dormitorio principal 2,77, secundario 2,50; con las de esquina, 3,3 / 3,3 /
+        # 3,9): el principal con la cama doble y el placard al pie (3,00 m), el secundario 2,50 y el estar 3,20, del que
+        # plans.LIV_MIN toma el 95 % (3,04 m). Antes 3,20 / 2,80 / 3,60 (frentes de 6,6 / 9,4 / 12,2 m para 1, 2 y 3
+        # dormitorios; ahora 6,0 / 8,5 / 11,0). El fondo típico conserva la superficie típica
+        "dorm_principal": {"min_area": 8.5, "min_side": 2.60, "typ_area": 11.5, "typ": [3.00, 3.80]},
+        "dorm_secundario": {"min_area": 7.0, "min_side": 2.00, "typ_area": 9.0, "typ": [2.50, 3.60]},
+        "estar_comedor": {"min_area": 10.0, "min_side": 2.60, "typ_area": 20.0, "typ": [3.20, 6.20]},
         "cocina": {"min_area": 4.0, "min_side": 1.60, "typ_area": 7.0, "typ": [2.40, 2.90]},
         # R10.8 (norma nacional, art. 27): cocina integrada al estar sin ventana propia, de min_area a max_area con lado
         # min_side; el vano del estar ilumina los dos locales (su 10 %) y no baja de vano_min (m²). Trazo la dibuja con

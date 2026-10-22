@@ -1,4 +1,4 @@
-# Base de tipologías — resumen (Trazo v2.62)
+# Base de tipologías — resumen (Trazo v2.65)
 
 Se leyeron 67 archivos de `data/tipologias/`: 49 viviendas (44 distintas: las de varios niveles cuentan una vez, con la suma de sus niveles) y 18 plantas enteras. Las superficies son m² con muros (el contorno de la vivienda por el eje de los muros divisorios y la cara exterior de la fachada) y las medidas, metros; cada celda con rango da la mediana y, entre paréntesis, el mínimo y el máximo. El ancho y el fondo de una estancia son los de su caja alineada con los ejes del dibujo (ancho a lo largo de la fachada), de las estancias rectangulares.
 
@@ -86,9 +86,9 @@ Medida: mediana de todas las tipologías juntas. Típico y mínimo, de `engine/s
 
 | Estancia | n | Medida (m²) | Típico (m²) | Medida / típico | Mínimo (m²) | Tope (m²) | Medida ancho × fondo (m) | Típico frente × fondo (m) | Clave |
 |---|---|---|---|---|---|---|---|---|---|
-| Dormitorio 1 | 40 | 11,8 | 11,5 | +3 % | 8,5 | — | 3,2 × 3,4 | 3,2 × 3,6 | vivienda.dorm_principal |
-| Dormitorio 2 | 22 | 8,9 | 9,0 | -2 % | 7,0 | — | 3,1 × 2,7 | 2,8 × 3,2 | vivienda.dorm_secundario |
-| Dormitorio 3 | 10 | 9,3 | 9,0 | +4 % | 7,0 | — | 4,0 × 2,6 | 2,8 × 3,2 | vivienda.dorm_secundario |
+| Dormitorio 1 | 40 | 11,8 | 11,5 | +3 % | 8,5 | — | 3,2 × 3,4 | 3 × 3,8 | vivienda.dorm_principal |
+| Dormitorio 2 | 22 | 8,9 | 9,0 | -2 % | 7,0 | — | 3,1 × 2,7 | 2,5 × 3,6 | vivienda.dorm_secundario |
+| Dormitorio 3 | 10 | 9,3 | 9,0 | +4 % | 7,0 | — | 4,0 × 2,6 | 2,5 × 3,6 | vivienda.dorm_secundario |
 | Cocina | 7 | 8,3 | 7,0 | +19 % | 4,0 | — | 2,0 × 3,9 | 2,4 × 2,9 | vivienda.cocina |
 | Cocina integrada | 37 | 5,0 | — | — | 3,0 | 5,0 | 3,1 × 2,4 | — | vivienda.cocina_integrada |
 | Baño | 42 | 4,2 | 4,0 | +4 % | 3,0 | 6,0 | 2,1 × 2,0 | 1,7 × 2,4 | vivienda.bano |

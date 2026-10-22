@@ -10048,8 +10048,8 @@
      "minimo_area": 8.5,
      "n": 40,
      "tipico": [
-      3.2,
-      3.6
+      3.0,
+      3.8
      ],
      "tipico_area": 11.5,
      "tope_area": null
@@ -10063,8 +10063,8 @@
      "minimo_area": 7.0,
      "n": 22,
      "tipico": [
-      2.8,
-      3.2
+      2.5,
+      3.6
      ],
      "tipico_area": 9.0,
      "tope_area": null
@@ -10078,8 +10078,8 @@
      "minimo_area": 7.0,
      "n": 10,
      "tipico": [
-      2.8,
-      3.2
+      2.5,
+      3.6
      ],
      "tipico_area": 9.0,
      "tope_area": null
@@ -11456,7 +11456,7 @@
    "n": 44
   }
  },
- "version": "2.62",
+ "version": "2.65",
  "viviendas": [
   {
    "anio": 2025,

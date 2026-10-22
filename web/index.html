@@ -630,7 +630,7 @@ const STD_FILAS={sau:['A (gama baja)','B (media)','C (alta)']};
 // Medidas que cambiaron (mínimos de la norma nacional de higiene de la vivienda en v2.27; estar-comedor por dormitorios en v2.61)
 // y su valor anterior: si el navegador o un proyecto anterior guardó el valor viejo, vale el nuevo; un valor elegido a mano
 // (distinto del viejo) se respeta.
-const STD_ANTES={vivienda:{dorm_principal:{min_area:10,min_side:2.5},dorm_secundario:{min_area:6.5},estar_comedor:{min_side:2.5},estar_por_dorms:[18,18,20,24,27],estudio:{min_area:6.5},bano:{min_area:2.4}}};
+const STD_ANTES={vivienda:{dorm_principal:{min_area:10,min_side:2.5,typ:[3.2,3.6]},dorm_secundario:{min_area:6.5,typ:[2.8,3.2]},estar_comedor:{min_side:2.5,typ:[3.6,5.5]},estar_por_dorms:[18,18,20,24,27],estudio:{min_area:6.5},bano:{min_area:2.4}}};   // R5.16b (v2.65): frentes típicos de antes (corte 2.65)
 function mezclarStd(dst,src,antes){ for(const k in src){ if(!(k in dst)) continue; const a=antes?antes[k]:undefined;
   if(src[k]&&typeof src[k]==='object'&&!Array.isArray(src[k])&&dst[k]&&typeof dst[k]==='object'&&!Array.isArray(dst[k])) mezclarStd(dst[k],src[k],a);
   else if(a===undefined||JSON.stringify(src[k])!==JSON.stringify(a)) dst[k]=src[k]; } }
@@ -1534,7 +1534,7 @@ function abrirProyecto(p,archivo,opt){ opt=opt||{}; const no=t=>{ alert('Trazo: 
   $('core_width').disabled=$('core_depth').disabled=$('core_auto').checked;
   fzAbrir(P.factibilidad);   // R10.13: gama, terreno, precios y margen; sin ellos, los valores por defecto
   if(Array.isArray(P.unit_mix)&&P.unit_mix.length){ mix=P.unit_mix.map(m=>Object.assign({},m)); renderMix(); legend(); }
-  if(STD_DEF){ STD=JSON.parse(JSON.stringify(STD_DEF)); mezclarStd(STD,P.standards||{},verMenor(p.version_motor,'2.61')?STD_ANTES:null); saveStd(); renderStd(); }   // las medidas del proyecto (guarda solo las cambiadas)
+  if(STD_DEF){ STD=JSON.parse(JSON.stringify(STD_DEF)); mezclarStd(STD,P.standards||{},verMenor(p.version_motor,'2.65')?STD_ANTES:null); saveStd(); renderStd(); }   // las medidas del proyecto (guarda solo las cambiadas)
   const otra=p.version_motor&&VER&&p.version_motor!==VER;
   return setMass({name:p.name,footprint:p.footprint,height:p.height,centerlines:P.centerlines,cores:P.cores,cores_mode:P.cores_mode,stories:P.stories,medianeras:P.medianeras,patios:P.patios,patios_galeria:P.patios_galeria,patios_mode:P.patios_mode,unit_edits:P.unit_edits,room_edits:P.room_edits,anchos_pasillo:P.anchos_pasillo,terreno:p.terreno,scp:p.scp},false,{label:(opt.variante?'Variante: '+archivo:'Proyecto: '+(p.name||archivo)),etapa:ETAPAS.includes(p.stage)?p.stage:'massing'})
    .then(()=>{ if(otra) $('tag').textContent+=' · guardado con Trazo v'+p.version_motor+' (ahora v'+VER+'): el resultado puede variar'; }); }

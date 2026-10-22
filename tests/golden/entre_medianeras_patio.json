@@ -1,12 +1,12 @@
 {
  "ejemplo": "samples/entre_medianeras_patio.json",
  "nombre": "Predio entre medianeras 10 × 40 (patio automático)",
- "version_motor": "2.64",
+ "version_motor": "2.65",
  "metricas": {
   "unidades": 4,
   "unidades_totales": 20,
   "por_tipo": {
-   "1 dorm": 4
+   "2 dorm": 4
   },
   "nucleos": 2,
   "ascensores": 1,
@@ -16,8 +16,8 @@
   "eficiencia_total": 64.8,
   "sin_usar": 5.6,
   "circulacion": 40.0,
-  "match_score": 55.0,
-  "fit_m2": 17.9,
+  "match_score": 30.0,
+  "fit_m2": 2.1,
   "calidad_planos": 100,
   "evacuacion_max": 6.8,
   "nsa_total": 1198.0,
