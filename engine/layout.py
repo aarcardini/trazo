@@ -10,6 +10,7 @@ from . import standards as ST
 from . import programs as PR
 from . import evacuacion as EV
 from . import plans as P
+from . import factibilidad as FZ
 # el motor está repartido en módulos; layout reexporta sus funciones (las usan las pruebas y el servidor)
 from .massing import (_inward, apply_setbacks, make_blind, build_massing, _dominant_angle, _is_rectilinear, _slabs,
                       decompose_wings, _lado_ciego, _dist_point_segment, _dist_to_boundary)  # noqa: F401
@@ -24,7 +25,7 @@ from .units import (_bisect_x, _chain_union, _is_rect, _segments, generate_unit_
                     superficie_con_muros)  # noqa: F401
 from .patios import (auto_patios, _anillo, split_blocks, make_patio_dark, _block_of, _block_of_line)  # noqa: F401
 
-VERSION = "2.63"
+VERSION = "2.64"
 
 DEFAULT_PARAMS = {
     # Masa
@@ -66,6 +67,9 @@ DEFAULT_PARAMS = {
     "patios_galeria": None,     # R3.8: [bool] alineado con patios: el pasillo de borde del ala que da a ese patio va en el patio (galería)
     "unit_edits": None,         # R4.4: [{"op": "tabique"|"fusionar"|"dividir"|"extender", "p": [x,y], "a": [x,y]}] en orden (units.editar_unidades)
     "room_edits": None,         # R5.7: [{"op": "pared", "p", "a"} | {"op": "puerta", "p", "entre"?, "a"?, "ancho"?, "abre"?}] en orden (plans)
+    # R10.13: {"gama": baja|media|alta, "terreno": {"modo": total|m2, "valor"}, "superficie_terreno"?, "precio_venta": {"bajo",
+    # "esperado", "alto"}, "margen_objetivo" (%), "balcones_m2"}; lo que falta sale de standards.costos (engine/factibilidad.py)
+    "factibilidad": None,
 }
 
 
@@ -211,6 +215,18 @@ def _caja_sin_pasillos(pieces, pc, c, cw):
         elif sd < 0 and lim < o[3] <= -cw / 2 + 1e-6:
             lim = o[3]
     return (b[0], b[1], b[2], lim) if sd > 0 else (b[0], lim, b[2], b[3])
+
+
+def _area_union(capas):
+    """Superficie de la unión de polígonos que pueden solaparse (pasillos y núcleos): cada uno aporta solo lo que no cubren
+    los anteriores (`G.subtract`). La caja de un núcleo incluye su tramo de pasillo, que ya está en res["corridors"]: sumar
+    las áreas por separado lo contaba dos veces y «sin usar» quedaba por debajo de la planta libre real (v2.64)."""
+    total, previos = 0.0, []
+    for poly in capas:
+        partes = G.subtract(poly, previos)[0] if previos else [(poly, [])]
+        total += sum(abs(G.area(o)) - sum(abs(G.area(h)) for h in hs) for o, hs in partes)
+        previos.append(poly)
+    return total
 
 
 def _art35(res, S):
@@ -649,7 +665,7 @@ def generate(data):
     _A = lambda ps: sum(abs(G.area(p)) for p in ps)
     # R3.8: la galería (y el muro que cruza) está fuera de la planta: no cuenta como planta usada, y la circulación se
     # mide sobre la planta más la galería (pasillos, con la galería, y núcleos / planta + galería)
-    used = _A(res["corridors"]) - fuera + _A([c["poly"] for c in res["cores"]]) + _A([u["poly"] for u in res["units"]])
+    used = _area_union(res["corridors"] + [c["poly"] for c in res["cores"]]) - fuera + _A([u["poly"] for u in res["units"]])
     res["metrics"]["unused_area"] = round(max(0.0, gfa_plate - used - res["metrics"].get("dark_area", 0.0)), 1)
     res["metrics"]["circulation_pct"] = round((_A(res["corridors"]) + _A([c["poly"] for c in res["cores"]])) /
                                               (gfa_plate + galeria) * 100, 1) if gfa_plate else 0
@@ -660,6 +676,7 @@ def generate(data):
     res["metrics"]["efficiency_total"] = round(res["metrics"]["nsa_total"] / res["metrics"]["gfa"] * 100, 1) \
         if res["metrics"]["gfa"] else 0
     res["metrics"]["units_total"] = mm["count"] * n_res
+    res["metrics"]["factibilidad"] = FZ.estimar(res, params, S, footprint)     # R10.13: costo, ingreso, margen y ROI por gama
     served_ratio = served / gfa_plate if gfa_plate else 0
     if served_ratio < 0.55:
         res["warnings"].append("Solo el %.0f%% de la planta está servido por el pasillo. "

@@ -56,14 +56,29 @@ def filas(res):
     return [fila(n, u) for n in niveles(res) for u in res.get("units") or []]
 
 
+def factibilidad(res):
+    """Filas de la factibilidad (R10.13, v2.64) con el precio esperado: gama, costo total, ingreso, margen, ROI (margen /
+    costo total, en %) y precio de equilibrio. Vacío si el resultado no la trae (no llegó al mix)."""
+    f = (res.get("metrics") or {}).get("factibilidad")
+    if not isinstance(f, dict) or not isinstance(f.get("escenarios"), dict) or not isinstance(f["escenarios"].get("esperado"), dict):
+        return []
+    e = f["escenarios"]["esperado"]
+    return [("Factibilidad: gama de construcción", _texto(f.get("gama"))),
+            ("Factibilidad: costo total (USD)", _num(e.get("costo_total"), 0)),
+            ("Factibilidad: ingreso con el precio esperado (USD)", _num(e.get("ingreso"), 0)),
+            ("Factibilidad: margen con el precio esperado (USD)", _num(e.get("margen"), 0)),
+            ("Factibilidad: ROI con el precio esperado (%)", _num(e.get("roi"), 1)),
+            ("Factibilidad: precio de equilibrio (USD por m² vendible)", _num(f.get("precio_equilibrio"), 0))]
+
+
 def totales(res, cantidad):
     """Bloque de totales: pares (clave, valor). Las viviendas se cuentan de la tabla; la superficie vendible y la
-    eficiencia son las del resumen de la web (metrics.nsa_total y metrics.efficiency_total)."""
+    eficiencia son las del resumen de la web (metrics.nsa_total y metrics.efficiency_total); al final, la factibilidad."""
     m = res.get("metrics") or {}
     return [("Viviendas totales", str(cantidad)),
             ("Niveles residenciales", str(len(niveles(res)))),
             ("Superficie vendible total, NSA (m²)", _num(m.get("nsa_total"), 1)),
-            ("Eficiencia (%)", _num(m.get("efficiency_total"), 1))]
+            ("Eficiencia (%)", _num(m.get("efficiency_total"), 1))] + factibilidad(res)
 
 
 def result_to_csv(res):

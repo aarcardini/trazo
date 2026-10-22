@@ -1,7 +1,7 @@
 {
  "ejemplo": "samples/T_dos_lineas.json",
  "nombre": "T con 2 polilíneas",
- "version_motor": "2.62",
+ "version_motor": "2.64",
  "metricas": {
   "unidades": 16,
   "unidades_totales": 80,
@@ -17,7 +17,7 @@
   "area_planta": 1723.5,
   "eficiencia_planta": 76.4,
   "eficiencia_total": 73.2,
-  "sin_usar": 78.2,
+  "sin_usar": 107.2,
   "circulacion": 19.0,
   "match_score": 51.2,
   "fit_m2": 26.6,
