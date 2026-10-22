@@ -10,27 +10,35 @@ def _medidas_anteriores(planta, vivienda):
     """Context manager: pone en `layout.DEFAULT_PARAMS` y `standards.DEFAULTS` las medidas de antes de la calibración con la
     base de tipologías (R5.16) y las restaura al salir. `planta` (v2.60): pasillo de 2,0 m, frente mínimo de 5,0 m, fondo
     máximo de 14 m y escalera de 1,20 m con ascensor. `vivienda` (v2.61): estar-comedor por dormitorios [18, 18, 20, 24, 27] y
-    el mix de 2 y 3 dormitorios de 75 y 95 m² al 50 % (el «Inversor» de v2.61 lo reemplazó)."""
+    el mix de 2 y 3 dormitorios de 75 y 95 m² al 50 % (el «Inversor» de v2.61 lo reemplazó); v2.65 (R5.16b): los frentes
+    típicos de antes del estar (3,60 m) y de los dormitorios (3,20 y 2,80), con los que la vivienda pedía 6,6 / 9,4 / 12,2 m
+    de frente para 1, 2 y 3 dormitorios (ahora 6,0 / 8,5 / 11,0)."""
     import contextlib
 
     @contextlib.contextmanager
     def cm():
         from engine import layout as LY, standards as ST
         params, escalera = dict(LY.DEFAULT_PARAMS), ST.DEFAULTS["nucleo"]["escalera_ancho_con_ascensor"]
-        estar = ST.DEFAULTS["vivienda"]["estar_por_dorms"]
+        V = ST.DEFAULTS["vivienda"]
+        estar = V["estar_por_dorms"]
+        typ = {k: list(V[k]["typ"]) for k in ("dorm_principal", "dorm_secundario", "estar_comedor")}
         if planta:
             LY.DEFAULT_PARAMS.update(corridor_width=2.0, min_unit_width=5.0, max_unit_depth=14.0)
             ST.DEFAULTS["nucleo"]["escalera_ancho_con_ascensor"] = 1.20
         if vivienda:
             LY.DEFAULT_PARAMS.update(unit_mix=[{"name": "2 dorm", "area": 75, "percent": 50, "dorms": 2},
                                                {"name": "3 dorm", "area": 95, "percent": 50, "dorms": 3}])
-            ST.DEFAULTS["vivienda"]["estar_por_dorms"] = [18.0, 18.0, 20.0, 24.0, 27.0]
+            V["estar_por_dorms"] = [18.0, 18.0, 20.0, 24.0, 27.0]
+            V["dorm_principal"]["typ"], V["dorm_secundario"]["typ"] = [3.20, 3.60], [2.80, 3.20]
+            V["estar_comedor"]["typ"] = [3.60, 5.50]
         try:
             yield
         finally:
             LY.DEFAULT_PARAMS.update(params)
             ST.DEFAULTS["nucleo"]["escalera_ancho_con_ascensor"] = escalera
-            ST.DEFAULTS["vivienda"]["estar_por_dorms"] = estar
+            V["estar_por_dorms"] = estar
+            for k, t in typ.items():
+                V[k]["typ"] = t
     return cm()
 
 def _con(planta, vivienda):
@@ -1011,8 +1019,10 @@ def test_editar_viviendas():
     r = run(barra, unit_edits=[{"op": "dividir", "p": c}])
     p1, p2 = [u for u in r["units"] if u.get("editada")]
     assert len(r["units"]) == len(base["units"]) + 1 and p1["id"] == t["a"] and abs(p1["width"] + 0.3 + p2["width"] - a["width"]) < 0.02
-    # (v2.62: la mitad de una 1 dorm de 46 m² son 23 m², que se parecen al Mono de 33 m² del mix Inversor: toma ese tipo)
-    assert p1["area"] < 0.65 * 42 and p1["type"] == "Mono" and p1["bedrooms"] == 0, (p1["type"], p1["area"])
+    # (v2.62: la mitad de una 1 dorm de 46 m² eran 23 m², que se parecían al Mono de 33 m² del mix Inversor y tomaban ese
+    # tipo; v2.65: con los frentes de la base la 1 dorm sale de 42 m² y su mitad, de 19 m², ya no se parece al Mono
+    # (±35 %): queda «Monoambiente», el tipo por dormitorios)
+    assert p1["area"] < 0.65 * 42 and p1["type"] == "Monoambiente" and p1["bedrooms"] == 0, (p1["type"], p1["area"])
     assert r["metrics"]["mix"]["match_score"] < base["metrics"]["mix"]["match_score"]   # el mix se aleja del objetivo
     # en orden: dividir y después mover el tabique nuevo
     tn = next(x for x in r["tabiques"] if (x["a"], x["b"]) == (p1["id"], p2["id"]))
@@ -1642,31 +1652,35 @@ def test_normativa_nacional():
         assert (V[k]["min_area"], V[k]["min_side"]) == (area, lado), k
     assert V["pasillo"]["min_side"] == 0.90 and V["hall"]["min_side"] == 1.20
     assert ST.DEFAULTS["ventanas"]["iluminacion"] == 0.10 and ST.DEFAULTS["predio"]["retiro_ventanas"] == 3.0
-    # los mínimos de v2.26, para comparar
-    viejo = copy.deepcopy(V)
-    viejo["dorm_principal"].update(min_area=10.0, min_side=2.50)
-    viejo["dorm_secundario"]["min_area"] = 6.5
-    rect = [(0.0, 0.0), (9.5, 0.0), (9.5, 8.0), (0.0, 8.0)]          # dormitorios de 3,20 y 2,80 m con 4,50 m de fondo
-    corrido = lambda x: {"op": "pared", "p": (6.7, 5.75), "a": (x, 5.75)}          # el tabique entre los dos dormitorios
-    menos_fondo = {"op": "pared", "p": (5.0, 3.5), "a": (5.0, 4.6)}                # el de los dormitorios y el pasillo
-    def fallas(ed, viv=None):
-        res = P.layout_unit(rect, 2, vivienda=viv, ediciones=list(enumerate(ed)))
-        assert res["ediciones"] == list(range(len(ed))), res["ediciones"]
-        return [c["msg"] for c in res["checks"] if not c.get("ok") and not c.get("info") and "ormitorio" in c["msg"]
-                and "no entra" not in c["msg"]]
-    assert fallas([]) == []
-    assert fallas([corrido(6.05)]) == ["Dormitorio principal: lado 2.55 m < mínimo 2.60 m"]
-    assert fallas([corrido(6.05)], viejo) == []
-    assert fallas([corrido(6.2), menos_fondo]) == []                                 # 2,70 × 3,40 = 9,2 m²
-    assert fallas([corrido(6.2), menos_fondo], viejo) == ["Dormitorio principal: 9.2 m² < mínimo 10.0 m²"]
-    assert fallas([corrido(7.5), menos_fondo]) == ["Dormitorio 2: 6.8 m² < mínimo 7.0 m²"]   # 2,00 × 3,40
-    assert fallas([corrido(7.5), menos_fondo], viejo) == []
+    # v2.65 (R5.16b): la geometría de esta prueba supone los dormitorios de 3,20 y 2,80 m (los frentes de antes; ahora
+    # 3,00 y 2,50): corre con las medidas de antes, como las pruebas pinned; la web, abajo, mide los valores nuevos
+    with _medidas_anteriores(False, True):
+        # los mínimos de v2.26, para comparar
+        viejo = copy.deepcopy(ST.DEFAULTS["vivienda"])
+        viejo["dorm_principal"].update(min_area=10.0, min_side=2.50)
+        viejo["dorm_secundario"]["min_area"] = 6.5
+        rect = [(0.0, 0.0), (9.5, 0.0), (9.5, 8.0), (0.0, 8.0)]          # dormitorios de 3,20 y 2,80 m con 4,50 m de fondo
+        corrido = lambda x: {"op": "pared", "p": (6.7, 5.75), "a": (x, 5.75)}          # el tabique entre los dos dormitorios
+        menos_fondo = {"op": "pared", "p": (5.0, 3.5), "a": (5.0, 4.6)}                # el de los dormitorios y el pasillo
+        def fallas(ed, viv=None):
+            res = P.layout_unit(rect, 2, vivienda=viv, ediciones=list(enumerate(ed)))
+            assert res["ediciones"] == list(range(len(ed))), res["ediciones"]
+            return [c["msg"] for c in res["checks"] if not c.get("ok") and not c.get("info") and "ormitorio" in c["msg"]
+                    and "no entra" not in c["msg"]]
+        assert fallas([]) == []
+        assert fallas([corrido(6.05)]) == ["Dormitorio principal: lado 2.55 m < mínimo 2.60 m"]
+        assert fallas([corrido(6.05)], viejo) == []
+        assert fallas([corrido(6.2), menos_fondo]) == []                                 # 2,70 × 3,40 = 9,2 m²
+        assert fallas([corrido(6.2), menos_fondo], viejo) == ["Dormitorio principal: 9.2 m² < mínimo 10.0 m²"]
+        assert fallas([corrido(7.5), menos_fondo]) == ["Dormitorio 2: 6.8 m² < mínimo 7.0 m²"]   # 2,00 × 3,40
+        assert fallas([corrido(7.5), menos_fondo], viejo) == []
     # web: la tabla de valores viejos nombra mínimos que existen y que cambiaron
     html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
     antes = re.search(r"const STD_ANTES=(\{.*?\}\}\});", html).group(1)
     antes = json.loads(re.sub(r"([{,])(\w+):", r'\1"\2":', antes))
-    assert antes == {"vivienda": {"dorm_principal": {"min_area": 10, "min_side": 2.5}, "dorm_secundario": {"min_area": 6.5},
-                                  "estar_comedor": {"min_side": 2.5}, "estar_por_dorms": [18, 18, 20, 24, 27],
+    assert antes == {"vivienda": {"dorm_principal": {"min_area": 10, "min_side": 2.5, "typ": [3.2, 3.6]},
+                                  "dorm_secundario": {"min_area": 6.5, "typ": [2.8, 3.2]},
+                                  "estar_comedor": {"min_side": 2.5, "typ": [3.6, 5.5]}, "estar_por_dorms": [18, 18, 20, 24, 27],
                                   "estudio": {"min_area": 6.5}, "bano": {"min_area": 2.4}}}, antes
     for estancia, valores in antes["vivienda"].items():
         if isinstance(valores, list):                                   # una lista de medidas (estar_por_dorms)
@@ -1674,20 +1688,25 @@ def test_normativa_nacional():
             continue
         for k, v in valores.items():
             assert V[estancia][k] != v, (estancia, k)
-    # se guarda solo lo cambiado, y los valores viejos se pasan solo en lo guardado antes de v2.27 (navegador) o de v2.61 (proyecto)
+    # se guarda solo lo cambiado, y los valores viejos se pasan solo en lo guardado antes de v2.27 (navegador) o de v2.65
+    # (proyecto; R5.16b: los frentes típicos del estar y de los dormitorios cambiaron en v2.65, antes el corte era 2.61)
     assert "localStorage.setItem('trazo.std',JSON.stringify(Object.assign({_v:2},medidasCambiadas())))" in html
     assert "mezclarStd(STD,sv,viejo?STD_ANTES:null)" in html and "const viejo=!sv._v" in html
-    assert "mezclarStd(STD,P.standards||{},verMenor(p.version_motor,'2.61')?STD_ANTES:null)" in html
+    assert "mezclarStd(STD,P.standards||{},verMenor(p.version_motor,'2.65')?STD_ANTES:null)" in html
 
 if __name__ == "__main__":
     test_normativa_nacional(); print("OK38")
 
 
+@vivienda_anterior
 def test_dormitorio_placard():
     """v2.29: al repartir el frente entre los dormitorios, el principal conserva el ancho de su cama doble con el placard
     al costado (paso + cama + paso + placard: 3,20 m con las medidas por defecto) cuando el fondo no deja ponerlo al pie
     de la cama, mientras los demás dormitorios lleguen a su mínimo (criterio del usuario). Si el frente no alcanza, los
-    demás no bajan de su mínimo y la ficha avisa que el placard no entra. Las medidas salen de «Equipamiento y muebles»."""
+    demás no bajan de su mínimo y la ficha avisa que el placard no entra. Las medidas salen de «Equipamiento y muebles».
+    (v2.65, R5.16b: corre con los frentes de antes, 3,20 y 2,80 m —`@vivienda_anterior`—: con el secundario de 2,50 el
+    frente de 8,8 m ya alcanza para el placard al costado; el principal de 3,00 con el placard al pie lo cubre
+    test_calibracion_frentes.)"""
     import copy
     from engine import plans as P, standards as ST
     rect = lambda w, d: [(0.0, 0.0), (w, 0.0), (w, d), (0.0, d)]          # dormitorios de 3,00 m de fondo
@@ -2071,8 +2090,11 @@ if __name__ == "__main__":
     test_interfaz_grupos(); print("OK47")
 
 
+@vivienda_anterior
 def test_vestidor():
-    """R5.10 (criterio del usuario): vestidor opcional por tipo del mix («Vest.»), apagado por defecto, junto al dormitorio
+    """R5.10 (criterio del usuario; v2.65: corre con los frentes de antes, 3,20 y 2,80 m —`@vivienda_anterior`—: su
+    geometría los supone; el vestidor con el principal de 3,00 lo cubre test_calibracion_frentes): vestidor opcional por
+    tipo del mix («Vest.»), apagado por defecto, junto al dormitorio
     principal, que ya no lleva placard. Con la suite va entre el dormitorio y su baño: toma lo que el dormitorio tenía
     detrás del pasillo interno, se entra a él desde el pasillo y desde él al baño (el dormitorio, abierto al vestidor);
     sin ella, a la entrada del dormitorio (pasillo → vestidor → dormitorio). El dormitorio conserva su medida mínima y la
@@ -2119,7 +2141,7 @@ def test_vestidor():
     dv, d1 = B["vest"][3] - B["vest"][1], B["bed1"][3] - B["bed1"][1]
     assert V0["vestidor"]["min_side"] - 1e-6 <= dv < V0["vestidor"]["typ"][1] and res["score"] == 100, (dv, res["checks"])
     bed1 = next(r for r in res["rooms"] if r["id"] == "bed1")
-    assert d1 >= V0["dorm_principal"]["min_side"] and bed1["area"] >= V0["dorm_principal"]["min_area"] - 1e-6
+    assert d1 >= V0["dorm_principal"]["min_side"] - 1e-6 and bed1["area"] >= V0["dorm_principal"]["min_area"] - 1e-6   # (v2.65: justo en 2,60)
     assert "cama_doble" in {q["kind"] for q in muebles(res, "bed1")}
     # no entra (dormitorios de 3,50 m de fondo): se avisa (no baja la calidad) y el plano no cambia
     base = P.layout_unit(rect(11.73, 6.5), 2, fondo(6.5))
@@ -5918,7 +5940,7 @@ def test_calibracion_vivienda():
     antes = re.search(r"const STD_ANTES=(\{.*?\}\}\});", html).group(1)
     antes = json.loads(re.sub(r"([{,])(\w+):", r'\1"\2":', antes))
     assert antes["vivienda"]["estar_por_dorms"] == [18, 18, 20, 24, 27], antes        # el valor de antes de v2.61
-    assert "verMenor(p.version_motor,'2.61')?STD_ANTES:null" in html
+    assert "verMenor(p.version_motor,'2.65')?STD_ANTES:null" in html       # (v2.65: el corte pasó de 2.61 a 2.65, R5.16b)
     # 3) la página con node (si hay): elegir un predeterminado, editar la tabla y abrir proyectos guardados antes
     node = shutil.which("node")
     if not node:
@@ -6313,7 +6335,8 @@ def test_sin_usar():
     m = r["metrics"]
     plate, libre, inter = barrer(r, [(r["plate"], [])])
     viejo = max(0.0, m["plate_area"] - (A(r["corridors"]) + A([c["poly"] for c in r["cores"]]) + A([u["poly"] for u in r["units"]])) - m.get("dark_area", 0.0))
-    assert abs(viejo - 23.4) < 0.05 and abs(inter - 2 * 5.05 * 1.5) < 0.1, (viejo, inter)            # la cuenta de antes y lo que repetía
+    # (v2.65, R5.16b: con los frentes de la base la barra lleva 14 viviendas y la cuenta de antes da 25,4 m²; en v2.64, 13 y 23,4)
+    assert abs(viejo - 25.4) < 0.05 and abs(inter - 2 * 5.05 * 1.5) < 0.1, (viejo, inter)            # la cuenta de antes y lo que repetía
     assert m["unused_area"] > viejo and abs(m["unused_area"] - viejo - inter) < 0.2, (m["unused_area"], viejo, inter)
     assert abs(plate - m["plate_area"]) < 0.3 and abs(m["unused_area"] - libre) < 0.5, (m["unused_area"], libre)    # planta − unión
     assert m["circulation_pct"] == round((A(r["corridors"]) + A([c["poly"] for c in r["cores"]])) / m["plate_area"] * 100, 1)   # sin cambio
@@ -6328,3 +6351,210 @@ def test_sin_usar():
 
 if __name__ == "__main__":
     test_factibilidad(); test_sin_usar(); print("OK80")
+
+
+def test_comparar_tipologias():
+    """tools/comparar_tipologias.py (R5.16b, segunda parte): la comparación plano por plano del motor contra la base de
+    tipologías. (a) Corre sobre todas las viviendas de precisión alta sin excepciones ni avisos y cada registro trae las
+    claves esperadas (marco, real, motor, comparación); los esquemas reales son los de la lista y los dúplex no se
+    comparan. (b) U_MVD_M5_2D_8.52x7.17_01: sus 9 estancias reales, esquema «lado a lado» (estar y dos dormitorios en la
+    única fachada, a la calle), el motor pide casi el frente real (plans.frente_min(2, 7,17) = 8,54 m contra 8,52; antes de
+    v2.65, 9,42) y la comparación por grupo cuenta 2 dormitorios y 2 baños reales. (c) Una pasante entrada por el costado (Isla de
+    Flores 1D 04) se gira para el motor y tiene dos fachadas opuestas; un nivel superior de un dúplex no se compara.
+    (d) El resumen va por tipología y por esquema. (e) `escribir` produce comparacion.json y COMPARACION.md (UTF-8,
+    «\\n») en otra carpeta sin tocar data/tipologias/, y el resultado es el mismo en dos corridas. (f) `main` lee una
+    carpeta cualquiera."""
+    import contextlib, importlib.util, io, shutil, tempfile
+    from engine import plans as P
+    raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    spec = importlib.util.spec_from_file_location("comparar_tipologias", os.path.join(raiz, "tools", "comparar_tipologias.py"))
+    CT = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(CT)
+    carpeta = os.path.join(raiz, "data", "tipologias")
+    # (a) todas las de precisión alta
+    cat = CT.comparar_base(carpeta, solo_alta=True)
+    assert cat["avisos"] == [] and cat["archivos"] >= 32, (cat["avisos"], cat["archivos"])
+    assert all(v["precision"] == "alta" for v in cat["viviendas"])
+    claves = {"archivo", "vivienda_id", "tipologia", "dormitorios", "precision", "crujia", "nivel", "marco", "real",
+              "motor", "comparable", "motivo", "frente_sobre_min"}
+    for v in cat["viviendas"]:
+        assert claves <= set(v), (v["archivo"], claves - set(v))
+        assert v["real"]["esquema"] in CT.ESQUEMAS, (v["archivo"], v["real"]["esquema"])
+        assert {"frente", "fondo", "fachadas", "esquema", "orden", "secuencia", "zonas", "estancias",
+                "habitables_con_fachada"} <= set(v["real"]), v["archivo"]
+        assert {"frente_min", "frente_min_convencion", "facade_min", "fondo_min"} <= set(v["motor"]), v["archivo"]
+        if v["comparable"]:
+            m = v["motor"]
+            assert 0 <= m["score"] <= 100 and isinstance(m["fallas"], list) and "esquema" in m and "estancias" in m
+            assert "comparacion" in v and "por_grupo" in v["comparacion"] and "fachada" in v["comparacion"], v["archivo"]
+            assert all(f in dict(CT.FALLAS) or f == "otros" for f in m["fallas"]), m["fallas"]
+            rc = m["rectangulo"]                       # el mismo plano en el rectángulo envolvente
+            assert {"rectangular", "score", "fallas", "resuelve", "esquema", "dormitorios"} <= set(rc), v["archivo"]
+            assert 0 <= rc["score"] <= 100 and (not rc["rectangular"] or (rc["score"] == m["score"] and rc["fallas"] == m["fallas"]))
+        else:
+            assert v["nivel"] is not None and v["real"]["esquema"] == "dúplex", (v["archivo"], v["motivo"])
+    assert sum(1 for v in cat["viviendas"] if v["comparable"]) >= 22
+    # (b) una vivienda conocida
+    v = next(v for v in cat["viviendas"] if v["archivo"] == "U_MVD_M5_2D_8.52x7.17_01.dxf")
+    assert len(v["real"]["estancias"]) == 9, [e["nombre"] for e in v["real"]["estancias"]]
+    assert sorted(e["nombre"] for e in v["real"]["estancias"]) == ["Baño en suite", "Cocina integrada", "Comedor",
+                                                                     "Dormitorio 1", "Dormitorio 2", "Estar", "Hall",
+                                                                     "Pasillo", "Toilette"]
+    assert v["real"]["esquema"] == "lado a lado" and v["marco"]["lado_entrada"] == "abajo" and not v["marco"]["girado"]
+    assert [f["rotulos"] for f in v["real"]["fachadas"]] == [["Calle"]] and v["real"]["fachadas"][0]["lado"] == "arriba"
+    assert set(v["real"]["habitables_con_fachada"]) == {"Estar", "Dormitorio 1", "Dormitorio 2"}, v["real"]["habitables_con_fachada"]
+    assert v["comparable"] and v["motor"]["frente_min_convencion"] == round(P.frente_min(2, 7.17), 2) == 8.54   # (v2.65; antes 9,42)
+    assert abs(v["frente_sobre_min"] - 8.52 / 8.54) < 0.01 and v["real"]["frente"] == 8.52
+    g = v["comparacion"]["por_grupo"]
+    assert g["dormitorio"]["real_n"] == 2 and g["baño"]["real_n"] == 2 and g["estar"]["real_n"] == 2 and g["cocina"]["real_n"] == 1
+    assert "noche" in v["real"]["zonas"] and v["real"]["zonas"]["noche"]["ancho"] > 4.0 and v["real"]["disposicion"] == "lado a lado"
+    # (c) una pasante entrada por el costado, y un nivel superior de un dúplex
+    v = next(v for v in cat["viviendas"] if v["archivo"] == "U_MVD_IslaDeFlores_1D_3.59x9.85_04.dxf")
+    assert v["real"]["esquema"] == "pasante" and v["marco"]["girado"] and v["marco"]["lado_entrada"] == "izquierda"
+    assert len(v["real"]["fachadas"]) == 2 and {f["lado"] for f in v["real"]["fachadas"]} == {"izquierda", "derecha"}
+    assert v["comparable"] and v["motor"]["frente_min_convencion"] == round(P.frente_min(1, 9.85), 2)
+    v = next(v for v in cat["viviendas"] if v["archivo"] == "U_MVD_Maua_3D_5.79x9.43_05-N2.dxf")
+    assert not v["comparable"] and v["real"]["esquema"] == "dúplex" and v["nivel"] == 2 and "motivo" in v
+    # (d) el resumen
+    R = cat["resumen"]
+    assert set(R) == {"alta", "todas"} and R["alta"]["n"] == cat["archivos"]
+    assert R["alta"]["comparables"] == sum(1 for v in cat["viviendas"] if v["comparable"])
+    assert all(t in R["alta"]["por_tipologia"] for t in ("Mono", "1D", "2D", "3D")), list(R["alta"]["por_tipologia"])
+    assert {"lado a lado", "pasante", "esquina", "dúplex"} <= set(R["alta"]["por_esquema"]), list(R["alta"]["por_esquema"])
+    assert R["alta"]["por_esquema"]["dúplex"]["comparables"] == 0 and R["alta"]["por_esquema"]["dúplex"]["n"] == 5
+    for t, d in R["alta"]["por_tipologia"].items():
+        assert d["frente_min_motor"] and d["frente_real"] and d["n"] >= 1, (t, d)
+    assert "por_grupo" in R["alta"] and "dormitorio" in R["alta"]["por_grupo"] and "fachada" in R["alta"]
+    # (e) escribir, en otra carpeta; el mismo resultado en dos corridas
+    with tempfile.TemporaryDirectory() as tmp:
+        rj, rm = CT.escribir(cat, tmp)
+        with open(rj, encoding="utf-8") as f:
+            d = json.load(f)
+        assert d["archivos"] == cat["archivos"] and d["version"] == cat["version"]
+        with open(rm, encoding="utf-8", newline="") as f:
+            md = f.read()
+        assert "## 1. Por tipología" in md and "## 2. Por esquema real" in md and "M5_2D_8.52x7.17_01" in md
+        assert "\r" not in md and "lado a lado" in md and "pasante" in md
+        assert json.dumps(CT.comparar_base(carpeta, solo_alta=True), sort_keys=True) == json.dumps(cat, sort_keys=True)
+    # (f) main en una carpeta cualquiera (sin indice.csv)
+    with tempfile.TemporaryDirectory() as tmp:
+        for n in ("U_MVD_M5_2D_8.52x7.17_01.dxf", "U_MVD_GR1591_1D_3.56x9.83_01.dxf"):
+            shutil.copy(os.path.join(carpeta, n), tmp)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = CT.main(["comparar_tipologias.py", tmp])
+        assert rc == 0 and "Comparé 2 viviendas" in out.getvalue(), out.getvalue()
+        assert os.path.isfile(os.path.join(tmp, "comparacion.json")) and os.path.isfile(os.path.join(tmp, "COMPARACION.md"))
+        with contextlib.redirect_stdout(io.StringIO()):
+            assert CT.main(["comparar_tipologias.py", os.path.join(tmp, "no_existe")]) == 2
+
+
+def test_calibracion_frentes():
+    """R5.16b (v2.65, fase 2, entrega 1): los frentes típicos del estar y de los dormitorios siguen lo medido en la base de
+    tipologías (data/tipologias/COMPARACION.md, 5.1): estar 3,20 (el motor toma el 95 %, 3,04 m), dormitorio principal
+    3,00 (la cama doble con su paso y el placard al pie), secundario 2,50; antes 3,60 / 3,20 / 2,80. (a) plans.facade_min
+    pasa a 6,04 / 8,54 / 11,04 m para 1, 2 y 3 dormitorios (antes 6,62 / 9,42 / 12,22) y frente_min lo sigue; con el fondo
+    justo (5,80 m: la franja de servicios deja 3,00 m a los dormitorios, menos que el placard al pie, 3,10) el principal
+    pide 3,20 (placard al costado): frente_principal y fondo_dormitorios. (b) Planos de 1, 2 y 3 dormitorios con el frente
+    mínimo en una franja de 6,8 m de fondo: calidad 100, con la cama doble y el placard en el principal y el sofá en el
+    estar; en una franja de 6,0 m el principal se ensancha a 3,20 para el placard al costado. (c) Con el estar de 3,04 m
+    la cocina aparte quedaría de 1,8 a 2,0 m y no le entraría la mesada: va dentro del hall («Hall / Cocina») hasta
+    KITCH_MESADA (2,00 m), y con 2,00 m o más va aparte. (d) Con las medidas de antes (_medidas_anteriores) nada cambia:
+    facade_min 6,62 / 9,42 / 12,22 y el principal de 3,20 en una franja de 6,8 m (test_dormitorio_placard y las pruebas
+    pinned corren así). (e) La web lleva los frentes viejos en STD_ANTES y el corte pasa a 2.65. (f) Contra la base:
+    más viviendas reales tienen al menos el frente que el motor pide (13 de 49; antes 8) y la mediana del frente que el
+    motor pide a 1D / 2D / 3D es 6,04 / 8,54 / 11,04. (g) En los ejemplos «Barra 60x16» y «Barra larga 90x18» entran más
+    viviendas que con las medidas de antes (14 y 21 contra 13 y 19), más cerca de su superficie objetivo (fit medio
+    2,0 y 6,9 m² contra 3,2 y 12,3), con calidad 100."""
+    import importlib.util, re
+    from engine import plans as P, standards as ST, layout as LY
+    S = ST.merged({})
+    V = S["vivienda"]
+    assert (V["estar_comedor"]["typ"][0], V["dorm_principal"]["typ"][0], V["dorm_secundario"]["typ"][0]) == (3.20, 3.00, 2.50)
+    P.configure(V, S["equipamiento"])
+    # (a) frentes
+    assert (round(P.LIV_MIN, 2), P.BED_MAIN, P.BED_W) == (3.04, 3.00, 2.50) and round(P.CAMA_PLACARD[0], 2) == 3.20
+    assert [round(P.facade_min(n), 2) for n in (1, 2, 3)] == [6.04, 8.54, 11.04]
+    assert [round(P.frente_min(n, 6.8), 2) for n in (1, 2, 3)] == [6.04, 8.54, 11.04]
+    assert round(P.fondo_dormitorios(5.8), 2) == 3.0 and round(P.frente_principal(3.0), 2) == 3.2 and P.frente_principal(3.1) == 3.0
+    assert [round(P.frente_min(n, 5.8), 2) for n in (1, 2, 3)] == [6.24, 8.74, 11.24]
+    assert round(P.frente_min(1, 5.9), 2) == 6.04 and round(P.frente_min(0), 2) == 4.8   # el monoambiente no cambia
+    # (b) planos con el frente mínimo
+    rect = lambda w, d: [(0.0, 0.0), (w, 0.0), (w, d), (0.0, d)]
+
+    def plano(nb, W, D):
+        res = P.layout_unit(rect(W, D), nb, None, V, S["equipamiento"], False, None, S["ventanas"])
+        R = {r["id"]: r for r in res["rooms"]}
+        ancho = lambda i: round(max(p[0] for p in R[i]["poly"]) - min(p[0] for p in R[i]["poly"]), 2)
+        fondo = lambda i: round(max(p[1] for p in R[i]["poly"]) - min(p[1] for p in R[i]["poly"]), 2)
+        eq = {(e["room"], e["name"]) for e in res["equipamiento"]}
+        return res, R, ancho, fondo, eq
+    for nb, W in ((1, 6.05), (2, 8.55), (3, 11.05)):
+        res, R, ancho, fondo, eq = plano(nb, W, 6.8)
+        assert res["score"] == 100, (nb, W, [c["msg"] for c in res["checks"] if not c["ok"]])
+        assert ancho("bed1") == 3.0 and fondo("bed1") >= 3.1 and all(ancho("bed%d" % j) == 2.5 for j in range(2, nb + 1))
+        assert ("bed1", "Cama doble") in eq and ("bed1", "Placard") in eq and ("living", "Sofá") in eq, (nb, sorted(eq))
+        assert "Hall / Cocina" in [r["name"] for r in res["rooms"]] and ("hall", "Heladera") in eq
+    res, R, ancho, fondo, eq = plano(2, 8.75, 6.0)          # la franja deja 3,0 m: el principal, de 3,20 (placard al costado)
+    assert ancho("bed1") == 3.2 and fondo("bed1") == 3.0 and ("bed1", "Placard") in eq and ("bed1", "Cama doble") in eq, \
+        (ancho("bed1"), fondo("bed1"), [c["msg"] for c in res["checks"] if not c["ok"]])
+    assert not any("ormitorio" in c["msg"] for c in res["checks"] if not c["ok"]), [c["msg"] for c in res["checks"] if not c["ok"]]
+    # (c) la cocina dentro del hall hasta KITCH_MESADA, aparte desde ahí
+    assert P.KITCH_MESADA == 2.0
+    for W, nombre in ((6.34, "Hall / Cocina"), (6.39, "Hall / Cocina"), (6.41, "Cocina"), (8.16, "Cocina")):   # cocina de 1,94 / 1,99 / 2,01 / 3,76 m
+        res, R, ancho, fondo, eq = plano(1, W, 6.75)
+        assert res["score"] == 100 and nombre in [r["name"] for r in res["rooms"]], (W, [r["name"] for r in res["rooms"]], [c["msg"] for c in res["checks"] if not c["ok"]])
+    # (d) con las medidas de antes, todo como antes
+    with _medidas_anteriores(False, True):
+        Sa = ST.merged({})
+        P.configure(Sa["vivienda"], Sa["equipamiento"])
+        assert [round(P.facade_min(n), 2) for n in (1, 2, 3)] == [6.62, 9.42, 12.22] and P.BED_MAIN == 3.2
+        res = P.layout_unit(rect(9.42, 6.8), 2, None, Sa["vivienda"], Sa["equipamiento"], False, None, Sa["ventanas"])
+        R = {r["id"]: r for r in res["rooms"]}
+        assert round(max(p[0] for p in R["bed1"]["poly"]) - min(p[0] for p in R["bed1"]["poly"]), 2) == 3.2 and res["score"] == 100
+    P.configure(V, S["equipamiento"])
+    assert [round(P.facade_min(n), 2) for n in (1, 2, 3)] == [6.04, 8.54, 11.04]
+    # (e) la web
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    antes = json.loads(re.sub(r"([{,])(\w+):", r'\1"\2":', re.search(r"const STD_ANTES=(\{.*?\}\}\});", html).group(1)))
+    assert antes["vivienda"]["dorm_principal"]["typ"] == [3.2, 3.6] and antes["vivienda"]["dorm_secundario"]["typ"] == [2.8, 3.2]
+    assert antes["vivienda"]["estar_comedor"]["typ"] == [3.6, 5.5] and "verMenor(p.version_motor,'2.65')?STD_ANTES:null" in html
+    assert LY.VERSION >= "2.65"
+    # (f) contra la base de tipologías
+    raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    spec = importlib.util.spec_from_file_location("comparar_tipologias", os.path.join(raiz, "tools", "comparar_tipologias.py"))
+    CT = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(CT)
+    cat = CT.comparar_base(os.path.join(raiz, "data", "tipologias"))
+    R_ = cat["resumen"]["todas"]
+    assert R_["entran_con_su_frente"] >= 12, R_["entran_con_su_frente"]
+    assert [R_["por_tipologia"][t]["frente_min_motor"] for t in ("1D", "2D", "3D")] == [6.04, 8.54, 11.04]
+    F = R_["frentes"]
+    assert F["motor"]["facade_min"]["2"] == 8.54 and F["lado a lado"]["Estar"]["n"] >= 10 and F["lado a lado"]["Dormitorio 1"]["n"] >= 10
+    assert 2.7 <= F["lado a lado"]["Estar"]["mediana"] <= 3.3 and 2.6 <= F["lado a lado"]["Dormitorio 1"]["mediana"] <= 3.0
+    assert 2.3 <= F["lado a lado"]["Dormitorio 2"]["mediana"] <= 2.6
+    # (g) los ejemplos
+    muestra = lambda n: json.load(open(os.path.join(raiz, "samples", n + ".json"), encoding="utf-8"))
+    for nombre, n_antes, n_ahora in (("barra", 13, 14), ("barra_larga", 19, 21)):
+        s = muestra(nombre)
+        r = run(s["footprint"], h=s["height"])
+        assert len(r["units"]) == n_ahora and r["metrics"]["plan_score"] == 100, (nombre, len(r["units"]), r["metrics"]["plan_score"])
+        with _medidas_anteriores(False, True):                  # solo los frentes de antes: el estar-comedor por
+            ST.DEFAULTS["vivienda"]["estar_por_dorms"] = list(S["vivienda"]["estar_por_dorms"])   # dormitorios y el mix
+            ra = run(s["footprint"], h=s["height"], unit_mix=[{"name": "Mono", "area": 33, "percent": 10, "dorms": 0},   # (Inversor), los de ahora
+                                                              {"name": "1 dorm", "area": 42, "percent": 55, "dorms": 1},
+                                                              {"name": "2 dorm", "area": 62, "percent": 30, "dorms": 2},
+                                                              {"name": "3 dorm", "area": 93, "percent": 5, "dorms": 3}])
+        assert len(ra["units"]) == n_antes, (nombre, len(ra["units"]))
+        assert r["metrics"]["mix"]["fit_m2"] < ra["metrics"]["mix"]["fit_m2"], (nombre, r["metrics"]["mix"], ra["metrics"]["mix"])
+    # (h) el vestidor (R5.10) con el principal de 3,00 m: en 12,0 × 7,0 entra, de su fondo típico, con la cama doble
+    res = P.layout_unit(rect(12.0, 7.0), 2, lambda p, q: abs(p[1] - 7.0) < 0.05 and abs(q[1] - 7.0) < 0.05, V, S["equipamiento"],
+                        False, None, S["ventanas"], vestidor=True)
+    R = {r["id"]: r for r in res["rooms"]}
+    assert "vest" in R and res["score"] == 100 and "cama_doble" in {q["kind"] for q in res["equipamiento"] if q["room"] == "bed1"}, \
+        ([r["id"] for r in res["rooms"]], [c["msg"] for c in res["checks"] if not c["ok"]])
+    assert R["bed1"]["area"] >= V["dorm_principal"]["min_area"] - 1e-6 and len([q for q in res["equipamiento"] if q["room"] == "vest"]) >= 1
+
+
+if __name__ == "__main__":
+    test_comparar_tipologias(); test_calibracion_frentes(); print("OK81")

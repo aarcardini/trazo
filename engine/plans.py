@@ -108,28 +108,51 @@ def fondo_sin_tira():
     return BED_MAX + HALL + FR_MAX + 0.95
 
 
-def facade_min(nb):
-    """Frente mínimo de fachada para estar + dormitorios con ventana."""
-    return 4.0 if nb == 0 else LIV_MIN + BED_MAIN + BED_W * (nb - 1)
+def frente_principal(bedD=None):
+    """R5.16b (v2.65): el frente del dormitorio principal: el típico (BED_MAIN, 3,00 m con las medidas por defecto: la cama
+    doble con su paso a los lados y el placard al pie) o, si el fondo que le queda (bedD) no deja el placard al pie de la
+    cama (CAMA_PLACARD[1], 3,10 m), el de la cama con el placard al costado (CAMA_PLACARD[0], 3,20 m): lo mismo que hace
+    _anchos_dormitorios al repartir el frente de la zona de noche. Sin bedD, el típico."""
+    if bedD is not None and bedD < CAMA_PLACARD[1] - 1e-6:
+        return max(BED_MAIN, CAMA_PLACARD[0])
+    return BED_MAIN
+
+
+def fondo_dormitorios(D):
+    """R5.16b (v2.65): el fondo que _plan_rects deja a los dormitorios en una vivienda de fondo D, antes de repartir: con
+    franja de servicios (profunda), lo que queda tras el pasillo interno y la franja más chica (hasta BED_MAX); si no,
+    lo que queda tras el pasillo interno."""
+    if D - HALL - BED_D >= FR_MIN - 1e-9:
+        return min(BED_MAX, D - HALL - FR_MIN)
+    return D - HALL
+
+
+def facade_min(nb, bedD=None):
+    """Frente mínimo de fachada para estar + dormitorios con ventana (R5.16b, v2.65: con el fondo bedD de los
+    dormitorios, el principal pide el ancho del placard al costado si no entra al pie: frente_principal)."""
+    return 4.0 if nb == 0 else LIV_MIN + frente_principal(bedD) + BED_W * (nb - 1)
 
 
 def frente_min(nb, D=None):
     """R5.16b: el frente que pide el plano de una vivienda de nb dormitorios y fondo D (sin D, el de una profunda), el
     que usa units.generate_unit_mix para repartir las viviendas (nunca menos que facade_min):
-    - con dormitorios: facade_min, el estar y los dormitorios en la fachada; en una vivienda poco profunda (sin franja
-      de servicios: D < BED_D + HALL + FR_MIN, ver _plan_rects) la zona de día lleva en fila junto al pasillo común el
-      hall, el baño y la cocina con su mesada y su heladera (_ancho_cocina con el fondo kd de esa franja), y pide eso en
-      vez del frente del estar (con menos, la vivienda queda sin cocina o sin heladera);
+    - con dormitorios: facade_min, el estar y los dormitorios en la fachada (v2.65: con el fondo que les queda,
+      fondo_dormitorios: si no deja el placard al pie de la cama doble, el principal pide 3,20 m en vez de 3,00); en
+      una vivienda poco profunda (sin franja de servicios: D < BED_D + HALL + FR_MIN, ver _plan_rects) la zona de día
+      lleva en fila junto al pasillo común el hall, el baño y la cocina con su mesada y su heladera (_ancho_cocina con
+      el fondo kd de esa franja), y pide eso en vez del frente del estar (con menos, la vivienda queda sin cocina o sin
+      heladera);
     - monoambiente: el hall con su lado mínimo, el baño con su ducha y la cocina con su heladera, en fila (ver el
       monoambiente de _plan_rects; con menos, el hall queda bajo su mínimo o la heladera no entra)."""
     if nb == 0:
         kd = min(2.4, D * 0.4) if D else 2.4
         bano = max(BATH_FULL[0], V["bano"]["min_area"] / kd)
         return max(facade_min(0), min(HALL_W, V["hall"]["min_side"]) + bano + (_ancho_cocina(kd) or KITCH_LINE))
+    bedD = fondo_dormitorios(D) if D is not None else None
     if D is None or D - HALL - BED_D >= FR_MIN - 1e-9:
-        return facade_min(nb)
+        return facade_min(nb, bedD)
     kd = min(2.6, max(1.8, D * 0.4))
-    return facade_min(nb) - LIV_MIN + max(LIV_MIN, HALL_W + BATH_W1 + max(1.8, _ancho_cocina(kd) or KITCH_LINE))
+    return facade_min(nb, bedD) - LIV_MIN + max(LIV_MIN, HALL_W + BATH_W1 + max(1.8, _ancho_cocina(kd) or KITCH_LINE))
 
 
 def _shared(r1, r2, tol=0.05):
@@ -364,10 +387,12 @@ def _ventanas(rooms, borde, is_facade, v1, S, cocinas=None):
     return out, checks
 
 
-def _frente_noche(W, nb, lateral=False):
+def _frente_noche(W, nb, lateral=False, bedD=None):
     """Frente de la zona de noche y el que pide: los dormitorios al fondo (R5.3, lateral: menos el último, que va al
-    costado). Si el frente no alcanza para el estar, se ajusta."""
-    need = BED_MAIN + BED_W * (nb - 2 if lateral else nb - 1)
+    costado). Si el frente no alcanza para el estar, se ajusta. bedD (v2.65): el fondo de los dormitorios, si ya se
+    conoce: con menos del que pide el placard al pie de la cama doble, el principal pide el ancho del placard al costado
+    (frente_principal)."""
+    need = frente_principal(bedD) + BED_W * (nb - 2 if lateral else nb - 1)
     if W - need >= LIV_MIN:
         return need + min(max((W - need) - 6.0, 0.0), 0.8 * nb), need    # estar de más de 6 m: a los dormitorios
     return max(0.0, W - max(3.0, W * 0.38)), need
@@ -786,7 +811,7 @@ def _plan_rects(x0, v0, x1, v1, nb, warnings, acc=None, lateral=False, hall_x0=F
     # ---- reparto del frente entre día y noche
     nf = nb - 1 if lateral else nb                     # dormitorios al fondo (R5.3: el último, al costado)
     ws = BED_W if lateral else 0.0                     # frente del dormitorio lateral
-    Wn, need = _frente_noche(W, nb, lateral)
+    Wn, need = _frente_noche(W, nb, lateral, fondo_dormitorios(D))     # v2.65: el principal, con su placard
     if W - need < LIV_MIN:
         hard = 3.0 + V["dorm_principal"]["min_side"] + V["dorm_secundario"]["min_side"] * (nf - 1)
         if W >= hard:
@@ -842,6 +867,17 @@ def _plan_rects(x0, v0, x1, v1, nb, warnings, acc=None, lateral=False, hall_x0=F
         else:
             claves, d = _servicios(xb - xs, nb, hi, acc, lo_k)
             bedD, d, e = fondos(d)
+            if bedD < CAMA_PLACARD[1] - 1e-6 and frente_principal(bedD) > frente_principal(fondo_dormitorios(D)) + 1e-6:
+                # v2.65: la franja de servicios le quitó al principal el fondo del placard al pie de la cama: pide el
+                # ancho del placard al costado (frente_principal), si el estar conserva su frente mínimo (lo mismo que
+                # hace _anchos_dormitorios, que solo puede dárselo si entra en Wn); la franja se rehace con lo que queda
+                Wn2, need2 = _frente_noche(W, nb, lateral, bedD)
+                if Wn2 > Wn + 1e-6 and W - need2 >= LIV_MIN - 1e-6:
+                    Wn, need, xs = Wn2, need2, x1 - Wn2
+                    angosta = xs - x0 - hw < KITCH_LINE
+                    lo_k = KITCH_L - (HALL - MIN_SHARE["abierto"] - 0.01) if angosta else 0.0
+                    claves, d = _servicios(xb - xs, nb, hi, acc, lo_k)
+                    bedD, d, e = fondos(d)
         tira = e >= 1.0                                # R5.11: la vivienda tiene tira (sin ella, todo como en v2.41)
         # R5.11 (criterio del usuario): la tira junto al pasillo común (de 1 m o más) es una banda de servicios. Con fondo
         # para la mesada (_banda), «cocina»: el hall va a x0, con la entrada, y la cocina corre de él hacia la tira,
@@ -1094,8 +1130,16 @@ def _plan_rects(x0, v0, x1, v1, nb, warnings, acc=None, lateral=False, hall_x0=F
     if deep and modo == "cocina":                      # R5.11: el hall y la cocina ya están, en la banda
         pass
     elif deep:
-        if xs - x0 - hw >= 1.8:                        # el depósito (o, R5.11, el lavadero de la tira) se abre desde la
-            puerta = ("kitchen", "storage", "puerta") in E or ("kitchen", "laundry", "puerta") in E   # pared del costado
+        # v2.65: una cocina aparte de 1,80 a 1,99 m de ancho (el estar de 3,04 m deja 1,64–1,99 m) solo lleva su mesada
+        # entera contra la pared del costado, con 2,70 m de fondo (_modos_cocina); si la franja de la entrada no llega a
+        # ese fondo (kd_max: sin cerrar la boca del pasillo interno), la cocina va dentro del hall («Hall / Cocina»),
+        # donde la mesada usa también la pared de la entrada (antes iba aparte y no entraba la heladera). Con
+        # KITCH_MESADA (2,00 m) o más, aparte como siempre (la cascada de fondos cuida el art. 14 y la banda)
+        wk0 = xs - x0 - hw
+        puerta = ("kitchen", "storage", "puerta") in E or ("kitchen", "laundry", "puerta") in E   # pared del costado
+        kd_max = max(kd, min(KITCH_D, hv1 - v0 - MIN_SHARE["abierto"] - 0.01))
+        entra = any(a <= wk0 + 1e-6 and f <= kd_max + 1e-6 for f, a in _modos_cocina(not puerta))
+        if wk0 >= 1.8 - 1e-6 and (wk0 >= KITCH_MESADA - 1e-6 or entra):   # el depósito (o, R5.11, el lavadero de la tira) se abre desde la
             pp = KITCH_L if puerta else 0.0                     # de la cocina: su puerta, fuera de la mesada
             wk, kd = cocina(xs - x0 - hw, kd, caja, [max(pcom, pp), max(p14, pp), pp], not puerta, techo=t14)
             if hall_x0:                                # R3.7: el hall en x0 y la cocina hacia la zona de noche

@@ -1,7 +1,7 @@
 {
  "ejemplo": "samples/entre_medianeras_patio_central.json",
  "nombre": "Entre medianeras 30 × 45 con patio central (U cerrada)",
- "version_motor": "2.64",
+ "version_motor": "2.65",
  "metricas": {
   "unidades": 13,
   "unidades_totales": 65,
@@ -20,8 +20,8 @@
   "sin_usar": 38.7,
   "circulacion": 24.2,
   "match_score": 91.9,
-  "fit_m2": 7.4,
-  "calidad_planos": 88,
+  "fit_m2": 7.0,
+  "calidad_planos": 96,
   "evacuacion_max": 22.7,
   "nsa_total": 3573.5,
   "sin_luz": 101.5,
