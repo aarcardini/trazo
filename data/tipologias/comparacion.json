@@ -5,10 +5,11 @@
   "alta": {
    "comparables": 22,
    "entran_con_su_frente": 8,
-   "esquema_igual": 14,
+   "entran_con_su_frente_fila": 9,
+   "esquema_igual": 15,
    "fachada": {
     "cocina": {
-     "motor_con_fachada": 5,
+     "motor_con_fachada": 4,
      "motor_n": 18,
      "real_abiertos": 16,
      "real_con_fachada": 6,
@@ -22,29 +23,29 @@
      "real_n": 2
     },
     "dormitorio": {
-     "motor_con_fachada": 14,
-     "motor_n": 16,
+     "motor_con_fachada": 16,
+     "motor_n": 18,
      "real_abiertos": 0,
      "real_con_fachada": 28,
      "real_n": 28
     },
     "estar": {
      "motor_con_fachada": 19,
-     "motor_n": 23,
+     "motor_n": 22,
      "real_abiertos": 10,
      "real_con_fachada": 26,
      "real_n": 37
     }
    },
    "fallas": {
-    "acceso": 5,
+    "acceso": 4,
     "art. 14": 3,
-    "equipamiento": 6,
+    "equipamiento": 7,
     "fondo": 4,
-    "frente": 16,
+    "frente": 15,
     "luz": 11,
     "mínimos": 19,
-    "programa": 10,
+    "programa": 9,
     "superficie": 2
    },
    "frentes": {
@@ -185,6 +186,8 @@
      "disposicion": {
       "mezcladas": 2
      },
+     "entran_con_su_frente": 0,
+     "entran_con_su_frente_fila": 0,
      "esquema_motor": {},
      "fachadas_n": 1,
      "fallas": {},
@@ -239,6 +242,8 @@
      "disposicion": {
       "en fila": 1
      },
+     "entran_con_su_frente": 0,
+     "entran_con_su_frente_fila": 0,
      "esquema_motor": {
       "en fila": 1
      },
@@ -292,6 +297,8 @@
       "lado a lado": 3,
       "mezcladas": 2
      },
+     "entran_con_su_frente": 3,
+     "entran_con_su_frente_fila": 3,
      "esquema_motor": {
       "esquina": 4,
       "lado a lado": 2
@@ -359,6 +366,8 @@
      "disposicion": {
       "lado a lado": 7
      },
+     "entran_con_su_frente": 5,
+     "entran_con_su_frente_fila": 5,
      "esquema_motor": {
       "en fila": 1,
       "lado a lado": 6
@@ -426,21 +435,23 @@
       "lado a lado": 5,
       "mezcladas": 1
      },
+     "entran_con_su_frente": 0,
+     "entran_con_su_frente_fila": 1,
      "esquema_motor": {
-      "lado a lado": 2,
-      "pasante": 3,
+      "lado a lado": 1,
+      "pasante": 4,
       "sin fachada": 3
      },
      "fachadas_n": 2,
      "fallas": {
-      "acceso": 2,
+      "acceso": 1,
       "art. 14": 1,
-      "equipamiento": 2,
+      "equipamiento": 3,
       "fondo": 2,
-      "frente": 5,
+      "frente": 4,
       "luz": 5,
       "mínimos": 8,
-      "programa": 5,
+      "programa": 4,
       "superficie": 1
      },
      "fondo_real": 10.75,
@@ -487,20 +498,20 @@
    },
    "por_grupo": {
     "baño": {
-     "motor_area": 4.25,
-     "motor_viviendas": 14,
+     "motor_area": 3.73,
+     "motor_viviendas": 15,
      "real_area": 4.21,
      "real_viviendas": 22
     },
     "cocina": {
-     "motor_area": 6.89,
+     "motor_area": 6.43,
      "motor_viviendas": 18,
      "real_area": 4.67,
      "real_viviendas": 22
     },
     "depósito": {
-     "motor_area": 1.28,
-     "motor_viviendas": 2,
+     "motor_area": 1.33,
+     "motor_viviendas": 1,
      "real_area": null,
      "real_viviendas": 0
     },
@@ -511,8 +522,8 @@
      "real_viviendas": 2
     },
     "dormitorio": {
-     "motor_area": 7.09,
-     "motor_viviendas": 9,
+     "motor_area": 7.83,
+     "motor_viviendas": 10,
      "real_area": 11.59,
      "real_viviendas": 19
     },
@@ -541,8 +552,8 @@
      "real_viviendas": 0
     },
     "pasillo": {
-     "motor_area": 2.05,
-     "motor_viviendas": 8,
+     "motor_area": 2.1,
+     "motor_viviendas": 9,
      "real_area": 2.46,
      "real_viviendas": 8
     },
@@ -558,6 +569,7 @@
      "comparables": 11,
      "entrada_aceptada": 8,
      "entran_con_su_frente": 3,
+     "entran_con_su_frente_fila": 3,
      "esquema_motor": {
       "en fila": 1,
       "lado a lado": 6,
@@ -597,11 +609,13 @@
     },
     "2D": {
      "comparables": 7,
-     "entrada_aceptada": 1,
+     "entrada_aceptada": 2,
      "entran_con_su_frente": 5,
+     "entran_con_su_frente_fila": 6,
      "esquema_motor": {
       "esquina": 3,
-      "lado a lado": 4
+      "lado a lado": 3,
+      "pasante": 1
      },
      "esquemas": {
       "dúplex": 2,
@@ -610,13 +624,13 @@
       "pasante": 1
      },
      "fallas": {
-      "acceso": 2,
+      "acceso": 1,
       "art. 14": 2,
-      "equipamiento": 1,
-      "frente": 5,
+      "equipamiento": 2,
+      "frente": 4,
       "luz": 4,
       "mínimos": 5,
-      "programa": 2
+      "programa": 1
      },
      "fondo_real": 7.4,
      "frente_min_motor": 8.54,
@@ -629,8 +643,8 @@
      },
      "resuelve": 2,
      "resuelve_rect": 5,
-     "score": 11,
-     "score_libre": 11,
+     "score": 12,
+     "score_libre": 12,
      "score_rect": 100,
      "sin_uso": 0.0
     },
@@ -638,6 +652,7 @@
      "comparables": 1,
      "entrada_aceptada": 0,
      "entran_con_su_frente": 0,
+     "entran_con_su_frente_fila": 0,
      "esquema_motor": {
       "esquina": 1
      },
@@ -673,6 +688,7 @@
      "comparables": 3,
      "entrada_aceptada": 2,
      "entran_con_su_frente": 0,
+     "entran_con_su_frente_fila": 0,
      "esquema_motor": {
       "en fila": 1,
       "pasante": 2
@@ -713,10 +729,11 @@
   "todas": {
    "comparables": 39,
    "entran_con_su_frente": 13,
-   "esquema_igual": 21,
+   "entran_con_su_frente_fila": 18,
+   "esquema_igual": 25,
    "fachada": {
     "cocina": {
-     "motor_con_fachada": 15,
+     "motor_con_fachada": 11,
      "motor_n": 34,
      "real_abiertos": 21,
      "real_con_fachada": 18,
@@ -730,29 +747,29 @@
      "real_n": 3
     },
     "dormitorio": {
-     "motor_con_fachada": 32,
-     "motor_n": 50,
+     "motor_con_fachada": 37,
+     "motor_n": 52,
      "real_abiertos": 0,
      "real_con_fachada": 61,
      "real_n": 62
     },
     "estar": {
      "motor_con_fachada": 36,
-     "motor_n": 42,
+     "motor_n": 41,
      "real_abiertos": 20,
      "real_con_fachada": 50,
      "real_n": 71
     }
    },
    "fallas": {
-    "acceso": 14,
+    "acceso": 10,
     "art. 14": 3,
-    "equipamiento": 10,
+    "equipamiento": 11,
     "fondo": 4,
-    "frente": 27,
-    "luz": 26,
-    "mínimos": 31,
-    "programa": 11,
+    "frente": 23,
+    "luz": 23,
+    "mínimos": 28,
+    "programa": 10,
     "sin uso": 2,
     "superficie": 2
    },
@@ -894,6 +911,8 @@
      "disposicion": {
       "mezcladas": 2
      },
+     "entran_con_su_frente": 0,
+     "entran_con_su_frente_fila": 0,
      "esquema_motor": {},
      "fachadas_n": 1,
      "fallas": {},
@@ -948,6 +967,8 @@
      "disposicion": {
       "en fila": 2
      },
+     "entran_con_su_frente": 0,
+     "entran_con_su_frente_fila": 0,
      "esquema_motor": {
       "en fila": 2
      },
@@ -1006,6 +1027,8 @@
       "lado a lado": 9,
       "mezcladas": 4
      },
+     "entran_con_su_frente": 3,
+     "entran_con_su_frente_fila": 7,
      "esquema_motor": {
       "en fila": 2,
       "esquina": 6,
@@ -1081,6 +1104,8 @@
      "disposicion": {
       "lado a lado": 12
      },
+     "entran_con_su_frente": 10,
+     "entran_con_su_frente_fila": 10,
      "esquema_motor": {
       "en fila": 1,
       "lado a lado": 10,
@@ -1153,22 +1178,23 @@
       "lado a lado": 5,
       "mezcladas": 1
      },
+     "entran_con_su_frente": 0,
+     "entran_con_su_frente_fila": 1,
      "esquema_motor": {
-      "en fila": 3,
-      "lado a lado": 2,
-      "pasante": 3,
+      "lado a lado": 1,
+      "pasante": 7,
       "sin fachada": 3
      },
      "fachadas_n": 2,
      "fallas": {
-      "acceso": 5,
+      "acceso": 1,
       "art. 14": 1,
-      "equipamiento": 2,
+      "equipamiento": 3,
       "fondo": 2,
-      "frente": 8,
-      "luz": 8,
-      "mínimos": 11,
-      "programa": 5,
+      "frente": 4,
+      "luz": 5,
+      "mínimos": 8,
+      "programa": 4,
       "superficie": 1
      },
      "fondo_real": 9.85,
@@ -1200,15 +1226,15 @@
       "alta": 8,
       "media": 3
      },
-     "resuelve": 0,
-     "resuelve_rect": 0,
+     "resuelve": 3,
+     "resuelve_rect": 3,
      "rotulos": {
       "Calle": 7,
       "Contrafrente": 5,
       "Patio": 11
      },
-     "score": 12,
-     "score_rect": 20,
+     "score": 14,
+     "score_rect": 33,
      "tipologias": {
       "1D": 8,
       "2D": 1,
@@ -1218,20 +1244,20 @@
    },
    "por_grupo": {
     "baño": {
-     "motor_area": 4.76,
-     "motor_viviendas": 31,
+     "motor_area": 4.38,
+     "motor_viviendas": 32,
      "real_area": 4.34,
      "real_viviendas": 39
     },
     "cocina": {
-     "motor_area": 7.47,
+     "motor_area": 6.83,
      "motor_viviendas": 34,
      "real_area": 6.41,
      "real_viviendas": 39
     },
     "depósito": {
-     "motor_area": 1.88,
-     "motor_viviendas": 5,
+     "motor_area": 2.94,
+     "motor_viviendas": 4,
      "real_area": null,
      "real_viviendas": 0
     },
@@ -1242,13 +1268,13 @@
      "real_viviendas": 3
     },
     "dormitorio": {
-     "motor_area": 8.58,
-     "motor_viviendas": 25,
+     "motor_area": 10.59,
+     "motor_viviendas": 26,
      "real_area": 14.92,
      "real_viviendas": 35
     },
     "estar": {
-     "motor_area": 15.59,
+     "motor_area": 14.11,
      "motor_viviendas": 38,
      "real_area": 16.89,
      "real_viviendas": 38
@@ -1272,8 +1298,8 @@
      "real_viviendas": 1
     },
     "pasillo": {
-     "motor_area": 3.0,
-     "motor_viviendas": 21,
+     "motor_area": 3.11,
+     "motor_viviendas": 25,
      "real_area": 2.45,
      "real_viviendas": 17
     },
@@ -1289,10 +1315,11 @@
      "comparables": 17,
      "entrada_aceptada": 12,
      "entran_con_su_frente": 6,
+     "entran_con_su_frente_fila": 6,
      "esquema_motor": {
-      "en fila": 4,
+      "en fila": 1,
       "lado a lado": 8,
-      "pasante": 1,
+      "pasante": 4,
       "sin fachada": 4
      },
      "esquemas": {
@@ -1302,12 +1329,12 @@
       "pasante": 8
      },
      "fallas": {
-      "acceso": 5,
+      "acceso": 2,
       "equipamiento": 3,
       "fondo": 4,
-      "frente": 13,
-      "luz": 10,
-      "mínimos": 14,
+      "frente": 10,
+      "luz": 7,
+      "mínimos": 11,
       "programa": 9
      },
      "fondo_real": 9.24,
@@ -1320,21 +1347,23 @@
       "alta": 13,
       "media": 6
      },
-     "resuelve": 1,
-     "resuelve_rect": 4,
-     "score": 14,
-     "score_libre": 14,
-     "score_rect": 33,
+     "resuelve": 4,
+     "resuelve_rect": 7,
+     "score": 17,
+     "score_libre": 17,
+     "score_rect": 50,
      "sin_uso": 0.0
     },
     "2D": {
      "comparables": 11,
-     "entrada_aceptada": 1,
+     "entrada_aceptada": 2,
      "entran_con_su_frente": 7,
+     "entran_con_su_frente_fila": 9,
      "esquema_motor": {
       "en fila": 2,
       "esquina": 3,
-      "lado a lado": 6
+      "lado a lado": 5,
+      "pasante": 1
      },
      "esquemas": {
       "dúplex": 2,
@@ -1343,13 +1372,13 @@
       "pasante": 1
      },
      "fallas": {
-      "acceso": 4,
+      "acceso": 3,
       "art. 14": 2,
-      "equipamiento": 3,
-      "frente": 7,
+      "equipamiento": 4,
+      "frente": 6,
       "luz": 8,
       "mínimos": 7,
-      "programa": 2
+      "programa": 1
      },
      "fondo_real": 7.4,
      "frente_min_motor": 8.54,
@@ -1363,8 +1392,8 @@
      },
      "resuelve": 2,
      "resuelve_rect": 8,
-     "score": 11,
-     "score_libre": 11,
+     "score": 12,
+     "score_libre": 12,
      "score_rect": 100,
      "sin_uso": 0.0
     },
@@ -1372,6 +1401,7 @@
      "comparables": 5,
      "entrada_aceptada": 1,
      "entran_con_su_frente": 0,
+     "entran_con_su_frente_fila": 3,
      "esquema_motor": {
       "esquina": 3,
       "lado a lado": 2
@@ -1409,6 +1439,7 @@
      "comparables": 2,
      "entrada_aceptada": 0,
      "entran_con_su_frente": 0,
+     "entran_con_su_frente_fila": 0,
      "esquema_motor": {
       "pasante": 2
      },
@@ -1443,6 +1474,7 @@
      "comparables": 4,
      "entrada_aceptada": 3,
      "entran_con_su_frente": 0,
+     "entran_con_su_frente_fila": 0,
      "esquema_motor": {
       "en fila": 2,
       "pasante": 2
@@ -1475,14 +1507,14 @@
      "sin_uso": 0.0
     }
    },
-   "resuelve": 3,
-   "resuelve_rect": 15,
-   "score": 12,
-   "score_rect": 33,
+   "resuelve": 6,
+   "resuelve_rect": 18,
+   "score": 14,
+   "score_rect": 50,
    "viviendas": 44
   }
  },
- "version": "2.65",
+ "version": "2.67",
  "viviendas": [
   {
    "archivo": "U_MVD_Aruma_1D_10.16x4.88_10.dxf",
@@ -1543,6 +1575,7 @@
    "crujia": "simple",
    "dormitorios": 1,
    "frente_sobre_min": 1.15,
+   "frente_sobre_min_fila": 1.15,
    "marco": {
     "ancho": 10.16,
     "fondo": 4.88,
@@ -1607,10 +1640,12 @@
     "facade": 10.16,
     "facade_min": 6.04,
     "fallas": [],
+    "fila": null,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 8.8,
     "frente_min_convencion": 8.8,
+    "frente_min_fila": 8.8,
     "habitables_con_fachada": [
      "Dormitorio",
      "Estar-Comedor"
@@ -1847,6 +1882,7 @@
    "crujia": "simple",
    "dormitorios": 1,
    "frente_sobre_min": 1.16,
+   "frente_sobre_min_fila": 1.16,
    "marco": {
     "ancho": 7.01,
     "fondo": 6.95,
@@ -1915,10 +1951,12 @@
     "fallas": [
      "luz"
     ],
+    "fila": null,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 6.04,
     "frente_min_convencion": 6.04,
+    "frente_min_fila": 6.04,
     "habitables_con_fachada": [
      "Dormitorio",
      "Estar-Comedor"
@@ -2142,6 +2180,7 @@
    "crujia": "simple",
    "dormitorios": 1,
    "frente_sobre_min": 1.27,
+   "frente_sobre_min_fila": 1.27,
    "marco": {
     "ancho": 7.7,
     "fondo": 6.74,
@@ -2203,10 +2242,12 @@
      "luz",
      "programa"
     ],
+    "fila": null,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 6.04,
     "frente_min_convencion": 6.04,
+    "frente_min_fila": 6.04,
     "habitables_con_fachada": [],
     "habitables_sin_fachada": [
      "Dormitorio",
@@ -2451,6 +2492,7 @@
    "crujia": "simple",
    "dormitorios": 2,
    "frente_sobre_min": 1.24,
+   "frente_sobre_min_fila": 1.24,
    "marco": {
     "ancho": 10.61,
     "fondo": 6.74,
@@ -2535,10 +2577,12 @@
     "fallas": [
      "luz"
     ],
+    "fila": null,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 8.54,
     "frente_min_convencion": 8.54,
+    "frente_min_fila": 8.54,
     "habitables_con_fachada": [
      "Dormitorio 2",
      "Dormitorio principal",
@@ -2805,6 +2849,7 @@
    "crujia": "simple",
    "dormitorios": 2,
    "frente_sobre_min": 1.28,
+   "frente_sobre_min_fila": 1.28,
    "marco": {
     "ancho": 10.95,
     "fondo": 6.95,
@@ -2896,10 +2941,12 @@
     "fallas": [
      "luz"
     ],
+    "fila": null,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 8.54,
     "frente_min_convencion": 8.54,
+    "frente_min_fila": 8.54,
     "habitables_con_fachada": [
      "Dormitorio 2",
      "Dormitorio principal",
@@ -3169,6 +3216,7 @@
    "crujia": "esquina",
    "dormitorios": 2,
    "frente_sobre_min": 0.86,
+   "frente_sobre_min_fila": 0.86,
    "marco": {
     "ancho": 12.76,
     "fondo": 7.34,
@@ -3261,10 +3309,12 @@
      "equipamiento",
      "frente"
     ],
+    "fila": null,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 8.54,
     "frente_min_convencion": 8.54,
+    "frente_min_fila": 8.54,
     "habitables_con_fachada": [
      "Dormitorio principal",
      "Estar-Comedor"
@@ -3535,6 +3585,7 @@
    "crujia": "esquina",
    "dormitorios": 2,
    "frente_sobre_min": 0.87,
+   "frente_sobre_min_fila": 1.35,
    "marco": {
     "ancho": 12.76,
     "fondo": 7.44,
@@ -3631,10 +3682,12 @@
      "equipamiento",
      "frente"
     ],
+    "fila": 0,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 8.54,
     "frente_min_convencion": 8.54,
+    "frente_min_fila": 5.5,
     "habitables_con_fachada": [
      "Dormitorio principal",
      "Estar-Comedor"
@@ -3930,6 +3983,7 @@
    "crujia": "esquina",
    "dormitorios": 3,
    "frente_sobre_min": 0.67,
+   "frente_sobre_min_fila": 0.93,
    "marco": {
     "ancho": 15.88,
     "fondo": 7.41,
@@ -4063,10 +4117,12 @@
      "luz",
      "frente"
     ],
+    "fila": 0,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 11.04,
     "frente_min_convencion": 11.04,
+    "frente_min_fila": 8.0,
     "habitables_con_fachada": [
      "Dormitorio 2",
      "Dormitorio 3",
@@ -4397,6 +4453,7 @@
    "crujia": "esquina",
    "dormitorios": 3,
    "frente_sobre_min": 0.72,
+   "frente_sobre_min_fila": 1.0,
    "marco": {
     "ancho": 15.88,
     "fondo": 7.97,
@@ -4521,10 +4578,12 @@
      "frente",
      "luz"
     ],
+    "fila": 0,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 11.04,
     "frente_min_convencion": 11.04,
+    "frente_min_fila": 8.0,
     "habitables_con_fachada": [
      "Dormitorio 2",
      "Dormitorio 3",
@@ -4853,6 +4912,7 @@
    "crujia": "esquina",
    "dormitorios": 3,
    "frente_sobre_min": 0.75,
+   "frente_sobre_min_fila": 1.38,
    "marco": {
     "ancho": 12.04,
     "fondo": 8.28,
@@ -4956,10 +5016,12 @@
      "mínimos",
      "frente"
     ],
+    "fila": -1,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 11.04,
     "frente_min_convencion": 11.04,
+    "frente_min_fila": 6.0,
     "habitables_con_fachada": [
      "Dormitorio principal",
      "Estar-Comedor"
@@ -5264,6 +5326,7 @@
    "crujia": "esquina",
    "dormitorios": 3,
    "frente_sobre_min": 0.75,
+   "frente_sobre_min_fila": 1.38,
    "marco": {
     "ancho": 12.04,
     "fondo": 8.3,
@@ -5368,10 +5431,12 @@
      "mínimos",
      "frente"
     ],
+    "fila": 1,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 11.04,
     "frente_min_convencion": 11.04,
+    "frente_min_fila": 6.0,
     "habitables_con_fachada": [
      "Dormitorio principal",
      "Estar-Comedor"
@@ -5696,6 +5761,7 @@
    "crujia": "esquina",
    "dormitorios": 4,
    "frente_sobre_min": 0.99,
+   "frente_sobre_min_fila": 0.99,
    "marco": {
     "ancho": 13.37,
     "fondo": 11.98,
@@ -5843,10 +5909,12 @@
      "frente",
      "sin uso"
     ],
+    "fila": null,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 13.54,
     "frente_min_convencion": 13.54,
+    "frente_min_fila": 13.54,
     "habitables_con_fachada": [
      "Comedor",
      "Dormitorio 4",
@@ -6202,6 +6270,7 @@
    "crujia": "esquina",
    "dormitorios": 4,
    "frente_sobre_min": 0.99,
+   "frente_sobre_min_fila": 0.99,
    "marco": {
     "ancho": 13.37,
     "fondo": 11.98,
@@ -6349,10 +6418,12 @@
      "frente",
      "sin uso"
     ],
+    "fila": null,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 13.54,
     "frente_min_convencion": 13.54,
+    "frente_min_fila": 13.54,
     "habitables_con_fachada": [
      "Dormitorio 4",
      "Estar"
@@ -6685,6 +6756,7 @@
    "crujia": "simple",
    "dormitorios": 1,
    "frente_sobre_min": 1.12,
+   "frente_sobre_min_fila": 1.12,
    "marco": {
     "ancho": 10.06,
     "fondo": 3.7,
@@ -6748,10 +6820,12 @@
      "fondo",
      "programa"
     ],
+    "fila": null,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 9.0,
     "frente_min_convencion": 9.0,
+    "frente_min_fila": 9.0,
     "habitables_con_fachada": [
      "Estar-Comedor"
     ],
@@ -6963,6 +7037,7 @@
    "crujia": "simple",
    "dormitorios": 1,
    "frente_sobre_min": 1.47,
+   "frente_sobre_min_fila": 1.47,
    "marco": {
     "ancho": 13.26,
     "fondo": 3.7,
@@ -7025,10 +7100,12 @@
      "fondo",
      "programa"
     ],
+    "fila": null,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 9.0,
     "frente_min_convencion": 9.0,
+    "frente_min_fila": 9.0,
     "habitables_con_fachada": [
      "Estar-Comedor"
     ],
@@ -7240,6 +7317,7 @@
    "crujia": "pasante",
    "dormitorios": 1,
    "frente_sobre_min": 0.53,
+   "frente_sobre_min_fila": 0.53,
    "marco": {
     "ancho": 8.34,
     "fondo": 8.47,
@@ -7296,10 +7374,12 @@
      "programa",
      "mínimos"
     ],
+    "fila": null,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 6.04,
     "frente_min_convencion": 6.04,
+    "frente_min_fila": 6.04,
     "habitables_con_fachada": [
      "Estar-Comedor"
     ],
@@ -7549,6 +7629,7 @@
    "crujia": "simple",
    "dormitorios": 2,
    "frente_sobre_min": 0.69,
+   "frente_sobre_min_fila": 0.69,
    "marco": {
     "ancho": 8.25,
     "fondo": 11.77,
@@ -7636,10 +7717,12 @@
      "frente",
      "programa"
     ],
+    "fila": null,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 8.54,
     "frente_min_convencion": 8.54,
+    "frente_min_fila": 8.54,
     "habitables_con_fachada": [
      "Comedor",
      "Estar"
@@ -7907,6 +7990,7 @@
    "crujia": "esquina",
    "dormitorios": 3,
    "frente_sobre_min": 0.64,
+   "frente_sobre_min_fila": 0.64,
    "marco": {
     "ancho": 11.61,
     "fondo": 15.19,
@@ -8035,10 +8119,12 @@
      "equipamiento",
      "frente"
     ],
+    "fila": null,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 11.04,
     "frente_min_convencion": 11.04,
+    "frente_min_fila": 11.04,
     "habitables_con_fachada": [
      "Dormitorio 3",
      "Dormitorio principal"
@@ -8298,9 +8384,10 @@
    "comparable": true,
    "comparacion": {
     "dormitorios_motor": 1,
-    "esquema_igual": false,
+    "esquema_igual": true,
     "fachada": {
      "motor": [
+      "Dormitorio",
       "Estar-Comedor"
      ],
      "real": [
@@ -8310,32 +8397,32 @@
     },
     "por_grupo": {
      "baño": {
-      "motor_area": 1.46,
+      "motor_area": 3.8,
       "motor_n": 1,
       "real_area": 3.82,
       "real_n": 1
      },
      "cocina": {
-      "motor_area": 8.7,
+      "motor_area": 5.24,
       "motor_n": 1,
       "real_area": 3.42,
       "real_n": 1
      },
      "dormitorio": {
-      "motor_area": 2.34,
+      "motor_area": 10.56,
       "motor_n": 1,
       "real_area": 10.15,
       "real_n": 1
      },
      "estar": {
-      "motor_area": 20.79,
+      "motor_area": 11.9,
       "motor_n": 1,
       "real_area": 11.56,
       "real_n": 2
      },
      "pasillo": {
-      "motor_area": 0.0,
-      "motor_n": 0,
+      "motor_area": 3.11,
+      "motor_n": 1,
       "real_area": 1.67,
       "real_n": 1
      }
@@ -8345,6 +8432,7 @@
    "crujia": "pasante",
    "dormitorios": 1,
    "frente_sobre_min": 0.59,
+   "frente_sobre_min_fila": 0.99,
    "marco": {
     "ancho": 3.6,
     "fondo": 9.83,
@@ -8353,110 +8441,100 @@
    },
    "motivo": null,
    "motor": {
-    "avisos": [
-     "Sin acceso desde la entrada: Baño, Dormitorio",
-     "Baño: lado 0.52 m < mínimo 1.20 m",
-     "Baño: 1.5 m² < mínimo 3.0 m²",
-     "Dormitorio sin fachada (sin luz natural)",
-     "Dormitorio: lado 0.52 m < mínimo 2.60 m",
-     "Dormitorio: 2.3 m² < mínimo 8.5 m²",
-     "Frente de 3.5 m insuficiente para estar + 1 dormitorio(s) (mín. 5.6 m)"
-    ],
-    "detalle": "estar: arriba; dormitorios: sin fachada propia",
-    "disposicion": "lado a lado",
+    "avisos": [],
+    "detalle": "estar: abajo; dormitorios: arriba",
+    "disposicion": "en fila",
     "entrada_aceptada": true,
-    "esquema": "en fila",
+    "esquema": "pasante",
     "estancias": [
      {
-      "area": 1.46,
+      "area": 11.9,
+      "grupo": "estar",
+      "kind": "living",
+      "lados": [
+       "abajo"
+      ],
+      "nombre": "Estar-Comedor"
+     },
+     {
+      "area": 5.24,
+      "grupo": "cocina",
+      "kind": "kitchen",
+      "lados": [],
+      "nombre": "Cocina"
+     },
+     {
+      "area": 3.11,
+      "grupo": "pasillo",
+      "kind": "hallway",
+      "lados": [],
+      "nombre": "Pasillo"
+     },
+     {
+      "area": 3.8,
       "grupo": "baño",
       "kind": "bath",
       "lados": [],
       "nombre": "Baño"
      },
      {
-      "area": 2.34,
+      "area": 10.56,
       "grupo": "dormitorio",
       "kind": "bedroom",
-      "lados": [],
-      "nombre": "Dormitorio"
-     },
-     {
-      "area": 8.7,
-      "grupo": "cocina",
-      "kind": "hall",
-      "lados": [
-       "abajo"
-      ],
-      "nombre": "Hall / Cocina"
-     },
-     {
-      "area": 20.79,
-      "grupo": "estar",
-      "kind": "living",
       "lados": [
        "arriba"
       ],
-      "nombre": "Estar-Comedor"
+      "nombre": "Dormitorio"
      }
     ],
     "facade": 3.52,
     "facade_min": 6.04,
-    "fallas": [
-     "acceso",
-     "mínimos",
-     "luz",
-     "frente"
-    ],
+    "fallas": [],
+    "fila": 0,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 6.04,
     "frente_min_convencion": 6.04,
+    "frente_min_fila": 3.6,
     "habitables_con_fachada": [
+     "Dormitorio",
      "Estar-Comedor"
     ],
-    "habitables_sin_fachada": [
-     "Dormitorio"
-    ],
-    "orden": "día de lado a lado, noche al fondo, servicios en el medio; día y noche lado a lado",
-    "puerta": 2.86,
+    "habitables_sin_fachada": [],
+    "orden": "día junto al pasillo, noche al fondo, servicios en el medio; día y noche en fila",
+    "puerta": 3.01,
     "puerta_real": 2.61,
     "rectangulo": {
      "dormitorios": 1,
-     "esquema": "lado a lado",
-     "fallas": [
-      "acceso",
-      "mínimos",
-      "luz",
-      "frente"
-     ],
+     "esquema": "pasante",
+     "fallas": [],
      "rectangular": false,
-     "resuelve": false,
-     "score": 0,
+     "resuelve": true,
+     "score": 100,
      "sin_uso": 0.0
     },
-    "resuelve": false,
-    "score": 0,
-    "score_libre": 0,
-    "secuencia": "Hall / Cocina | Baño | Estar-Comedor | Dormitorio",
+    "resuelve": true,
+    "score": 100,
+    "score_libre": 100,
+    "secuencia": "Estar-Comedor | Cocina + Pasillo | Baño | Dormitorio",
     "sin_uso": 0.0,
     "zonas": {
      "día": {
-      "ancho": 3.0,
-      "area": 29.49,
-      "fondo": 9.83,
-      "posicion": "pasante"
+      "ancho": 3.52,
+      "area": 17.14,
+      "fondo": 5.38,
+      "posicion": "pasillo"
      },
      "noche": {
-      "ancho": 0.52,
-      "area": 2.34,
-      "fondo": 4.5,
+      "ancho": 3.52,
+      "area": 10.56,
+      "fondo": 3.0,
       "posicion": "fondo"
      },
      "servicios": {
-      "ancho": 0.52,
-      "area": 1.46,
-      "fondo": 2.8,
+      "ancho": 3.52,
+      "area": 6.91,
+      "fondo": 3.45,
       "posicion": "medio"
      }
     }
@@ -8604,9 +8682,10 @@
    "comparable": true,
    "comparacion": {
     "dormitorios_motor": 1,
-    "esquema_igual": false,
+    "esquema_igual": true,
     "fachada": {
      "motor": [
+      "Dormitorio",
       "Estar-Comedor"
      ],
      "real": [
@@ -8616,32 +8695,32 @@
     },
     "por_grupo": {
      "baño": {
-      "motor_area": 1.51,
+      "motor_area": 3.83,
       "motor_n": 1,
       "real_area": 3.89,
       "real_n": 1
      },
      "cocina": {
-      "motor_area": 8.7,
+      "motor_area": 5.28,
       "motor_n": 1,
       "real_area": 3.13,
       "real_n": 1
      },
      "dormitorio": {
-      "motor_area": 2.43,
+      "motor_area": 10.62,
       "motor_n": 1,
       "real_area": 10.14,
       "real_n": 1
      },
      "estar": {
-      "motor_area": 20.76,
+      "motor_area": 11.93,
       "motor_n": 1,
       "real_area": 11.9,
       "real_n": 2
      },
      "pasillo": {
-      "motor_area": 0.0,
-      "motor_n": 0,
+      "motor_area": 3.11,
+      "motor_n": 1,
       "real_area": 1.66,
       "real_n": 1
      }
@@ -8651,6 +8730,7 @@
    "crujia": "pasante",
    "dormitorios": 1,
    "frente_sobre_min": 0.59,
+   "frente_sobre_min_fila": 0.99,
    "marco": {
     "ancho": 3.61,
     "fondo": 9.82,
@@ -8659,110 +8739,100 @@
    },
    "motivo": null,
    "motor": {
-    "avisos": [
-     "Sin acceso desde la entrada: Baño, Dormitorio",
-     "Baño: lado 0.54 m < mínimo 1.20 m",
-     "Baño: 1.5 m² < mínimo 3.0 m²",
-     "Dormitorio sin fachada (sin luz natural)",
-     "Dormitorio: lado 0.54 m < mínimo 2.60 m",
-     "Dormitorio: 2.4 m² < mínimo 8.5 m²",
-     "Frente de 3.5 m insuficiente para estar + 1 dormitorio(s) (mín. 5.6 m)"
-    ],
-    "detalle": "estar: arriba; dormitorios: sin fachada propia",
-    "disposicion": "lado a lado",
+    "avisos": [],
+    "detalle": "estar: abajo; dormitorios: arriba",
+    "disposicion": "en fila",
     "entrada_aceptada": true,
-    "esquema": "en fila",
+    "esquema": "pasante",
     "estancias": [
      {
-      "area": 1.51,
+      "area": 11.93,
+      "grupo": "estar",
+      "kind": "living",
+      "lados": [
+       "abajo"
+      ],
+      "nombre": "Estar-Comedor"
+     },
+     {
+      "area": 5.28,
+      "grupo": "cocina",
+      "kind": "kitchen",
+      "lados": [],
+      "nombre": "Cocina"
+     },
+     {
+      "area": 3.11,
+      "grupo": "pasillo",
+      "kind": "hallway",
+      "lados": [],
+      "nombre": "Pasillo"
+     },
+     {
+      "area": 3.83,
       "grupo": "baño",
       "kind": "bath",
       "lados": [],
       "nombre": "Baño"
      },
      {
-      "area": 2.43,
+      "area": 10.62,
       "grupo": "dormitorio",
       "kind": "bedroom",
-      "lados": [],
-      "nombre": "Dormitorio"
-     },
-     {
-      "area": 8.7,
-      "grupo": "cocina",
-      "kind": "hall",
-      "lados": [
-       "abajo"
-      ],
-      "nombre": "Hall / Cocina"
-     },
-     {
-      "area": 20.76,
-      "grupo": "estar",
-      "kind": "living",
       "lados": [
        "arriba"
       ],
-      "nombre": "Estar-Comedor"
+      "nombre": "Dormitorio"
      }
     ],
     "facade": 3.54,
     "facade_min": 6.04,
-    "fallas": [
-     "acceso",
-     "mínimos",
-     "luz",
-     "frente"
-    ],
+    "fallas": [],
+    "fila": 0,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 6.04,
     "frente_min_convencion": 6.04,
+    "frente_min_fila": 3.6,
     "habitables_con_fachada": [
+     "Dormitorio",
      "Estar-Comedor"
     ],
-    "habitables_sin_fachada": [
-     "Dormitorio"
-    ],
-    "orden": "día de lado a lado, noche al fondo, servicios en el medio; día y noche lado a lado",
-    "puerta": 1.53,
+    "habitables_sin_fachada": [],
+    "orden": "día junto al pasillo, noche al fondo, servicios en el medio; día y noche en fila",
+    "puerta": 0.58,
     "puerta_real": 0.95,
     "rectangulo": {
      "dormitorios": 1,
-     "esquema": "lado a lado",
-     "fallas": [
-      "acceso",
-      "mínimos",
-      "luz",
-      "frente"
-     ],
+     "esquema": "pasante",
+     "fallas": [],
      "rectangular": false,
-     "resuelve": false,
-     "score": 0,
+     "resuelve": true,
+     "score": 100,
      "sin_uso": 0.0
     },
-    "resuelve": false,
-    "score": 0,
-    "score_libre": 0,
-    "secuencia": "Hall / Cocina | Baño | Estar-Comedor | Dormitorio",
+    "resuelve": true,
+    "score": 100,
+    "score_libre": 100,
+    "secuencia": "Estar-Comedor | Cocina + Pasillo | Baño | Dormitorio",
     "sin_uso": 0.0,
     "zonas": {
      "día": {
-      "ancho": 3.0,
-      "area": 29.46,
-      "fondo": 9.82,
-      "posicion": "pasante"
+      "ancho": 3.54,
+      "area": 17.21,
+      "fondo": 5.37,
+      "posicion": "pasillo"
      },
      "noche": {
-      "ancho": 0.54,
-      "area": 2.43,
-      "fondo": 4.5,
+      "ancho": 3.54,
+      "area": 10.62,
+      "fondo": 3.0,
       "posicion": "fondo"
      },
      "servicios": {
-      "ancho": 0.54,
-      "area": 1.51,
-      "fondo": 2.8,
+      "ancho": 3.54,
+      "area": 6.94,
+      "fondo": 3.45,
       "posicion": "medio"
      }
     }
@@ -8910,9 +8980,10 @@
    "comparable": true,
    "comparacion": {
     "dormitorios_motor": 1,
-    "esquema_igual": false,
+    "esquema_igual": true,
     "fachada": {
      "motor": [
+      "Dormitorio",
       "Estar-Comedor"
      ],
      "real": [
@@ -8922,32 +8993,32 @@
     },
     "por_grupo": {
      "baño": {
-      "motor_area": 1.51,
+      "motor_area": 3.83,
       "motor_n": 1,
       "real_area": 3.86,
       "real_n": 1
      },
      "cocina": {
-      "motor_area": 8.7,
+      "motor_area": 5.28,
       "motor_n": 1,
       "real_area": 3.33,
       "real_n": 1
      },
      "dormitorio": {
-      "motor_area": 2.43,
+      "motor_area": 10.62,
       "motor_n": 1,
       "real_area": 10.18,
       "real_n": 1
      },
      "estar": {
-      "motor_area": 20.76,
+      "motor_area": 11.93,
       "motor_n": 1,
       "real_area": 11.67,
       "real_n": 2
      },
      "pasillo": {
-      "motor_area": 0.0,
-      "motor_n": 0,
+      "motor_area": 3.11,
+      "motor_n": 1,
       "real_area": 1.64,
       "real_n": 1
      }
@@ -8957,6 +9028,7 @@
    "crujia": "pasante",
    "dormitorios": 1,
    "frente_sobre_min": 0.59,
+   "frente_sobre_min_fila": 0.99,
    "marco": {
     "ancho": 3.61,
     "fondo": 9.82,
@@ -8965,110 +9037,100 @@
    },
    "motivo": null,
    "motor": {
-    "avisos": [
-     "Sin acceso desde la entrada: Baño, Dormitorio",
-     "Baño: lado 0.54 m < mínimo 1.20 m",
-     "Baño: 1.5 m² < mínimo 3.0 m²",
-     "Dormitorio sin fachada (sin luz natural)",
-     "Dormitorio: lado 0.54 m < mínimo 2.60 m",
-     "Dormitorio: 2.4 m² < mínimo 8.5 m²",
-     "Frente de 3.5 m insuficiente para estar + 1 dormitorio(s) (mín. 5.6 m)"
-    ],
-    "detalle": "estar: arriba; dormitorios: sin fachada propia",
-    "disposicion": "lado a lado",
+    "avisos": [],
+    "detalle": "estar: abajo; dormitorios: arriba",
+    "disposicion": "en fila",
     "entrada_aceptada": true,
-    "esquema": "en fila",
+    "esquema": "pasante",
     "estancias": [
      {
-      "area": 1.51,
+      "area": 11.93,
+      "grupo": "estar",
+      "kind": "living",
+      "lados": [
+       "abajo"
+      ],
+      "nombre": "Estar-Comedor"
+     },
+     {
+      "area": 5.28,
+      "grupo": "cocina",
+      "kind": "kitchen",
+      "lados": [],
+      "nombre": "Cocina"
+     },
+     {
+      "area": 3.11,
+      "grupo": "pasillo",
+      "kind": "hallway",
+      "lados": [],
+      "nombre": "Pasillo"
+     },
+     {
+      "area": 3.83,
       "grupo": "baño",
       "kind": "bath",
       "lados": [],
       "nombre": "Baño"
      },
      {
-      "area": 2.43,
+      "area": 10.62,
       "grupo": "dormitorio",
       "kind": "bedroom",
-      "lados": [],
-      "nombre": "Dormitorio"
-     },
-     {
-      "area": 8.7,
-      "grupo": "cocina",
-      "kind": "hall",
-      "lados": [
-       "abajo"
-      ],
-      "nombre": "Hall / Cocina"
-     },
-     {
-      "area": 20.76,
-      "grupo": "estar",
-      "kind": "living",
       "lados": [
        "arriba"
       ],
-      "nombre": "Estar-Comedor"
+      "nombre": "Dormitorio"
      }
     ],
     "facade": 3.54,
     "facade_min": 6.04,
-    "fallas": [
-     "acceso",
-     "mínimos",
-     "luz",
-     "frente"
-    ],
+    "fallas": [],
+    "fila": 0,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 6.04,
     "frente_min_convencion": 6.04,
+    "frente_min_fila": 3.6,
     "habitables_con_fachada": [
+     "Dormitorio",
      "Estar-Comedor"
     ],
-    "habitables_sin_fachada": [
-     "Dormitorio"
-    ],
-    "orden": "día de lado a lado, noche al fondo, servicios en el medio; día y noche lado a lado",
-    "puerta": 2.87,
+    "habitables_sin_fachada": [],
+    "orden": "día junto al pasillo, noche al fondo, servicios en el medio; día y noche en fila",
+    "puerta": 3.02,
     "puerta_real": 2.85,
     "rectangulo": {
      "dormitorios": 1,
-     "esquema": "lado a lado",
-     "fallas": [
-      "acceso",
-      "mínimos",
-      "luz",
-      "frente"
-     ],
+     "esquema": "pasante",
+     "fallas": [],
      "rectangular": false,
-     "resuelve": false,
-     "score": 0,
+     "resuelve": true,
+     "score": 100,
      "sin_uso": 0.0
     },
-    "resuelve": false,
-    "score": 0,
-    "score_libre": 0,
-    "secuencia": "Hall / Cocina | Baño | Estar-Comedor | Dormitorio",
+    "resuelve": true,
+    "score": 100,
+    "score_libre": 100,
+    "secuencia": "Estar-Comedor | Cocina + Pasillo | Baño | Dormitorio",
     "sin_uso": 0.0,
     "zonas": {
      "día": {
-      "ancho": 3.0,
-      "area": 29.46,
-      "fondo": 9.82,
-      "posicion": "pasante"
+      "ancho": 3.54,
+      "area": 17.21,
+      "fondo": 5.37,
+      "posicion": "pasillo"
      },
      "noche": {
-      "ancho": 0.54,
-      "area": 2.43,
-      "fondo": 4.5,
+      "ancho": 3.54,
+      "area": 10.62,
+      "fondo": 3.0,
       "posicion": "fondo"
      },
      "servicios": {
-      "ancho": 0.54,
-      "area": 1.51,
-      "fondo": 2.8,
+      "ancho": 3.54,
+      "area": 6.94,
+      "fondo": 3.45,
       "posicion": "medio"
      }
     }
@@ -9262,6 +9324,7 @@
    "crujia": "pasante",
    "dormitorios": 0,
    "frente_sobre_min": 0.74,
+   "frente_sobre_min_fila": 0.74,
    "marco": {
     "ancho": 3.59,
     "fondo": 9.83,
@@ -9319,10 +9382,12 @@
     "fallas": [
      "mínimos"
     ],
+    "fila": null,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 4.8,
     "frente_min_convencion": 4.8,
+    "frente_min_fila": 4.8,
     "habitables_con_fachada": [
      "Estar-Dormitorio"
     ],
@@ -9554,6 +9619,7 @@
    "crujia": "pasante",
    "dormitorios": 1,
    "frente_sobre_min": 0.59,
+   "frente_sobre_min_fila": 0.59,
    "marco": {
     "ancho": 9.85,
     "fondo": 8.34,
@@ -9617,10 +9683,12 @@
      "frente",
      "programa"
     ],
+    "fila": null,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 6.04,
     "frente_min_convencion": 6.04,
+    "frente_min_fila": 6.04,
     "habitables_con_fachada": [],
     "habitables_sin_fachada": [
      "Estar-Comedor"
@@ -9857,6 +9925,7 @@
    "crujia": "esquina",
    "dormitorios": 1,
    "frente_sobre_min": 0.58,
+   "frente_sobre_min_fila": 0.58,
    "marco": {
     "ancho": 7.68,
     "fondo": 8.52,
@@ -9912,10 +9981,12 @@
      "frente",
      "programa"
     ],
+    "fila": null,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 6.04,
     "frente_min_convencion": 6.04,
+    "frente_min_fila": 6.04,
     "habitables_con_fachada": [
      "Estar-Comedor"
     ],
@@ -10165,6 +10236,7 @@
    "crujia": "simple",
    "dormitorios": 1,
    "frente_sobre_min": 1.2,
+   "frente_sobre_min_fila": 1.2,
    "marco": {
     "ancho": 7.5,
     "fondo": 5.86,
@@ -10239,10 +10311,12 @@
      "mínimos",
      "frente"
     ],
+    "fila": null,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 6.24,
     "frente_min_convencion": 6.24,
+    "frente_min_fila": 6.24,
     "habitables_con_fachada": [
      "Dormitorio",
      "Estar-Comedor"
@@ -10424,11 +10498,13 @@
    "archivo": "U_MVD_IslaDeFlores_2D_6.05x11.71_01.dxf",
    "comparable": true,
    "comparacion": {
-    "dormitorios_motor": 0,
-    "esquema_igual": false,
+    "dormitorios_motor": 2,
+    "esquema_igual": true,
     "fachada": {
      "motor": [
-      "Estar"
+      "Dormitorio 2",
+      "Dormitorio principal",
+      "Estar-Comedor"
      ],
      "real": [
       "Dormitorio 1",
@@ -10438,38 +10514,38 @@
     },
     "por_grupo": {
      "baño": {
-      "motor_area": 0.0,
-      "motor_n": 0,
+      "motor_area": 3.52,
+      "motor_n": 1,
       "real_area": 4.38,
       "real_n": 1
      },
      "cocina": {
-      "motor_area": 8.7,
+      "motor_area": 4.86,
       "motor_n": 1,
       "real_area": 3.62,
       "real_n": 1
      },
-     "depósito": {
-      "motor_area": 1.23,
-      "motor_n": 1,
-      "real_area": 0.0,
-      "real_n": 0
-     },
      "dormitorio": {
-      "motor_area": 0.0,
-      "motor_n": 0,
+      "motor_area": 9.99,
+      "motor_n": 2,
       "real_area": 14.92,
       "real_n": 2
      },
      "estar": {
-      "motor_area": 26.43,
-      "motor_n": 2,
+      "motor_area": 14.19,
+      "motor_n": 1,
       "real_area": 27.87,
       "real_n": 2
      },
      "estudio": {
       "motor_area": 16.82,
       "motor_n": 1,
+      "real_area": 0.0,
+      "real_n": 0
+     },
+     "pasillo": {
+      "motor_area": 6.43,
+      "motor_n": 2,
       "real_area": 0.0,
       "real_n": 0
      }
@@ -10479,6 +10555,7 @@
    "crujia": "pasante",
    "dormitorios": 2,
    "frente_sobre_min": 0.71,
+   "frente_sobre_min_fila": 1.1,
    "marco": {
     "ancho": 6.05,
     "fondo": 11.71,
@@ -10488,48 +10565,73 @@
    "motivo": null,
    "motor": {
     "avisos": [
-     "Sin acceso desde la entrada: Estudio",
+     "Dormitorio principal: lado 1.82 m < mínimo 2.60 m",
+     "Dormitorio principal: 5.4 m² < mínimo 8.5 m²",
+     "Dormitorio 2: lado 1.51 m < mínimo 2.00 m",
+     "Dormitorio 2: 4.5 m² < mínimo 7.0 m²",
      "Estudio: 8.52 m de profundidad, más de 3 veces su lado menor (2.72 m) (norma nacional, art. 14)",
-     "Frente de 3.3 m insuficiente para estar + 2 dormitorio(s) (mín. 7.6 m)",
-     "Sin baño: toda vivienda lleva uno (norma nacional, art. 17)",
+     "Estar-Comedor: no entra la mesa para 6 (entra una para 4)",
      "Superficie con muros 55.7 m² < mínimo 56 m² para 3 dormitorios (contando el estudio, art. 6) (norma nacional, art. 3)"
     ],
-    "detalle": "estar: arriba; dormitorios: sin fachada propia",
-    "disposicion": "lado a lado",
-    "entrada_aceptada": false,
-    "esquema": "lado a lado",
+    "detalle": "estar: abajo; dormitorios: arriba",
+    "disposicion": "mezcladas",
+    "entrada_aceptada": true,
+    "esquema": "pasante",
     "estancias": [
      {
-      "area": 1.23,
-      "grupo": "depósito",
-      "kind": "storage",
-      "lados": [],
-      "nombre": "Depósito"
-     },
-     {
-      "area": 8.7,
-      "grupo": "cocina",
-      "kind": "hall",
-      "lados": [
-       "abajo"
-      ],
-      "nombre": "Hall / Cocina"
-     },
-     {
-      "area": 9.93,
-      "grupo": "estar",
-      "kind": "dining",
-      "lados": [],
-      "nombre": "Comedor"
-     },
-     {
-      "area": 16.5,
+      "area": 14.19,
       "grupo": "estar",
       "kind": "living",
       "lados": [
+       "abajo"
+      ],
+      "nombre": "Estar-Comedor"
+     },
+     {
+      "area": 4.86,
+      "grupo": "cocina",
+      "kind": "kitchen",
+      "lados": [],
+      "nombre": "Cocina"
+     },
+     {
+      "area": 3.1,
+      "grupo": "pasillo",
+      "kind": "hallway",
+      "lados": [],
+      "nombre": "Pasillo"
+     },
+     {
+      "area": 3.52,
+      "grupo": "baño",
+      "kind": "bath",
+      "lados": [],
+      "nombre": "Baño"
+     },
+     {
+      "area": 3.33,
+      "grupo": "pasillo",
+      "kind": "hallway",
+      "lados": [],
+      "nombre": "Pasillo"
+     },
+     {
+      "area": 5.45,
+      "grupo": "dormitorio",
+      "kind": "bedroom",
+      "lados": [
        "arriba"
       ],
-      "nombre": "Estar"
+      "nombre": "Dormitorio principal"
+     },
+     {
+      "area": 4.54,
+      "grupo": "dormitorio",
+      "kind": "bedroom",
+      "lados": [
+       "arriba"
+      ],
+      "nombre": "Dormitorio 2"
      },
      {
       "area": 16.82,
@@ -10544,60 +10646,61 @@
     "facade": 3.33,
     "facade_min": 8.54,
     "fallas": [
-     "acceso",
+     "mínimos",
      "art. 14",
-     "frente",
-     "programa",
-     "mínimos"
+     "equipamiento"
     ],
+    "fila": 0,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 8.54,
     "frente_min_convencion": 8.54,
+    "frente_min_fila": 5.5,
     "habitables_con_fachada": [
-     "Estar"
+     "Dormitorio 2",
+     "Dormitorio principal",
+     "Estar-Comedor"
     ],
-    "habitables_sin_fachada": [
-     "Comedor"
-    ],
-    "orden": "día de lado a lado, noche al fondo, servicios junto al pasillo; día y noche lado a lado",
-    "puerta": 1.5,
+    "habitables_sin_fachada": [],
+    "orden": "día junto al pasillo, noche al fondo, servicios en el medio; día y noche mezcladas",
+    "puerta": 2.83,
     "puerta_real": 3.33,
     "rectangulo": {
      "dormitorios": 2,
      "esquema": "lado a lado",
      "fallas": [
       "mínimos",
-      "frente"
+      "frente",
+      "entrada"
      ],
      "rectangular": false,
      "resuelve": false,
-     "score": 17,
+     "score": 14,
      "sin_uso": 0.0
     },
     "resuelve": false,
-    "score": 0,
-    "score_libre": 0,
-    "secuencia": "Hall / Cocina + Depósito | Comedor | Estudio | Estar",
+    "score": 12,
+    "score_libre": 12,
+    "secuencia": "Estar-Comedor | Cocina + Pasillo | Baño + Estudio | Pasillo | Dormitorio principal + Dormitorio 2",
     "sin_uso": 0.0,
     "zonas": {
      "día": {
-      "ancho": 3.0,
-      "area": 35.13,
-      "fondo": 11.71,
-      "posicion": "pasante"
+      "ancho": 3.33,
+      "area": 19.05,
+      "fondo": 6.26,
+      "posicion": "pasillo"
      },
      "noche": {
-      "ancho": 2.73,
-      "area": 16.82,
+      "ancho": 6.05,
+      "area": 26.81,
       "fondo": 8.53,
       "posicion": "fondo"
      },
      "servicios": {
-      "ancho": 0.8,
-      "area": 1.23,
-      "fondo": 3.41,
-      "posicion": "pasillo"
+      "ancho": 3.33,
+      "area": 9.95,
+      "fondo": 4.45,
+      "posicion": "medio"
      }
     }
    },
@@ -10795,6 +10898,7 @@
    "crujia": "pasante",
    "dormitorios": 0,
    "frente_sobre_min": 0.69,
+   "frente_sobre_min_fila": 0.69,
    "marco": {
     "ancho": 6.06,
     "fondo": 9.98,
@@ -10859,10 +10963,12 @@
      "mínimos",
      "luz"
     ],
+    "fila": null,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 4.8,
     "frente_min_convencion": 4.8,
+    "frente_min_fila": 4.8,
     "habitables_con_fachada": [
      "Estar-Dormitorio"
     ],
@@ -11087,6 +11193,7 @@
    "crujia": "doble",
    "dormitorios": 1,
    "frente_sobre_min": 0.62,
+   "frente_sobre_min_fila": 0.62,
    "marco": {
     "ancho": 11.51,
     "fondo": 3.72,
@@ -11164,10 +11271,12 @@
      "equipamiento",
      "fondo"
     ],
+    "fila": null,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 9.0,
     "frente_min_convencion": 6.04,
+    "frente_min_fila": 6.04,
     "habitables_con_fachada": [
      "Dormitorio",
      "Estar-Comedor"
@@ -11396,6 +11505,7 @@
    "crujia": "doble",
    "dormitorios": 1,
    "frente_sobre_min": 0.65,
+   "frente_sobre_min_fila": 0.65,
    "marco": {
     "ancho": 11.51,
     "fondo": 3.93,
@@ -11438,10 +11548,12 @@
      "programa",
      "mínimos"
     ],
+    "fila": null,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 9.0,
     "frente_min_convencion": 6.04,
+    "frente_min_fila": 6.04,
     "habitables_con_fachada": [],
     "habitables_sin_fachada": [],
     "orden": "noche de lado a lado",
@@ -11667,6 +11779,7 @@
    "crujia": "doble",
    "dormitorios": 1,
    "frente_sobre_min": 0.81,
+   "frente_sobre_min_fila": 0.81,
    "marco": {
     "ancho": 15.92,
     "fondo": 4.89,
@@ -11730,10 +11843,12 @@
      "frente",
      "programa"
     ],
+    "fila": null,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 8.8,
     "frente_min_convencion": 6.04,
+    "frente_min_fila": 6.04,
     "habitables_con_fachada": [],
     "habitables_sin_fachada": [
      "Estar-Comedor"
@@ -12018,6 +12133,7 @@
    "crujia": "simple",
    "dormitorios": 2,
    "frente_sobre_min": 1.0,
+   "frente_sobre_min_fila": 1.0,
    "marco": {
     "ancho": 8.52,
     "fondo": 7.17,
@@ -12098,10 +12214,12 @@
     "facade": 8.52,
     "facade_min": 8.54,
     "fallas": [],
+    "fila": null,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 8.54,
     "frente_min_convencion": 8.54,
+    "frente_min_fila": 8.54,
     "habitables_con_fachada": [
      "Dormitorio 2",
      "Dormitorio principal",
@@ -12373,6 +12491,7 @@
    "crujia": "simple",
    "dormitorios": 2,
    "frente_sobre_min": 1.0,
+   "frente_sobre_min_fila": 1.0,
    "marco": {
     "ancho": 8.53,
     "fondo": 7.4,
@@ -12464,10 +12583,12 @@
      "mínimos",
      "frente"
     ],
+    "fila": null,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 8.54,
     "frente_min_convencion": 8.54,
+    "frente_min_fila": 8.54,
     "habitables_con_fachada": [
      "Dormitorio 2",
      "Dormitorio principal",
@@ -12724,6 +12845,7 @@
    "crujia": "esquina",
    "dormitorios": 2,
    "frente_sobre_min": 1.01,
+   "frente_sobre_min_fila": 1.01,
    "marco": {
     "ancho": 8.62,
     "fondo": 7.16,
@@ -12807,10 +12929,12 @@
     "facade": 8.62,
     "facade_min": 8.54,
     "fallas": [],
+    "fila": 1,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 8.54,
     "frente_min_convencion": 8.54,
+    "frente_min_fila": 8.54,
     "habitables_con_fachada": [
      "Dormitorio 2",
      "Dormitorio principal",
@@ -13097,6 +13221,7 @@
    "crujia": "esquina",
    "dormitorios": 2,
    "frente_sobre_min": 1.01,
+   "frente_sobre_min_fila": 1.01,
    "marco": {
     "ancho": 8.63,
     "fondo": 7.42,
@@ -13188,10 +13313,12 @@
      "mínimos",
      "frente"
     ],
+    "fila": -1,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 8.54,
     "frente_min_convencion": 8.54,
+    "frente_min_fila": 8.54,
     "habitables_con_fachada": [
      "Dormitorio 2",
      "Dormitorio principal",
@@ -13445,6 +13572,7 @@
    "crujia": "simple",
    "dormitorios": 0,
    "frente_sobre_min": 0.93,
+   "frente_sobre_min_fila": 0.93,
    "marco": {
     "ancho": 4.44,
     "fondo": 6.45,
@@ -13499,10 +13627,12 @@
      "equipamiento",
      "superficie"
     ],
+    "fila": null,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 4.8,
     "frente_min_convencion": 4.8,
+    "frente_min_fila": 4.8,
     "habitables_con_fachada": [
      "Estar-Dormitorio"
     ],
@@ -13649,6 +13779,7 @@
    "crujia": "duplex",
    "dormitorios": 1,
    "frente_sobre_min": 0.54,
+   "frente_sobre_min_fila": 0.54,
    "marco": {
     "ancho": 6.89,
     "fondo": 3.27,
@@ -13658,10 +13789,12 @@
    "motivo": "dúplex: el motor hace un solo nivel",
    "motor": {
     "facade_min": 6.04,
+    "fila": null,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 9.0,
-    "frente_min_convencion": 6.04
+    "frente_min_convencion": 6.04,
+    "frente_min_fila": 6.04
    },
    "nivel": 1,
    "precision": "alta",
@@ -13763,6 +13896,7 @@
    "crujia": "duplex",
    "dormitorios": 1,
    "frente_sobre_min": 0.54,
+   "frente_sobre_min_fila": 0.91,
    "marco": {
     "ancho": 3.27,
     "fondo": 9.24,
@@ -13772,10 +13906,12 @@
    "motivo": "dúplex: el motor hace un solo nivel",
    "motor": {
     "facade_min": 6.04,
+    "fila": 0,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 6.04,
-    "frente_min_convencion": 6.04
+    "frente_min_convencion": 6.04,
+    "frente_min_fila": 3.6
    },
    "nivel": 2,
    "precision": "alta",
@@ -13944,6 +14080,7 @@
    "crujia": "simple",
    "dormitorios": 1,
    "frente_sobre_min": 0.96,
+   "frente_sobre_min_fila": 0.96,
    "marco": {
     "ancho": 5.79,
     "fondo": 9.43,
@@ -13998,10 +14135,12 @@
      "frente",
      "programa"
     ],
+    "fila": null,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 6.04,
     "frente_min_convencion": 6.04,
+    "frente_min_fila": 6.04,
     "habitables_con_fachada": [
      "Estar-Comedor"
     ],
@@ -14217,6 +14356,7 @@
    "crujia": "simple",
    "dormitorios": 1,
    "frente_sobre_min": 0.96,
+   "frente_sobre_min_fila": 0.96,
    "marco": {
     "ancho": 8.09,
     "fondo": 6.94,
@@ -14289,10 +14429,12 @@
      "luz",
      "frente"
     ],
+    "fila": null,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 6.04,
     "frente_min_convencion": 6.04,
+    "frente_min_fila": 6.04,
     "habitables_con_fachada": [
      "Estar-Comedor"
     ],
@@ -14461,6 +14603,7 @@
    "crujia": "duplex",
    "dormitorios": 2,
    "frente_sobre_min": 0.68,
+   "frente_sobre_min_fila": 0.68,
    "marco": {
     "ancho": 6.89,
     "fondo": 6.94,
@@ -14470,10 +14613,12 @@
    "motivo": "dúplex: el motor hace un solo nivel",
    "motor": {
     "facade_min": 8.54,
+    "fila": null,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 8.54,
-    "frente_min_convencion": 8.54
+    "frente_min_convencion": 8.54,
+    "frente_min_fila": 8.54
    },
    "nivel": 1,
    "precision": "alta",
@@ -14607,6 +14752,7 @@
    "crujia": "duplex",
    "dormitorios": 2,
    "frente_sobre_min": 0.68,
+   "frente_sobre_min_fila": 0.68,
    "marco": {
     "ancho": 5.8,
     "fondo": 6.94,
@@ -14616,10 +14762,12 @@
    "motivo": "dúplex: el motor hace un solo nivel",
    "motor": {
     "facade_min": 8.54,
+    "fila": 0,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 8.54,
-    "frente_min_convencion": 8.54
+    "frente_min_convencion": 8.54,
+    "frente_min_fila": 8.54
    },
    "nivel": 2,
    "precision": "alta",
@@ -14798,6 +14946,7 @@
    "crujia": "esquina",
    "dormitorios": 2,
    "frente_sobre_min": 1.01,
+   "frente_sobre_min_fila": 1.01,
    "marco": {
     "ancho": 8.62,
     "fondo": 8.09,
@@ -14885,10 +15034,12 @@
      "luz",
      "frente"
     ],
+    "fila": null,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 8.54,
     "frente_min_convencion": 8.54,
+    "frente_min_fila": 8.54,
     "habitables_con_fachada": [
      "Dormitorio 2",
      "Dormitorio principal",
@@ -15092,6 +15243,7 @@
    "crujia": "duplex",
    "dormitorios": 3,
    "frente_sobre_min": 0.52,
+   "frente_sobre_min_fila": 0.52,
    "marco": {
     "ancho": 5.79,
     "fondo": 9.43,
@@ -15101,10 +15253,12 @@
    "motivo": "dúplex: el motor hace un solo nivel",
    "motor": {
     "facade_min": 11.04,
+    "fila": null,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 11.04,
-    "frente_min_convencion": 11.04
+    "frente_min_convencion": 11.04,
+    "frente_min_fila": 11.04
    },
    "nivel": 1,
    "precision": "alta",
@@ -15250,6 +15404,7 @@
    "crujia": "duplex",
    "dormitorios": 3,
    "frente_sobre_min": 0.52,
+   "frente_sobre_min_fila": 0.52,
    "marco": {
     "ancho": 5.79,
     "fondo": 9.43,
@@ -15259,10 +15414,12 @@
    "motivo": "dúplex: el motor hace un solo nivel",
    "motor": {
     "facade_min": 11.04,
+    "fila": null,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 11.04,
-    "frente_min_convencion": 11.04
+    "frente_min_convencion": 11.04,
+    "frente_min_fila": 11.04
    },
    "nivel": 2,
    "precision": "alta",
@@ -15378,6 +15535,7 @@
    "crujia": "duplex",
    "dormitorios": 3,
    "frente_sobre_min": 0.53,
+   "frente_sobre_min_fila": 0.53,
    "marco": {
     "ancho": 5.8,
     "fondo": 6.94,
@@ -15387,10 +15545,12 @@
    "motivo": "dúplex: el motor hace un solo nivel",
    "motor": {
     "facade_min": 11.04,
+    "fila": null,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 11.04,
-    "frente_min_convencion": 11.04
+    "frente_min_convencion": 11.04,
+    "frente_min_fila": 11.04
    },
    "nivel": 1,
    "precision": "alta",
@@ -15507,6 +15667,7 @@
    "crujia": "duplex",
    "dormitorios": 3,
    "frente_sobre_min": 0.53,
+   "frente_sobre_min_fila": 0.53,
    "marco": {
     "ancho": 5.8,
     "fondo": 6.94,
@@ -15516,10 +15677,12 @@
    "motivo": "dúplex: el motor hace un solo nivel",
    "motor": {
     "facade_min": 11.04,
+    "fila": 0,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 11.04,
-    "frente_min_convencion": 11.04
+    "frente_min_convencion": 11.04,
+    "frente_min_fila": 11.04
    },
    "nivel": 2,
    "precision": "alta",
@@ -15650,6 +15813,7 @@
    "crujia": "duplex",
    "dormitorios": 3,
    "frente_sobre_min": 0.78,
+   "frente_sobre_min_fila": 0.78,
    "marco": {
     "ancho": 5.61,
     "fondo": 8.62,
@@ -15659,10 +15823,12 @@
    "motivo": "dúplex: el motor hace un solo nivel",
    "motor": {
     "facade_min": 11.04,
+    "fila": -1,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 11.04,
-    "frente_min_convencion": 11.04
+    "frente_min_convencion": 11.04,
+    "frente_min_fila": 11.04
    },
    "nivel": 1,
    "precision": "alta",
@@ -15811,6 +15977,7 @@
    "crujia": "duplex",
    "dormitorios": 3,
    "frente_sobre_min": 0.78,
+   "frente_sobre_min_fila": 0.78,
    "marco": {
     "ancho": 8.62,
     "fondo": 5.81,
@@ -15820,10 +15987,12 @@
    "motivo": "dúplex: el motor hace un solo nivel",
    "motor": {
     "facade_min": 11.04,
+    "fila": 1,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 11.24,
-    "frente_min_convencion": 11.04
+    "frente_min_convencion": 11.04,
+    "frente_min_fila": 11.04
    },
    "nivel": 2,
    "precision": "alta",
@@ -16009,6 +16178,7 @@
    "crujia": "pasante",
    "dormitorios": 0,
    "frente_sobre_min": 0.68,
+   "frente_sobre_min_fila": 0.68,
    "marco": {
     "ancho": 9.29,
     "fondo": 3.27,
@@ -16069,10 +16239,12 @@
      "mínimos",
      "superficie"
     ],
+    "fila": null,
     "fondo_min": 4.0,
     "fondo_sin_tira": 9.25,
     "frente_min": 6.19,
     "frente_min_convencion": 4.8,
+    "frente_min_fila": 4.8,
     "habitables_con_fachada": [
      "Estar-Dormitorio"
     ],
