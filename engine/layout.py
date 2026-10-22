@@ -24,7 +24,7 @@ from .units import (_bisect_x, _chain_union, _is_rect, _segments, generate_unit_
                     superficie_con_muros)  # noqa: F401
 from .patios import (auto_patios, _anillo, split_blocks, make_patio_dark, _block_of, _block_of_line)  # noqa: F401
 
-VERSION = "2.59"
+VERSION = "2.60"
 
 DEFAULT_PARAMS = {
     # Masa
@@ -36,7 +36,7 @@ DEFAULT_PARAMS = {
     "centerlines": None,        # lista de polilíneas [[[x,y],...],...] en coordenadas de mundo; None = automático
     "cores_mode": "auto",       # auto | manual
     "cores": None,              # núcleos manuales: [x, y] o {"p": [x, y], "frente", "fondo", "giro": 0|90} (mundo; se ajustan al pasillo)
-    "corridor_width": 2.0,
+    "corridor_width": 1.5,      # R5.16 (v2.60): la mediana de la base de tipologías es 1,50 m; el art. 35 pide 1,2 / 1,4 / 1,6 según las viviendas
     "anchos_pasillo": None,     # R10.8: ancho propio de algunos tramos: [{"p": [x,y] | "seg": [[x,y],[x,y]], "ancho": m}]
     "core_width": 5.0,
     "core_depth": 7.0,          # incluye el pasillo (como en Finch)
@@ -48,9 +48,9 @@ DEFAULT_PARAMS = {
     # Mix
     "unit_mix": [{"name": "2 dorm", "area": 75, "percent": 50, "dorms": 2},
                  {"name": "3 dorm", "area": 95, "percent": 50, "dorms": 3}],
-    "min_unit_width": 5.0,
+    "min_unit_width": 3.5,      # R5.16 (v2.60): la base de tipologías llega a 3,20 m; 14 de 44 viviendas miden menos de 5 m
     "party_wall": 0.30,
-    "max_unit_depth": 14.0,
+    "max_unit_depth": 16.0,     # R5.16 (v2.60): la base de tipologías llega a 15,9 m
     "unit_width_target_min": 4.0,
     "loading": "auto",          # auto | double | single (pasillo central o pasillo de borde)
     "core_auto": True,          # núcleo dimensionado a partir de escalera + ascensores (standards)
@@ -268,7 +268,7 @@ def generate(data):
     params["_core_90"] = tam(n_elev, 90)                   # núcleo girado (R3.5)
     params["_partes_nucleo"] = lambda box, side, cw_: PR.core_parts(box, side, cw_, S["nucleo"], floor_h, n_elev)
     otra_pasada = lambda n: generate(dict(data, params=dict(data.get("params") or {}, _ascensores=n)))
-    sw_, sl_, risers_ = ST.stair_box(S["nucleo"], floor_h)
+    sw_, sl_, risers_ = ST.stair_box(S["nucleo"], floor_h, n_elev > 0)
     stype = ("común" if top_h <= 12 else "protegida (EP)" if top_h <= 30 else "presurizada (PFP)")
     core_m = {"elevators": n_elev, "width": params["core_width"],
               "depth": round(params["core_depth"] - cw, 2), "stair_type": stype,

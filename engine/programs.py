@@ -30,8 +30,8 @@ def core_parts(box, side, cw, S, floor_h, n_elev, giro=0):
         return [f(u0, v0), f(u1, v1)]
 
     parts = []
-    sw, sl, risers = ST.stair_box(S, floor_h)
-    m, n, ojo, h = S["muro"], S["escalera_ancho"], S["ojo"], S["huella"]
+    sw, sl, risers = ST.stair_box(S, floor_h, n_elev > 0)
+    m, n, ojo, h = S["muro"], ST.ancho_escalera(S, n_elev > 0), S["ojo"], S["huella"]
     gira = giro == 90
     sl_eff = min(sl, Wc if gira else Dc)
     # escalera en coordenadas (a = a lo largo de los tramos, b = a través): con giro 90, a = u; si no, a = v

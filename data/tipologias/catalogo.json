@@ -10237,7 +10237,7 @@
       "min": 1.208,
       "n": 68
      },
-     "motor": 2.0,
+     "motor": 1.5,
      "norma": [
       1.2,
       1.4,
@@ -10247,13 +10247,13 @@
     "fondo_maximo": {
      "clave": "max_unit_depth",
      "medida": 15.92,
-     "motor": 14.0
+     "motor": 16.0
     },
     "frente_minimo": {
-     "bajo_el_minimo": 14,
+     "bajo_el_minimo": 4,
      "clave": "min_unit_width",
      "medida": 3.2,
-     "motor": 5.0,
+     "motor": 3.5,
      "viviendas": 44
     },
     "nucleo": {
@@ -10265,26 +10265,26 @@
      "motor": {
       "ascensores": 1,
       "giro_0": {
-       "area_con_palier": 27.36,
-       "area_sin_palier": 23.46,
+       "area_con_palier": 23.33,
+       "area_sin_palier": 19.5,
        "caja_con_palier": [
-        5.45,
-        5.02
+        5.05,
+        4.62
        ],
        "caja_sin_palier": [
-        5.3,
-        5.02
+        4.9,
+        4.62
        ]
       },
       "giro_90": {
-       "area_con_palier": 27.61,
-       "area_sin_palier": 19.63,
+       "area_con_palier": 26.17,
+       "area_sin_palier": 16.66,
        "caja_con_palier": [
-        7.67,
+        7.27,
         3.6
        ],
        "caja_sin_palier": [
-        7.52,
+        7.12,
         3.6
        ]
       }
@@ -11456,7 +11456,7 @@
    "n": 44
   }
  },
- "version": "2.59",
+ "version": "2.60",
  "viviendas": [
   {
    "anio": 2025,

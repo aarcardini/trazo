@@ -1,4 +1,4 @@
-# Base de tipologías — resumen (Trazo v2.59)
+# Base de tipologías — resumen (Trazo v2.60)
 
 Se leyeron 67 archivos de `data/tipologias/`: 49 viviendas (44 distintas: las de varios niveles cuentan una vez, con la suma de sus niveles) y 18 plantas enteras. Las superficies son m² con muros (el contorno de la vivienda por el eje de los muros divisorios y la cara exterior de la fachada) y las medidas, metros; cada celda con rango da la mediana y, entre paréntesis, el mínimo y el máximo. El ancho y el fondo de una estancia son los de su caja alineada con los ejes del dibujo (ancho a lo largo de la fachada), de las estancias rectangulares.
 
@@ -117,17 +117,17 @@ Parámetros por defecto de `engine/layout.py`. El núcleo del motor es el de un 
 
 | Medida | Motor | Base de tipologías |
 |---|---|---|
-| Ancho del pasillo común (m) | 2,0 (`corridor_width`); norma 1,2 / 1,4 / 1,6 | 1,50 (1,21–2,18) |
-| Núcleo del motor sin palier (escalera + ascensor + ductos), superficie (m²) | 23,5 con giro 0; 19,6 con giro 90 | 13,7 |
-| Núcleo del motor con palier (`core_size`), superficie (m²) | 27,4 con giro 0; 27,6 con giro 90 | — (el palier está en `Trazo_Pasillo`) |
-| Caja del núcleo sin palier (m) | 5,3 × 5,0 con giro 0; 7,5 × 3,6 con giro 90 | 6,1 × 3,3 (lado mayor × lado menor) |
-| Frente mínimo de la vivienda (m) | 5,0 (`min_unit_width`) | 3,20; 14 de 44 viviendas están por debajo |
-| Fondo máximo de la vivienda (m) | 14,0 (`max_unit_depth`) | 15,92 |
+| Ancho del pasillo común (m) | 1,5 (`corridor_width`); norma 1,2 / 1,4 / 1,6 | 1,50 (1,21–2,18) |
+| Núcleo del motor sin palier (escalera + ascensor + ductos), superficie (m²) | 19,5 con giro 0; 16,7 con giro 90 | 13,7 |
+| Núcleo del motor con palier (`core_size`), superficie (m²) | 23,3 con giro 0; 26,2 con giro 90 | — (el palier está en `Trazo_Pasillo`) |
+| Caja del núcleo sin palier (m) | 4,9 × 4,6 con giro 0; 7,1 × 3,6 con giro 90 | 6,1 × 3,3 (lado mayor × lado menor) |
+| Frente mínimo de la vivienda (m) | 3,5 (`min_unit_width`) | 3,20; 4 de 44 viviendas están por debajo |
+| Fondo máximo de la vivienda (m) | 16,0 (`max_unit_depth`) | 15,92 |
 | Viviendas por núcleo | — | 3,5 (1,0–8,0) |
 | Circulación (%) | — | 12,0 (8,4–22,8) |
 | Eficiencia (%) | — | 74,3 (18,9–88,6) |
 
-Sobre el núcleo: `Trazo_Nucleos` es escalera + ascensores + ductos y el palier de los ascensores va en `Trazo_Pasillo`, así que la circulación medida (12 %) sí incluye el palier y el núcleo del motor se compara sin él. La base pone la escalera a lo largo del pasillo, como el giro 90 del motor: su caja (6,1 × 3,3) se parece más a la del giro 90 (7,5 × 3,6) que a la del giro 0 (5,3 × 5,0).
+Sobre el núcleo: `Trazo_Nucleos` es escalera + ascensores + ductos y el palier de los ascensores va en `Trazo_Pasillo`, así que la circulación medida (12 %) sí incluye el palier y el núcleo del motor se compara sin él. La base pone la escalera a lo largo del pasillo, como el giro 90 del motor: su caja (6,1 × 3,3) se parece más a la del giro 90 (7,1 × 3,6) que a la del giro 0 (4,9 × 4,6).
 
 ---
 

@@ -1,7 +1,7 @@
 {
  "ejemplo": "samples/masterplan/predio_irregular.json",
  "nombre": "Predio irregular con calle en T",
- "version_motor": "2.42",
+ "version_motor": "2.60",
  "metricas": {
   "manzanas": 3,
   "lotes": 64,
