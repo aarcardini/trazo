@@ -72,6 +72,20 @@ Las unidades del archivo de Rhino (mm, cm o m) se convierten solas: Trazo trabaj
 
 Desde entonces basta con escribir `trazo` en Rhino.
 
+### 5. Ver la planta en el teléfono (opcional)
+
+Trazo corre en la computadora; el teléfono solo mira. Con la computadora encendida y los dos en la misma red Wi-Fi, arrancá el servidor abierto a la red:
+
+```bash
+TRAZO_HOST=0.0.0.0 python3 server.py        # Mac
+```
+```bat
+set TRAZO_HOST=0.0.0.0
+python server.py                            # Windows
+```
+
+La consola muestra la dirección para el teléfono (por ejemplo `http://192.168.1.20:8765`): abrila en Safari o Chrome. El resultado es el mismo que en la computadora, con la planta, la axonometría y las fichas; dibujar con el dedo todavía no está preparado (R4.14 del roadmap). Mientras el servidor está abierto, cualquiera en esa red puede usar Trazo; cerralo con Ctrl+C al terminar. Si el sistema pregunta si deja que Python acepte conexiones, aceptá. Rhino sigue funcionando igual, con `127.0.0.1`.
+
 ## Uso
 1. Arranca Trazo (ver «Instalación», paso 3) y abre http://127.0.0.1:8765
 2. En Rhino 8: comando `_RunPythonScript` y elige `rhino/trazo_rhino.py` (o el alias `trazo`).
@@ -176,6 +190,9 @@ Si algo falla en Rhino, ejecuta el script y elige **Diagnostico**. Si no se resu
 - **Pasillo y núcleos**: eje (automático o dibujado), ancho de pasillo, núcleos (ancho, fondo incluyendo pasillo, cantidad), distancias de evacuación (salida única / múltiple) y núcleos extra automáticos.
 - **Mix**: tipos con m² objetivo y %, ancho mínimo, muro medianero; métricas Match Score, Fit y Unidades únicas.
 - **Planos**: distribución día/noche con pasillo interno, puertas y grafo de conexiones verificado.
+
+## Novedades v2.63
+- **Ver la planta en el teléfono (R4.14a).** `TRAZO_HOST=0.0.0.0 python server.py` abre el servidor a la red local y la consola muestra la dirección para abrir Trazo desde el teléfono en la misma red Wi-Fi (sección «5. Ver la planta en el teléfono»); sin esa variable, todo sigue como antes, solo en la computadora. `server.direcciones(host, port)` da las direcciones; `test_servidor_en_red`. No cambia el motor ni la web.
 
 ## Novedades v2.62
 - **Reparto del mix por el frente que pide el plano (R5.16b, primera parte).** Hasta ahora el reparto elegía cuántas viviendas entran en cada franja por superficie y cortaba cada una con el ancho que daba su objetivo con el fondo de la franja: un 1 dorm. de 42 m² en una franja de 7,75 m de fondo salía de 5,4 m de frente, cuando el estar y el dormitorio en fachada piden 6,62 m, y en las franjas de 16 m de los pasillos dibujados en T o en X aparecían monoambientes de 1,6 m. Ahora **cada vivienda recibe al menos el frente que pide su plano** (`plans.frente_min`): el estar y los dormitorios en la fachada (`facade_min`); en una franja poco profunda, sin franja de servicios (menos de 5,8 m), el hall, el baño y la cocina con su heladera en fila junto al pasillo común (un 1 dorm. pide 8,3 m en 5,75 m de fondo); y el monoambiente, el hall con su lado mínimo, el baño con su ducha y la cocina con su heladera (4,8 m). Su ancho es el mayor entre ese frente y el de su superficie objetivo con el fondo que el plano aprovecha entero (`fondo_sin_tira`, 9,25 m: en una franja más profunda, el plano deja la tira sin uso y avisa); si el frente manda, la vivienda queda más grande que su objetivo (lo muestra el «fit» del mix), nunca más angosta. La cantidad de viviendas sigue siendo la que mejor ajusta las superficies (la de la superficie media, una más o una menos), pero entre las que caben con sus frentes, y los tipos siguen saliendo por los porcentajes del mix con el estado compartido entre tramos; un tipo que en esa franja, con su frente mínimo y el fondo entero, pasaría de **1,35 veces su superficie objetivo** no es apto para la franja (se prefiere a los aptos; si ninguno lo es, como en una franja de 16 m, va el que menos se pasa). Si aun así alguna vivienda pasa de 1,35 veces su objetivo (una franja corta donde el tipo que toca queda solo), se prueba cambiarla por un tipo más grande que quepa o meter una vivienda más con un tipo que quepa, y se toma lo que ajusta mejor. Los tabiques (`party_wall`) se descuentan del frente de cada vivienda.

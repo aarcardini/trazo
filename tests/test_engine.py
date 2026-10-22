@@ -90,6 +90,26 @@ def test_U_T_and_diagonal():
     D = [[0,0],[50,0],[58,12],[8,12]]
     r = run(D); assert r["units"]
 
+
+def test_servidor_en_red():
+    """R4.14a (v2.63): con TRAZO_HOST=0.0.0.0 el servidor se abre a la red local y la consola muestra la dirección para
+    el teléfono; sin la variable, solo 127.0.0.1. `server.direcciones` arma esa lista sin abrir ningún puerto."""
+    import importlib.util, re
+    ruta = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "server.py")
+    src = open(ruta, encoding="utf-8").read()
+    assert 'os.environ.get("TRAZO_HOST", "127.0.0.1")' in src and "ThreadingHTTPServer((host, port), H)" in src
+    spec = importlib.util.spec_from_file_location("trazo_server_prueba", ruta)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)                      # no arranca el servidor: eso está bajo __main__
+    assert mod.direcciones("127.0.0.1", 8765) == ["http://127.0.0.1:8765"]
+    assert mod.direcciones("192.168.1.20", 8766) == ["http://192.168.1.20:8766"]
+    abiertas = mod.direcciones("0.0.0.0", 8765)
+    assert abiertas[0] == "http://127.0.0.1:8765" and len(abiertas) == len(set(abiertas))
+    for u in abiertas[1:]:
+        assert re.fullmatch(r"http://\d+\.\d+\.\d+\.\d+:8765", u) and not u.startswith("http://127."), u
+    readme = open(os.path.join(os.path.dirname(ruta), "README.md"), encoding="utf-8").read()
+    assert "TRAZO_HOST=0.0.0.0" in readme and "Ver la planta en el teléfono" in readme
+
 if __name__ == "__main__":
     test_bar(); test_L(); test_L_serves_most(); test_U_T_and_diagonal(); print("OK")
 
@@ -6052,3 +6072,4 @@ def test_reparto_frente():
 
 if __name__ == "__main__":
     test_reparto_frente(); print("OK78")
+    test_servidor_en_red(); print("OK79")

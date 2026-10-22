@@ -2,6 +2,7 @@
 """Servidor local: sirve la interfaz web y la API. Sin dependencias externas.
 
     python server.py            ->  http://127.0.0.1:8765
+    TRAZO_HOST=0.0.0.0 python server.py   ->  además, desde el teléfono en la misma red Wi-Fi (R4.14a)
 """
 import json, os, re, sys, time, threading, unicodedata
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -247,10 +248,43 @@ class H(BaseHTTPRequestHandler):
         self._send(404, {"error": "no encontrado"})
 
 
+def direcciones(host, port):
+    """Las direcciones donde se abre Trazo (R4.14a): con 127.0.0.1, solo esta máquina; con 0.0.0.0 también las de la
+    red local (la de la interfaz que sale a la red y las del nombre de la máquina), para abrirlo desde el teléfono."""
+    if host not in ("0.0.0.0", ""):
+        return ["http://%s:%d" % (host, port)]
+    import socket
+    ips = []
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("10.255.255.255", 1))          # no manda nada: solo elige la interfaz que sale a la red
+        ips.append(s.getsockname()[0])
+        s.close()
+    except OSError:
+        pass
+    try:
+        ips += socket.gethostbyname_ex(socket.gethostname())[2]
+    except OSError:
+        pass
+    vistas, out = set(), ["http://127.0.0.1:%d" % port]
+    for ip in ips:
+        if ip.startswith("127.") or ip in vistas:
+            continue
+        vistas.add(ip)
+        out.append("http://%s:%d" % (ip, port))
+    return out
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("TRAZO_PORT", "8765"))
-    srv = ThreadingHTTPServer(("127.0.0.1", port), H)
-    print("Trazo v%s en http://127.0.0.1:%d  (Ctrl+C para salir)" % (_layout.VERSION, port))
+    host = os.environ.get("TRAZO_HOST", "127.0.0.1")
+    srv = ThreadingHTTPServer((host, port), H)
+    urls = direcciones(host, port)
+    print("Trazo v%s en %s  (Ctrl+C para salir)" % (_layout.VERSION, urls[0]))
+    for u in urls[1:]:
+        print("  desde el teléfono, en la misma red Wi-Fi: %s" % u)
+    if host in ("0.0.0.0", "") and len(urls) == 1:
+        print("  (abierto a la red, pero no se encontró la dirección de esta máquina: mirá la configuración de red)")
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
