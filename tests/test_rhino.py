@@ -292,7 +292,9 @@ LOTE = [[0, 0], [10, 0], [10, 40], [0, 40]]
 def resultado_de_prueba(alto=3):
     """En el servidor, una masa de Rhino y su resultado: lote 10 × 40 entre medianeras (un nivel cada 3 m), con patio."""
     meds = [{"a": [10, 0], "b": [10, 40], "retiro": 0}, {"a": [0, 40], "b": [0, 0], "retiro": 0}]
-    res = layout.generate({"footprint": LOTE, "height": alto, "stage": "plans", "params": {"medianeras": meds}})
+    mix = [{"name": "2 dorm", "area": 75, "percent": 50, "dorms": 2}, {"name": "3 dorm", "area": 95, "percent": 50, "dorms": 3}]
+    res = layout.generate({"footprint": LOTE, "height": alto, "stage": "plans",       # (v2.62: con 2 y 3 dormitorios, para
+                           "params": {"medianeras": meds, "unit_mix": mix}})           # que haya cama individual y placard)
     assert res["patios"] and len(res["stories"]) == alto // 3
     server.STATE.update(mass={"name": "Lote", "footprint": LOTE, "height": alto, "origin_z": 0.0}, result=res)
 

@@ -1,13 +1,13 @@
 {
  "ejemplo": "samples/torre_mixta.json",
  "nombre": "Barra mixta (estac. + comercio + oficinas + vivienda)",
- "version_motor": "2.61",
+ "version_motor": "2.62",
  "metricas": {
-  "unidades": 19,
-  "unidades_totales": 95,
+  "unidades": 15,
+  "unidades_totales": 75,
   "por_tipo": {
-   "1 dorm": 10,
-   "2 dorm": 6,
+   "1 dorm": 8,
+   "2 dorm": 4,
    "3 dorm": 1,
    "Mono": 2
   },
@@ -15,15 +15,15 @@
   "ascensores": 1,
   "tramos": 1,
   "area_planta": 1162.2,
-  "eficiencia_planta": 76.5,
-  "eficiencia_total": 40.4,
-  "sin_usar": 31.2,
+  "eficiencia_planta": 77.3,
+  "eficiencia_total": 40.8,
+  "sin_usar": 22.5,
   "circulacion": 20.8,
-  "match_score": 97.6,
-  "fit_m2": 3.3,
-  "calidad_planos": 53,
+  "match_score": 95.0,
+  "fit_m2": 10.3,
+  "calidad_planos": 100,
   "evacuacion_max": 16.6,
-  "nsa_total": 4446.0,
+  "nsa_total": 4489.5,
   "plazas": 47,
   "planta_libre": 2908.2
  }

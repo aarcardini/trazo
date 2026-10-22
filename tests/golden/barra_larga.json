@@ -1,28 +1,28 @@
 {
  "ejemplo": "samples/barra_larga.json",
  "nombre": "Barra larga 90x18",
- "version_motor": "2.61",
+ "version_motor": "2.62",
  "metricas": {
-  "unidades": 25,
-  "unidades_totales": 175,
+  "unidades": 19,
+  "unidades_totales": 133,
   "por_tipo": {
-   "1 dorm": 14,
-   "2 dorm": 7,
+   "1 dorm": 10,
+   "2 dorm": 6,
    "3 dorm": 1,
-   "Mono": 3
+   "Mono": 2
   },
   "nucleos": 3,
   "ascensores": 2,
   "tramos": 1,
   "area_planta": 1544.9,
-  "eficiencia_planta": 75.8,
-  "eficiencia_total": 72.3,
-  "sin_usar": 43.5,
+  "eficiencia_planta": 76.7,
+  "eficiencia_total": 73.2,
+  "sin_usar": 29.6,
   "circulacion": 21.4,
-  "match_score": 97.0,
-  "fit_m2": 2.1,
-  "calidad_planos": 46,
+  "match_score": 97.6,
+  "fit_m2": 12.3,
+  "calidad_planos": 100,
   "evacuacion_max": 20.6,
-  "nsa_total": 8199.8
+  "nsa_total": 8297.8
  }
 }

@@ -113,6 +113,25 @@ def facade_min(nb):
     return 4.0 if nb == 0 else LIV_MIN + BED_MAIN + BED_W * (nb - 1)
 
 
+def frente_min(nb, D=None):
+    """R5.16b: el frente que pide el plano de una vivienda de nb dormitorios y fondo D (sin D, el de una profunda), el
+    que usa units.generate_unit_mix para repartir las viviendas (nunca menos que facade_min):
+    - con dormitorios: facade_min, el estar y los dormitorios en la fachada; en una vivienda poco profunda (sin franja
+      de servicios: D < BED_D + HALL + FR_MIN, ver _plan_rects) la zona de día lleva en fila junto al pasillo común el
+      hall, el baño y la cocina con su mesada y su heladera (_ancho_cocina con el fondo kd de esa franja), y pide eso en
+      vez del frente del estar (con menos, la vivienda queda sin cocina o sin heladera);
+    - monoambiente: el hall con su lado mínimo, el baño con su ducha y la cocina con su heladera, en fila (ver el
+      monoambiente de _plan_rects; con menos, el hall queda bajo su mínimo o la heladera no entra)."""
+    if nb == 0:
+        kd = min(2.4, D * 0.4) if D else 2.4
+        bano = max(BATH_FULL[0], V["bano"]["min_area"] / kd)
+        return max(facade_min(0), min(HALL_W, V["hall"]["min_side"]) + bano + (_ancho_cocina(kd) or KITCH_LINE))
+    if D is None or D - HALL - BED_D >= FR_MIN - 1e-9:
+        return facade_min(nb)
+    kd = min(2.6, max(1.8, D * 0.4))
+    return facade_min(nb) - LIV_MIN + max(LIV_MIN, HALL_W + BATH_W1 + max(1.8, _ancho_cocina(kd) or KITCH_LINE))
+
+
 def _shared(r1, r2, tol=0.05):
     """Segmento compartido entre dos rectángulos (x0,v0,x1,v1). Devuelve (p, q) o None."""
     for a, b in ((r1, r2), (r2, r1)):
@@ -1098,7 +1117,7 @@ def _plan_rects(x0, v0, x1, v1, nb, warnings, acc=None, lateral=False, hall_x0=F
     else:
         bw = BATH_W1
         wk = xs - x0 - hw - bw                         # la franja de la entrada, con el fondo del baño (no menos de 1,80)
-        con_cocina = wk >= 1.8
+        con_cocina = wk >= 1.8 - 1e-6                  # (R5.16b: justo con el frente de frente_min, sin ruido de redondeo)
         wd = wv = 0.0
         if con_cocina:                                 # (R3.7: con el hall en x0, se pasa por ella al pasillo interno)
             wk, kd = cocina(wk, kd, caja, [kd, max(1.8, p14), 1.8], not hall_x0, True, techo=t14)
