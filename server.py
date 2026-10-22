@@ -23,6 +23,7 @@ import engine.circulation as _circulation
 import engine.evacuacion as _evacuacion
 import engine.units as _units
 import engine.patios as _patios
+import engine.factibilidad as _factibilidad
 import engine.dxf as _dxf
 import engine.dxf_lector as _dxf_lector
 import engine.tabla_viviendas as _tabla_viviendas
@@ -46,7 +47,7 @@ def engine():
         importlib.reload(_plans)
         importlib.reload(_programs)
         importlib.reload(_masterplan)
-        for m in (_massing, _circulation, _evacuacion, _units, _patios, _layout):   # en orden: cada uno usa los anteriores
+        for m in (_massing, _circulation, _evacuacion, _units, _patios, _factibilidad, _layout):   # en orden: cada uno usa los anteriores
             importlib.reload(m)
         importlib.reload(_dxf)
         importlib.reload(_dxf_lector)

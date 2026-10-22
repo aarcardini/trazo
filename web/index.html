@@ -4,7 +4,7 @@
 <script id="temaInicial">/* R4.10: el tema elegido, antes de pintar (sin parpadeo); sin nada guardado o con «sistema», vale el del sistema */
 (function(){try{var t=localStorage.getItem('trazo.tema');if(t==='claro'||t==='oscuro')document.documentElement.dataset.theme=t==='oscuro'?'dark':'light'}catch(e){}})();</script>
 <style>
-:root{--bg:#f6f7f9;--pan:#fff;--ink:#1b2430;--mut:#667085;--line:#d9dee6;--acc:#2f6fed;--ok:#1a9d5b;--mid:#9aa3b2;--bad:#d63b3b;--grilla:#e6e9ee;--grilla2:#d0d6df;color-scheme:light}
+:root{--bg:#f6f7f9;--pan:#fff;--ink:#1b2430;--mut:#667085;--line:#d9dee6;--acc:#2f6fed;--ok:#1a9d5b;--mid:#9aa3b2;--bad:#d63b3b;--grilla:#e6e9ee;--grilla2:#d0d6df;--amar:#d39a1f;color-scheme:light}
 :root[data-theme="dark"]{--bg:#12161c;--pan:#1a2029;--ink:#e6eaf0;--mut:#98a2b3;--line:#2c3542;--acc:#6b9bff;--grilla:#1d232c;--grilla2:#2b3440;color-scheme:dark}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#12161c;--pan:#1a2029;--ink:#e6eaf0;--mut:#98a2b3;--line:#2c3542;--acc:#6b9bff;--grilla:#1d232c;--grilla2:#2b3440;color-scheme:dark}}
 *{box-sizing:border-box}body{margin:0;font:14px system-ui,sans-serif;background:var(--bg);color:var(--ink);display:grid;grid-template-columns:78px auto 1fr 300px;grid-template-rows:46px minmax(0,1fr);grid-template-areas:"top top top top" "rail panel main right";height:100vh;overflow:hidden}
@@ -70,6 +70,9 @@ td,th{padding:3px 4px;border-bottom:1px solid var(--line);text-align:left}
 .mixrow{display:grid;grid-template-columns:1fr 54px 54px 20px;gap:4px;margin:3px 0;align-items:center}.mixrow input,.mixrow select{width:100%;min-width:0}
 table{width:100%;border-collapse:collapse;font-size:12px}
 .w{color:var(--bad);font-size:12px;margin:3px 0}
+.sem{display:flex;align-items:center;gap:8px;font-weight:600;margin:4px 0 6px}.sem i{width:12px;height:12px;border-radius:50%;flex:none;background:var(--mid)}.sem.verde i{background:var(--ok)}.sem.amarillo i{background:var(--amar)}.sem.rojo i{background:var(--bad)}
+.fzstd{display:flex;gap:4px;flex-wrap:wrap;align-items:center;font-size:11px;color:var(--mut);margin:2px 0}.fzstd>span{flex:0 0 100%}
+table.fz th,table.fz td{font-size:12px}table.fz th:not(:first-child),table.fz td:not(:first-child){text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}table.fz tr.tot td{font-weight:600;border-top:1px solid var(--ink)}table.fz td small{color:var(--mut)}
 </style></head><body>
 <header class="top">
  <span class="marca">Trazo</span><small id="ver"></small>
@@ -82,6 +85,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}
  <button data-grupo="masa" onclick="grupo('masa')" title="Masa: terreno, alturas, programa por planta, medianeras y patios"><svg viewBox="0 0 24 24"><path d="M12 3 3 8l9 5 9-5z"/><path d="m3 13 9 5 9-5"/></svg><span>Masa</span></button>
  <button data-grupo="circ" onclick="grupo('circ')" title="Circulación: pasillo, líneas centrales, núcleos y evacuación"><svg viewBox="0 0 24 24"><path d="M4 20h4v-4h4v-4h4V8h4"/></svg><span>Circulación</span></button>
  <button data-grupo="viviendas" onclick="grupo('viviendas')" title="Viviendas: mix, medidas de la unidad y planos"><svg viewBox="0 0 24 24"><path d="M4 11 12 4l8 7"/><path d="M6 10v10h12V10"/></svg><span>Viviendas</span></button>
+ <button data-grupo="factibilidad" onclick="grupo('factibilidad')" title="Factibilidad: gama de construcción, terreno, precio de venta, costo, margen y ROI"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg><span>Factibilidad</span></button>
  <button data-grupo="normativa" onclick="grupo('normativa')" title="Normativa: medidas mínimas y típicas"><svg viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="8" rx="1.5"/><path d="M7 8v3M11 8v4M15 8v3M19 8v4"/></svg><span>Normativa</span></button>
  <button data-grupo="vista" onclick="grupo('vista')" title="Vista: tema claro u oscuro, colores de los programas y leyenda"><svg viewBox="0 0 24 24"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span>Vista</span></button>
 </nav>
@@ -181,6 +185,31 @@ table{width:100%;border-collapse:collapse;font-size:12px}
   </div>
   <div class="pie"><button class="s" onclick="run('mix')">Generar mix</button><button onclick="run('plans')">Generar planos</button></div>
  </div>
+ <div class="grupo" data-grupo="factibilidad" hidden>
+  <header><b>Factibilidad</b><small>Costo de obra por gama, terreno, precio de venta, margen y ROI.</small><button class="x" onclick="grupo(null)" title="Cerrar (Esc)">×</button></header>
+  <div class="cuerpo">
+   <div class="hint" id="fzAyuda">Los costos por gama son de referencia: están triangulados (no hay una fuente pública del costo de obra por m² de edificios en Uruguay) y hay que validarlos con presupuestos de constructoras antes de confiar en el resultado.</div>
+   <h2>Gama de construcción</h2>
+   <label>Gama <select id="fz_gama" onchange="fzGama()"><option value="baja">Baja (Vivienda Promovida)</option><option value="media">Media</option><option value="alta">Alta</option></select></label>
+   <label title="Obra por m² bruto cerrado, neto de IVA, sin terreno, honorarios, tasas ni imprevistos. Es la medida de esta gama en Normativa">Costo de obra (USD por m² bruto) <input type="number" id="fz_costo" min="0" step="50" onchange="fzCosto(this.value)"></label>
+   <h2>Terreno</h2>
+   <label>Precio del terreno <input type="number" id="fz_terreno" value="0" min="0" step="1000" style="width:110px" onchange="fzCambio()"></label>
+   <label>Se carga como <select id="fz_terreno_modo" onchange="fzCambio()"><option value="total">USD total</option><option value="m2">USD por m² de terreno</option></select></label>
+   <div class="hint" id="fzTerrenoInfo">El terreno es un dato de entrada: sin él, el costo y el margen no lo incluyen.</div>
+   <h2>Precio de venta (USD por m² vendible)</h2>
+   <label>Bajo <input type="number" id="fz_p_bajo" min="0" step="50" style="width:90px" onchange="fzCambio()"></label>
+   <label>Esperado <input type="number" id="fz_p_esperado" min="0" step="50" style="width:90px" onchange="fzCambio()"></label>
+   <label>Alto <input type="number" id="fz_p_alto" min="0" step="50" style="width:90px" onchange="fzCambio()"></label>
+   <div class="hint">Por defecto, el de la ANV para Montevideo (Vivienda Promovida, año móvil a abril de 2026): 3.115 por m² habitable, con 10 % menos y 10 % más. La ANV, por m² construido (con los bienes comunes): Malvín 2.832, Capurro–Bella Vista 2.783, Larrañaga 2.761, Prado 2.600, Tres Cruces 2.500, La Figurita 2.039; el habitable es ≈ 29 % más caro. Precios pedidos en 2026: Carrasco 4.349, Pocitos 3.850, Punta Carretas 3.497, Cordón 2.700, Centro 2.200 (COSTOS.md, sección 5).</div>
+   <h2>Margen objetivo</h2>
+   <label title="El semáforo compara el ROI (margen / costo total) con este valor: verde si lo alcanza el precio esperado, amarillo si solo el alto, rojo si ni el alto">ROI objetivo (% sobre el costo) <input type="number" id="fz_margen" min="0" step="1" onchange="fzCambio()"></label>
+   <label title="Superficie de balcones y terrazas cubiertas, que Trazo todavía no distingue: se cobra al coeficiente de balcones de Normativa">Balcones y terrazas cubiertas (m²) <input type="number" id="fz_balcones" value="0" min="0" step="10" onchange="fzCambio()"></label>
+   <h2>Resultado</h2>
+   <div id="fzTabla"><div class="hint">Genera el mix o los planos para ver el costo, el ingreso y el ROI.</div></div>
+   <div class="hint">Honorarios: arancel de la SAU (categoría A, B o C según la gama). Permiso: tasas de la Intendencia de Montevideo en UI por m². Caja de Profesionales, ingeniería, imprevistos, administración, financieros y comercialización: porcentajes de COSTOS.md, editables en Normativa («Costos y factibilidad»). El costo es neto de IVA y el ingreso cuenta solo la superficie vendible de vivienda.</div>
+  </div>
+  <div class="pie"><button class="s" onclick="grupo('normativa')" title="Los costos por gama, el arancel de la SAU y los porcentajes se editan en Normativa">Medidas de costos…</button></div>
+ </div>
  <div class="grupo" data-grupo="normativa" hidden>
   <header><b>Normativa</b><small>Medidas mínimas y típicas de la vivienda, el núcleo y el predio.</small><button class="x" onclick="grupo(null)" title="Cerrar (Esc)">×</button></header>
   <div class="cuerpo">
@@ -262,6 +291,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}
  <div class="ctx ficha" id="ctx" style="display:none"></div>
  <div class="resTit"><h2>Resumen</h2><button class="lnk" id="btnTodo" onclick="verTodo()">Ver todo ›</button></div>
  <div id="resumen"><div class="hint">Genera la planta para ver el resumen.</div></div>
+ <div id="fzResumen"></div>
  <h2>Avisos</h2><div id="warns"></div>
  <div id="todo" hidden>
   <h2>Programas</h2><div id="donut"></div><div id="progList"></div>
@@ -323,7 +353,7 @@ function renderStories(){ if(!stories){ $('storyTable').innerHTML='<div class="w
  $('storyTable').innerHTML=stories.map((s,i)=>`<div class="mixrow" style="grid-template-columns:30px 1fr 60px"><span>${i}</span><select onchange="stories[${i}].program=this.value">${PROGS.map(p=>`<option value="${p.key}" ${p.key==s.program?'selected':''}>${p.label}</option>`).join('')}</select><input type="number" step="0.1" value="${s.height}" onchange="stories[${i}].height=+this.value"></div>`).join('');}
 let STD=null, STD_DEF=null, medianeras=[], medHover=null;
 function params(){ const g=id=>+$(id).value; const manual=$('cores_mode').value==='manual';
- return {core_auto:$('core_auto').checked,ascensores:$('ascensores').value,standards:STD,medianeras:medianeras.length?medianeras:null,floor_height:g('floor_height'),outer_wall:g('outer_wall'),loading:$('loading').value,corridor_width:g('corridor_width'),anchos_pasillo:anchosPasillo.length?anchosPasillo:null,core_width:g('core_width'),core_depth:g('core_depth'),core_count:g('core_count'),auto_cores:$('auto_cores').checked,core_side:$('core_side').value,egress_single:g('egress_single'),egress_multi:g('egress_multi'),min_unit_width:g('min_unit_width'),party_wall:g('party_wall'),max_unit_depth:g('max_unit_depth'),unit_mix:mix,centerlines:centerlines.length?centerlines:null,cores_mode:manual?'manual':'auto',cores:manual?coresManual:null,unit_edits:ediciones.length?ediciones:null,room_edits:interiores.length?interiores:null,patios_mode:$('patios_mode').value,patios:$('patios_mode').value==='manual'?patios:null,patios_galeria:$('patios_mode').value==='manual'&&patiosGaleria.some(Boolean)?patios.map((p,i)=>!!patiosGaleria[i]):null,stories:stories}; }   // R3.8: la marca de galería por patio (alineada con patios)
+ return {core_auto:$('core_auto').checked,ascensores:$('ascensores').value,standards:STD,medianeras:medianeras.length?medianeras:null,floor_height:g('floor_height'),outer_wall:g('outer_wall'),loading:$('loading').value,corridor_width:g('corridor_width'),anchos_pasillo:anchosPasillo.length?anchosPasillo:null,core_width:g('core_width'),core_depth:g('core_depth'),core_count:g('core_count'),auto_cores:$('auto_cores').checked,core_side:$('core_side').value,egress_single:g('egress_single'),egress_multi:g('egress_multi'),min_unit_width:g('min_unit_width'),party_wall:g('party_wall'),max_unit_depth:g('max_unit_depth'),unit_mix:mix,centerlines:centerlines.length?centerlines:null,cores_mode:manual?'manual':'auto',cores:manual?coresManual:null,unit_edits:ediciones.length?ediciones:null,room_edits:interiores.length?interiores:null,patios_mode:$('patios_mode').value,patios:$('patios_mode').value==='manual'?patios:null,patios_galeria:$('patios_mode').value==='manual'&&patiosGaleria.some(Boolean)?patios.map((p,i)=>!!patiosGaleria[i]):null,factibilidad:factibilidadParams(),stories:stories}; }   // R3.8: la marca de galería por patio (alineada con patios)
 async function run(stage,opt){ opt=opt||{}; if(!footprint.length){ $('tag').textContent='Trazo está en blanco: envía una masa desde Rhino o elige un ejemplo'; return; } lastStage=stage; $('tag').textContent='Calculando…'; const enviados=JSON.stringify(anchosPasillo);
  let j; try{ const r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({footprint,height:+$('height').value,stage,params:params()})}); j=await r.json(); }
  catch(e){ j={error:'no hay conexión con el servidor de Trazo: arráncalo (py server.py en Windows, python3 server.py en Mac) y recarga la página'}; }
@@ -584,7 +614,7 @@ function drawOverlay(){ const go=$('go'); go.innerHTML=''; if(!view) return; if(
  const oc=[]; et.forEach(a=>etiquetaMedida(go,a[0],a[1],Object.assign({ocupado:oc},a[2]))); }   // R4.13a: todas con el mismo estilo y sin pisarse
 
 /* ---------- medidas y normativa ---------- */
-const STD_LABELS={predio:'Predio',retiro_ventanas:'Retiro de medianera para ventanas (m)',patio_min:'Ancho mínimo de patio para iluminar (m)',retiro_divisoria:'Retiro mínimo si se separa de la divisoria (art. 53 e, m)',vivienda:'Vivienda',nucleo:'Núcleo',oficinas:'Oficinas',comercial:'Comercial',estacionamiento:'Estacionamiento',equipamiento:'Equipamiento y muebles',ventanas:'Ventanas',
+const STD_LABELS={predio:'Predio',retiro_ventanas:'Retiro de medianera para ventanas (m)',patio_min:'Ancho mínimo de patio para iluminar (m)',retiro_divisoria:'Retiro mínimo si se separa de la divisoria (art. 53 e, m)',costos:'Costos y factibilidad (valores de referencia: validarlos con presupuestos)',vivienda:'Vivienda',nucleo:'Núcleo',oficinas:'Oficinas',comercial:'Comercial',estacionamiento:'Estacionamiento',equipamiento:'Equipamiento y muebles',ventanas:'Ventanas',
  dorm_principal:'Dormitorio principal',dorm_secundario:'Dormitorio secundario',estar_comedor:'Estar-comedor',cocina:'Cocina',bano:'Baño',bano_aux:'Baño auxiliar',lavadero:'Lavadero',pasillo:'Pasillo interno',hall:'Hall de entrada',estudio:'Estudio',deposito:'Depósito (0 = sin depósito)',cocina_integrada:'Cocina integrada al estar sin ventana (art. 27)',vano_min:'vano mín. del estar m²',superficie_min:'Superficie mínima con muros (art. 3): monoamb. · 1 · 2 · 3 · 4 dorm. (m²)',franja_servicios:'Franja de baños, lavadero y depósito (fondo)',vestidor:'Vestidor (tipos del mix con «Vest.»)',max_area:'máx. m²',max_side:'lado máx.',
  min_area:'mín. m²',min_side:'lado mín.',typ_area:'típ. m²',typ:'típ. frente × fondo',typ_side:'típico',escalera_ancho:'Ancho de tramo sin ascensor (m)',escalera_ancho_con_ascensor:'Ancho de tramo con ascensor (m)',contrahuella:'Contrahuella máx. (m)',huella:'Huella (m)',ojo:'Ojo (m)',muro:'Muro (m)',ascensor_ducto:'Ducto ascensor (m)',ascensor_cabina:'Cabina (m)',palier:'Palier (m)',ducto_instalaciones:'Ducto instalaciones (m)',unidades_por_ascensor:'Unidades por ascensor',altura_sin_ascensor:'Altura máx. sin ascensor (m)',pisos_dos_ascensores:'Niveles para 2 ascensores',pasillo_comun:'Pasillo común (art. 35): ancho mín. hasta 3 · de 4 a 10 · 11 o más viviendas (m)',pasillo_viviendas:'Pasillo común: viviendas por planta donde cambia el ancho',pasillo_largo:'Pasillo común: tramo recto largo desde (m)',pasillo_ancho_largo:'Pasillo común: ancho con un tramo largo (m)',
  m2_por_persona:'m² por persona',trabajadores_por_inodoro:'Personas por inodoro',cubiculo:'Cubículo inodoro (m)',zona_lavabos:'Zona lavabos (m)',bano_accesible:'Baño accesible (m)',hall_extra:'Hall extra (m)',plaza:'Plaza (m)',calle:'Calle (m)',
@@ -593,6 +623,10 @@ const STD_LABELS={predio:'Predio',retiro_ventanas:'Retiro de medianera para vent
  iluminacion:'Vano mínimo / superficie del local',alto:'Alto de ventana (m)',ancho_dormitorio:'Ancho típico en dormitorios (m)',ancho_estar:'Ancho típico en el estar (m)',mocheta:'Libre a una esquina o tabique (m)',proporcion_max:'Profundidad máx. / lado menor del local (art. 14)',ancho_cocina:'Ancho típico en la cocina con fachada (m)',vano_cocina:'Vano mínimo de la cocina con ventana (art. 24, m²)',
  puerta_accesible:'Accesible: puertas de dormitorios y baño (m)',giro:'Accesible: círculo de giro en el baño (m)',transferencia:'Accesible: transferencia junto al inodoro (m)',ducha_nivel:'Accesible: ducha a nivel (m)',bano_accesible:'Accesible: baño, frente × fondo (m)'};
 const STD_LISTA={asientos:1,placard_largo:1,pasillo_comun:1,pasillo_viviendas:1,superficie_min:1};   // listas (no medidas largo × fondo)
+const STD_COSTOS={obra_m2:'Obra, USD por m² bruto cerrado, neto de IVA: baja · media · alta',coef_cochera:'Coeficiente de obra: cochera y subsuelo',coef_balcon:'Coeficiente de obra: balcones y terrazas cubiertas',coef_amenities:'Coeficiente de obra: amenities',sau_tramos:'Arancel SAU: tramos acumulativos, hasta (millones de pesos de 1997)',sau:'Arancel SAU: % por tramo',sau_iva:'Arancel SAU: obra con IVA (× la obra neta)',sau_actualizacion:'Arancel SAU: coeficiente de actualización C',tipo_cambio:'Tipo de cambio (pesos por USD)',ingenieria_pct:'Ingeniería y estudios (% de la obra): baja · media · alta',permiso_ui:'Permiso, vivienda (UI por m²): unidad hasta 70 m² · hasta 140 m² · más',permiso_hasta:'Permiso: límites de tamaño de la unidad (m²)',permiso_comercio_ui:'Permiso, comercio y oficinas (UI por m²)',permiso_otros_ui:'Permiso, otros usos (UI por m²)',ui_usd:'Valor de la UI (USD)',caja_pct:'Caja de Profesionales (% de la mano de obra)',mano_obra_pct:'Mano de obra (% de la obra neta)',conexiones_pct:'Conexiones, Bomberos y escribanía (% de la obra)',imprevistos_pct:'Imprevistos (% de la obra): baja · media · alta',administracion_pct:'Administración del desarrollador (% de la obra)',financieros_pct:'Costos financieros (% de obra + terreno)',comercializacion_pct:'Comercialización (% del ingreso)',compra_terreno_pct:'Comisión de compra del terreno (% del terreno)'};   // R10.13; precio_venta y margen_objetivo se cargan en Factibilidad
+const STD_PASO={obra_m2:50,sau_tramos:1,ingenieria_pct:0.1,permiso_ui:1,permiso_hasta:10,permiso_comercio_ui:1,permiso_otros_ui:1,ui_usd:0.001,imprevistos_pct:0.5,administracion_pct:0.5,financieros_pct:0.5,comercializacion_pct:0.5,sau:0.5,tipo_cambio:0.5,sau_actualizacion:0.01,sau_iva:0.01,compra_terreno_pct:0.1,caja_pct:0.1,mano_obra_pct:1,conexiones_pct:0.1};
+const STD_OCULTAS={costos:['precio_venta','margen_objetivo']};   // los valores por defecto del precio y del margen objetivo; en el proyecto van en Factibilidad
+const STD_FILAS={sau:['A (gama baja)','B (media)','C (alta)']};
 // Medidas que cambiaron (mínimos de la norma nacional de higiene de la vivienda en v2.27; estar-comedor por dormitorios en v2.61)
 // y su valor anterior: si el navegador o un proyecto anterior guardó el valor viejo, vale el nuevo; un valor elegido a mano
 // (distinto del viejo) se respeta.
@@ -605,16 +639,19 @@ async function loadStd(){ try{ STD_DEF=await (await fetch('/api/standards')).jso
  STD=JSON.parse(JSON.stringify(STD_DEF)); if(sv){ const viejo=!sv._v; delete sv._v; mezclarStd(STD,sv,viejo?STD_ANTES:null); if(viejo) saveStd(); } renderStd(); }
 function saveStd(){ try{ localStorage.setItem('trazo.std',JSON.stringify(Object.assign({_v:2},medidasCambiadas()))); }catch(e){} }   // solo lo cambiado: los valores por defecto nuevos llegan solos
 function resetStd(){ STD=JSON.parse(JSON.stringify(STD_DEF)); saveStd(); renderStd(); if(lastStage) run(lastStage,{keepView:true}); }
-function setStd(path,val){ let o=STD; for(let i=0;i<path.length-1;i++) o=o[path[i]]; o[path[path.length-1]]=val; saveStd(); renderMeds(); if(lastStage) run(lastStage,{keepView:true}); }
+function setStd(path,val){ let o=STD; for(let i=0;i<path.length-1;i++) o=o[path[i]]; o[path[path.length-1]]=val; saveStd(); renderMeds(); fzMostrarCosto(); if(lastStage) run(lastStage,{keepView:true}); }
 function numIn(path,v,step=0.05){ return `<input type="number" step="${step}" value="${v}" style="width:58px" onchange="setStd(${JSON.stringify(path).replace(/"/g,"'")},+this.value)">`; }
 function renderStd(){ if(!STD) return; let h='';
- for(const g of ['vivienda','equipamiento','ventanas','nucleo','oficinas','comercial','predio','estacionamiento']){ h+=`<div class="hint" style="font-weight:600;color:var(--ink);margin-top:8px">${STD_LABELS[g]}</div>`;
-  for(const [k,v] of Object.entries(STD[g])){
+ for(const g of ['vivienda','equipamiento','ventanas','nucleo','oficinas','comercial','predio','estacionamiento','costos']){ h+=`<div class="hint" style="font-weight:600;color:var(--ink);margin-top:8px">${STD_LABELS[g]}</div>`;
+  for(const [k,v] of Object.entries(STD[g]||{})){
+   if((STD_OCULTAS[g]||[]).includes(k)) continue;
+   if(g==='costos'&&Array.isArray(v)&&Array.isArray(v[0])){ h+=`<div style="font-size:12px;margin:4px 0 2px">${STD_COSTOS[k]||k}</div>`+v.map((fila,i)=>`<div class="fzstd"><span>${STD_FILAS[k]?STD_FILAS[k][i]:i}</span>${fila.map((x,j)=>numIn([g,k,i,j],x,STD_PASO[k]||0.05)).join(' ')}</div>`).join(''); continue; }
+   if(g==='costos'&&Array.isArray(v)){ h+=`<div style="font-size:12px;margin:4px 0 2px">${STD_COSTOS[k]||k}</div><div class="fzstd">${v.map((x,i)=>numIn([g,k,i],x,STD_PASO[k]||0.05)).join(' ')}</div>`; continue; }
    if(g==='vivienda'&&typeof v==='object'&&!Array.isArray(v)){ h+=`<div style="font-size:12px;margin:4px 0 2px">${STD_LABELS[k]||k}</div><div style="display:flex;gap:4px;flex-wrap:wrap;font-size:11px;color:var(--mut)">`+Object.entries(v).map(([kk,vv])=>Array.isArray(vv)?`${STD_LABELS[kk]} ${numIn([g,k,kk,0],vv[0])}×${numIn([g,k,kk,1],vv[1])}`:`${STD_LABELS[kk]} ${numIn([g,k,kk],vv)}`).join(' ')+`</div>`; }
    else if(g==='vivienda'&&k!=='superficie_min') continue;
    else if(Array.isArray(v)) h+=`<label style="font-size:12px">${STD_LABELS[k]||k} <span>${v.map((x,i)=>numIn([g,k,i],x,k==='asientos'||k==='pasillo_viviendas'||k==='superficie_min'?1:0.05)).join(STD_LISTA[k]?' · ':'×')}</span></label>`;
-   else h+=`<label style="font-size:12px">${STD_LABELS[k]||k} ${numIn([g,k],v,k==='iluminacion'?0.01:0.05)}</label>`; } }
- $('stdPanel').innerHTML=h; }
+   else h+=`<label style="font-size:12px">${(g==='costos'?STD_COSTOS[k]:STD_LABELS[k])||k} ${numIn([g,k],v,STD_PASO[k]||(k==='iluminacion'?0.01:0.05))}</label>`; } }
+ $('stdPanel').innerHTML=h; fzMostrarCosto(); }
 
 /* ---------- formas de núcleos y programas ---------- */
 const CORE_L={stair:0.62,elevator:0.40,landing:0.84,duct:0.52,service:0.74};
@@ -1285,7 +1322,7 @@ function herramientaBar(auto){ const h=$('herr'); $('tag').style.visibility=tool
 function quitarMedianeras(){ if(medianeras.length) recordar('quitar las medianeras'); medianeras=[]; renderMeds(); draw(); if(lastStage) run(lastStage,{keepView:true}); }
 function capas(){ const ks=['showGraph','showEquip','showDims','showEvac','showTip']; $('nCapas').textContent=ks.filter(k=>$(k).checked).length+' de '+ks.length; }
 function verTodo(v){ const t=$('todo'); t.hidden=v!=null?!v:!t.hidden; $('btnTodo').textContent=t.hidden?'Ver todo ›':'Ver menos ‹'; }
-function resumenPanel(){ const e=$('resumen'), m=result&&result.metrics, mx=m&&m.mix; if(!m||!mx){ e.innerHTML='<div class="hint">Genera el mix o los planos para ver el resumen.</div>'+(m&&m.gfa?`<div class="k"><span>GFA</span><b>${m.gfa} m²</b></div><div class="k"><span>Plantas</span><b>${m.stories}</b></div>`:''); return; }
+function resumenPanel(){ fzResultado(); const e=$('resumen'), m=result&&result.metrics, mx=m&&m.mix; if(!m||!mx){ e.innerHTML='<div class="hint">Genera el mix o los planos para ver el resumen.</div>'+(m&&m.gfa?`<div class="k"><span>GFA</span><b>${m.gfa} m²</b></div><div class="k"><span>Plantas</span><b>${m.stories}</b></div>`:''); return; }
  const c=(t,v,u)=>`<div><span>${t}</span><b>${v??'-'}</b>${u?' <small>'+u+'</small>':''}</div>`, q=m.plan_score;
  e.innerHTML='<div class="res">'+c('Unidades/planta',mx.count)+c('Unidades totales',m.units_total)+c('NSA total',m.nsa_total,'m²')+c('Eficiencia',m.efficiency_total,'%')+'</div>'+
   (q!=null?`<div class="k"><span>Calidad de planos</span><i><i style="width:${q}%;background:${q>=90?'var(--ok)':q>=70?'#d39a1f':'var(--bad)'}"></i></i><b>${q} %</b></div>`:'')+
@@ -1293,6 +1330,41 @@ function resumenPanel(){ const e=$('resumen'), m=result&&result.metrics, mx=m&&m
 function estadoTop(){ const s=$('sample'), o=s.selectedOptions&&s.selectedOptions[0], st=result&&result.stories;
  $('masaNombre').textContent=footprint.length?(o&&!o.disabled?o.textContent:nombre||'Masa'):'En blanco';
  $('masaInfo').textContent=footprint.length?[st?st.length+' nivel'+(st.length===1?'':'es'):null,lastStage?'etapa: '+({massing:'masa',corridor:'pasillo y núcleos',mix:'mix',plans:'planos'}[lastStage]||lastStage):null].filter(Boolean).join(' · '):''; }
+/* ---------- factibilidad (R10.13): costo por gama, ingreso, margen, ROI y semáforo; los números salen del motor ---------- */
+const FZ_GAMAS=['baja','media','alta'], FZ_ESC=[['bajo','Bajo'],['esperado','Esperado'],['alto','Alto']], FZ_SEM={verde:'Viable',amarillo:'Ajustado',rojo:'No viable'};
+const fzN=n=>n==null||!isFinite(n)?'–':(n<0?'−':'')+String(Math.round(Math.abs(n))).replace(/\B(?=(\d{3})+(?!\d))/g,'.');   // 5.769.850
+const fzM=n=>n==null||!isFinite(n)?'–':(n<0?'−':'')+(Math.abs(n)/1e6).toFixed(2).replace('.',',')+' M';                         // 5,77 M
+const fzP=n=>n==null||!isFinite(n)?'–':(n<0?'−':'')+Math.abs(n).toFixed(1).replace('.',',')+' %';
+function factibilidadParams(){ const n=id=>{ const v=$(id).value; return v===''?null:+v; };   // vacío: el motor usa el valor por defecto de Normativa (standards.costos)
+ return {gama:$('fz_gama').value,terreno:{modo:$('fz_terreno_modo').value,valor:n('fz_terreno')||0},superficie_terreno:terreno&&terreno.frente>0&&terreno.fondo>0?terreno.frente*terreno.fondo:null,   // el terreno rectangular da la superficie del predio; sin él, el motor usa la masa
+  precio_venta:{bajo:n('fz_p_bajo'),esperado:n('fz_p_esperado'),alto:n('fz_p_alto')},margen_objetivo:n('fz_margen'),balcones_m2:n('fz_balcones')||0}; }
+function fzAbrir(f){ f=f&&typeof f==='object'?f:{};   // devuelve cada control a su valor; un proyecto sin factibilidad abre con los valores por defecto
+ const d=(STD_DEF&&STD_DEF.costos)||{}, pv=f.precio_venta||{}, t=f.terreno&&typeof f.terreno==='object'?f.terreno:{};
+ $('fz_gama').value=FZ_GAMAS.includes(f.gama)?f.gama:'baja'; $('fz_terreno_modo').value=t.modo==='m2'?'m2':'total'; $('fz_terreno').value=t.valor>0?t.valor:0;
+ FZ_ESC.forEach(([k],i)=>{ $('fz_p_'+k).value=pv[k]!=null?pv[k]:(d.precio_venta?d.precio_venta[i]:''); });
+ $('fz_margen').value=f.margen_objetivo!=null?f.margen_objetivo:(d.margen_objetivo!=null?d.margen_objetivo:15); $('fz_balcones').value=f.balcones_m2>0?f.balcones_m2:0; fzMostrarCosto(); }
+function fzMostrarCosto(){ const e=$('fz_costo'); if(!e) return; const c=STD&&STD.costos&&STD.costos.obra_m2; e.value=c?c[Math.max(0,FZ_GAMAS.indexOf($('fz_gama').value))]:''; }   // el costo de la gama elegida, que es la medida de Normativa
+function fzCosto(v){ if(!STD||!STD.costos||v===''||!isFinite(+v)||+v<0) return fzMostrarCosto(); setStd(['costos','obra_m2',Math.max(0,FZ_GAMAS.indexOf($('fz_gama').value))],+v); }
+function fzGama(){ fzMostrarCosto(); fzCambio(); }
+function fzCambio(){ if(lastStage) run(lastStage,{keepView:true}); }
+function fzOlvidar(){ $('fz_terreno').value=0; $('fz_balcones').value=0; }   // «Nuevo»: el terreno y los balcones son de la masa; la gama, los precios y el margen quedan
+function fzResultado(){ const f=result&&result.metrics&&result.metrics.factibilidad, R=$('fzResumen'), T=$('fzTabla'), I=$('fzTerrenoInfo');
+ if(!f){ R.innerHTML=''; T.innerHTML='<div class="hint">Genera el mix o los planos («Generar mix» en Viviendas) para ver el costo, el ingreso y el ROI.</div>'; I.textContent='El terreno es un dato de entrada: sin él, el costo y el margen no lo incluyen.'; return; }
+ const e=f.escenarios, rub=Object.fromEntries(f.rubros.map(r=>[r.id,r])), obra=rub.obra.usd, t=f.terreno;
+ const roiC=r=>`<span style="color:${r==null?'inherit':r+1e-9>=f.objetivo?'var(--ok)':r<0?'var(--bad)':'inherit'}">${fzP(r)}</span>`;
+ const fila=(tit,fn,cls)=>`<tr${cls?' class="'+cls+'"':''}><td>${tit}</td>${FZ_ESC.map(([k])=>`<td>${fn(e[k])}</td>`).join('')}</tr>`, cab=`<tr><th></th>${FZ_ESC.map(([,x])=>`<th>${x}</th>`).join('')}</tr>`;
+ I.textContent=t.modo==='m2'?'Terreno: '+fzN(t.usd)+' USD ('+fzN(t.valor)+' USD por m² × '+fzN(t.superficie)+' m² de '+(t.fuente==='predio'?'terreno rectangular':'la masa, que no incluye los retiros')+')':'Terreno: '+fzN(t.usd)+' USD en total'+(t.usd>0&&t.superficie>0?' ('+fzN(t.usd/t.superficie)+' USD por m² de '+(t.fuente==='predio'?'terreno':'masa')+')':'')+'.';
+ R.innerHTML=`<div class="resTit"><h2>Factibilidad · gama ${f.gama}</h2><button class="lnk" onclick="grupo('factibilidad')">Detalle ›</button></div><div class="sem ${f.semaforo}" title="${esc(f.semaforo_texto)}"><i></i><span>${FZ_SEM[f.semaforo]}</span></div>
+  <table class="fz">${cab}${fila('USD/m²',x=>fzN(x.precio))}${fila('Ingreso',x=>fzM(x.ingreso))}${fila('Costo total',x=>fzM(x.costo_total))}${fila('Margen',x=>fzM(x.margen))}${fila('ROI',x=>roiC(x.roi))}</table>
+  <div class="k"><span>Obra</span><b>${fzM(obra)}</b></div><div class="k"><span>Precio de equilibrio</span><b>${fzN(f.precio_equilibrio)} USD/m²</b></div><div class="hint">${esc(f.semaforo_texto)}</div>`;
+ const sp=f.superficies, progs=sp.programas.length>1?sp.programas.map(p=>`${esc(progLabel(p.programa))} ${fzN(p.gfa)} m²${p.coef!==1?' × '+String(p.coef).replace('.',','):''}`).join(' · '):'';
+ T.innerHTML=`<div class="sem ${f.semaforo}"><i></i><span>${FZ_SEM[f.semaforo]}</span></div><div class="hint" style="margin-top:0">${esc(f.semaforo_texto)}</div>
+  <div class="hint">Superficie bruta ${fzN(sp.gfa)} m² (${fzN(sp.equivalente)} m² equivalentes para la obra) · vendible ${fzN(sp.nsa)} m²${progs?'<br>'+progs:''}${sp.balcones?'<br>Balcones y terrazas: '+fzN(sp.balcones)+' m² × '+String(STD&&STD.costos?STD.costos.coef_balcon:'').replace('.',','):''}</div>
+  <table class="fz"><tr><th>Rubro (USD)</th><th>USD</th><th>% obra</th></tr>${f.rubros.map(r=>`<tr title="${esc(r.base)}"><td>${esc(r.nombre)}</td><td>${fzN(r.usd)}</td><td>${obra>0?fzP(r.usd/obra*100):'–'}</td></tr>`).join('')}
+  <tr class="tot"><td>Costo sin comercialización</td><td>${fzN(f.costo_sin_comercializacion)}</td><td>${obra>0?fzP(f.costo_sin_comercializacion/obra*100):'–'}</td></tr></table>
+  <table class="fz" style="margin-top:8px">${cab}${fila('Precio, USD/m² vendible',x=>fzN(x.precio))}${fila('Ingreso',x=>fzN(x.ingreso))}${fila('Comercialización <small>('+fzP(f.comercializacion_pct)+')</small>',x=>fzN(x.comercializacion))}${fila('Costo total',x=>fzN(x.costo_total),'tot')}${fila('Margen',x=>fzN(x.margen))}${fila('ROI <small>(margen / costo)</small>',x=>roiC(x.roi))}${fila('Margen sobre venta',x=>fzP(x.margen_venta))}</table>
+  <div class="k"><span>Margen objetivo (ROI)</span><b>${fzP(f.objetivo)}</b></div><div class="k"><span>Precio de equilibrio</span><b>${fzN(f.precio_equilibrio)} USD/m² vendible</b></div>
+  <div class="k"><span>Costo total por m² bruto · vendible</span><b>${fzN(f.costo_m2_bruto)} · ${fzN(f.costo_m2_vendible)}</b></div>`+(f.avisos||[]).map(w=>`<div class="w">⚠ ${esc(w)}</div>`).join(''); }
 /* ---------- vistas ---------- */
 let viewMode='plan', planStory=null, sel=new Set(), anchor=null;
 let view3={az:-0.65, el:0.62, explode:0, plans:true, isolate:false, wire:false};
@@ -1417,7 +1489,7 @@ async function nuevo(){ if((footprint.length||result)&&!confirm('¿Empezar en bl
  try{ await fetch('/api/reset',{method:'POST'}); }catch(e){} olvidarHistoria();
  if(tool) setTool(tool); footprint=[]; terreno=null; scp=null; centerlines=[]; curLine=[]; coresManual=[]; $('cores_mode').value='auto'; stories=null; medianeras=[]; result=null; lastStage=null; selUnit=null; selCore=null; sinPatio(); olvidarFlechas(); sel.clear(); planStory=null; zoom=1; pan=[0,0];
  externa=null; avisosDxf=[]; nombre=''; abierto=null; variantes=[]; verVariantes(false); ediciones=[]; interiores=[]; edInfo(); anchosPasillo=[]; selPas=null; anchosInfo(); ['__rhino','__mp','__dxf','__proyecto','__terreno'].forEach(v=>{ const o=$('sample').querySelector('option[value="'+v+'"]'); if(o) o.remove(); }); selLabel('__nuevo','— En blanco —',true);
- patios=[]; patiosGaleria=[]; curPatio=[]; $('patios_mode').value='auto'; $('height').value=$('height').defaultValue; $('lvl').innerHTML=''; lineInfo(); coreInfo(); renderMeds(); renderStories(); panels2(); unitPanel();
+ patios=[]; patiosGaleria=[]; curPatio=[]; $('patios_mode').value='auto'; $('height').value=$('height').defaultValue; $('lvl').innerHTML=''; lineInfo(); coreInfo(); renderMeds(); renderStories(); fzOlvidar(); panels2(); unitPanel();
  $('rhinoBadge').textContent='Esperando masa de Rhino… (o abre un DXF, o usa un ejemplo)'; setView('plan'); $('tag').textContent='En blanco'; }
 /* ---------- proyectos (R4.1): el archivo es el pedido al motor (/api/generate) más nombre, versión y fecha ---------- */
 const ETAPAS=['massing','corridor','mix','plans'];
@@ -1457,6 +1529,7 @@ function abrirProyecto(p,archivo,opt){ opt=opt||{}; const no=t=>{ alert('Trazo: 
   if(!opt.variante){ variantes=Array.isArray(p.variantes)?p.variantes.filter(v=>v&&v.proyecto&&v.metricas):[]; verVariantes($('varPanel').style.display==='block'); }   // las variantes del proyecto
   for(const [k,v] of Object.entries(P)){ const e=$(k); if(e&&/^(INPUT|SELECT)$/.test(e.tagName)&&v!=null&&typeof v!=='object'){ if(e.type==='checkbox') e.checked=!!v; else e.value=v; } }   // cada parámetro simple vuelve a su control (mismo id)
   $('core_width').disabled=$('core_depth').disabled=$('core_auto').checked;
+  fzAbrir(P.factibilidad);   // R10.13: gama, terreno, precios y margen; sin ellos, los valores por defecto
   if(Array.isArray(P.unit_mix)&&P.unit_mix.length){ mix=P.unit_mix.map(m=>Object.assign({},m)); renderMix(); legend(); }
   if(STD_DEF){ STD=JSON.parse(JSON.stringify(STD_DEF)); mezclarStd(STD,P.standards||{},verMenor(p.version_motor,'2.61')?STD_ANTES:null); saveStd(); renderStd(); }   // las medidas del proyecto (guarda solo las cambiadas)
   const otra=p.version_motor&&VER&&p.version_motor!==VER;
@@ -1465,9 +1538,9 @@ function abrirProyecto(p,archivo,opt){ opt=opt||{}; const no=t=>{ alert('Trazo: 
  catch(e){ no('está incompleto o dañado ('+e.message+'). Prueba con otra copia del proyecto.'); } }
 /* ---------- variantes (R4.5): soluciones guardadas para compararlas ---------- */
 let variantes=[];   // {nombre, guardada, proyecto (como «Guardar proyecto»), metricas}
-const VCOL=[['unidades','Unid./planta',1],['total','Unid. totales',1],['nsa','NSA (m²)',1],['eficiencia','Eficiencia %',1],['match','Match %',1],['circulacion','Circulación %',-1],['sin_usar','Sin usar (m²)',-1],['nucleos','Núcleos',0],['evac','Evac. ✗',-1],['planos','Planos %',1]];   // 1: más es mejor; -1: menos es mejor
-function resumen(r){ const m=(r&&r.metrics)||{}, mx=m.mix||{}, us=(r&&r.units)||null;
- return {unidades:mx.count??null,total:m.units_total??null,nsa:m.nsa_total??null,eficiencia:m.efficiency_total??null,match:mx.match_score??null,circulacion:m.circulation_pct??null,sin_usar:m.unused_area??null,nucleos:m.core_count??null,evac:us?us.filter(u=>u.egress_status&&u.egress_status!=='ok').length:null,planos:m.plan_score??null}; }
+const VCOL=[['unidades','Unid./planta',1],['total','Unid. totales',1],['nsa','NSA (m²)',1],['eficiencia','Eficiencia %',1],['match','Match %',1],['circulacion','Circulación %',-1],['sin_usar','Sin usar (m²)',-1],['nucleos','Núcleos',0],['evac','Evac. ✗',-1],['planos','Planos %',1],['roi','ROI %',1],['equilibrio','Equil. USD/m²',-1]];   // 1: más es mejor; -1: menos es mejor
+function resumen(r){ const m=(r&&r.metrics)||{}, mx=m.mix||{}, us=(r&&r.units)||null, fz=m.factibilidad||{};
+ return {unidades:mx.count??null,total:m.units_total??null,nsa:m.nsa_total??null,eficiencia:m.efficiency_total??null,match:mx.match_score??null,circulacion:m.circulation_pct??null,sin_usar:m.unused_area??null,nucleos:m.core_count??null,evac:us?us.filter(u=>u.egress_status&&u.egress_status!=='ok').length:null,planos:m.plan_score??null,roi:fz.escenarios&&fz.escenarios.esperado?fz.escenarios.esperado.roi:null,equilibrio:fz.precio_equilibrio??null}; }
 function guardarVariante(){ if(!result||!footprint.length){ alert('Trazo: genera primero una solución (por ejemplo, «Generar planos») para guardarla como variante.'); return; }
  const letra=n=>n<26?String.fromCharCode(65+n):String(n+1); let k=variantes.length; while(variantes.some(v=>v.nombre==='Variante '+letra(k))) k++;
  variantes.push({nombre:'Variante '+letra(k),guardada:new Date().toISOString(),proyecto:JSON.parse(JSON.stringify(proyecto())),metricas:resumen(result)}); verVariantes(true); $('tag').textContent='Guardada: Variante '+letra(k); }   // proyecto: una copia, lo que cambie después no la toca
@@ -1490,5 +1563,5 @@ async function copiarVariantes(){ const t=[['Variante',...VCOL.map(c=>c[1])],...
 async function bajarCsv(){ if(!result||!result.units||!result.units.length){ alert('Genera primero la planta con viviendas («Generar mix» o «Generar planos») y vuelve a bajar la tabla'); return; } let r; try{ r=await fetch('/api/csv?nombre='+encodeURIComponent(nombre||'')); }catch(e){ alert('Trazo: no pude pedir la tabla al servidor. Revisa que siga abierto (python server.py) y vuelve a intentarlo'); return; } if(!r.ok){ let m='Trazo: no pude armar la tabla de viviendas'; try{ m=(await r.json()).error||m; }catch(e){} alert(m); return; } const b=await r.blob(), f=/filename="([^"]+)"/.exec(r.headers.get('Content-Disposition')||''), a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=f?f[1]:'trazo_viviendas.csv'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),5000); }
 async function dl(kind){ if(!result){alert('Genera primero un resultado');return;} let blob,name; if(kind=='json'){blob=new Blob([JSON.stringify(result,null,1)],{type:'application/json'});name='trazo.json';} else {const t=await (await fetch('/api/dxf')).text(); blob=new Blob([t],{type:'text/plain'});name='trazo.dxf';} const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); }
 async function poll(){ try{ const j=await (await fetch('/api/mass')).json(); if(j.version!==massVer&&j.mass){ massVer=j.version; setMass(j.mass,true); } }catch(e){} setTimeout(poll,1500); }
-(async()=>{ fetch('/api/version').then(r=>r.json()).then(j=>{ VER=j.version; $('ver').textContent='v'+j.version; }); renderMix(); legend(); await loadStd(); renderStories(); samples=await (await fetch('/api/samples')).json(); const s=$('sample'); s.innerHTML=Object.entries(samples).map(([k,v])=>`<option value="${k}">${v.name}</option>`).join(''); s.onchange=()=>{ if(samples[s.value]) setMass(samples[s.value]); else if(externa&&(s.value==='__rhino'||s.value==='__mp'||s.value==='__dxf')) setMass(externa,true); else if(s.value==='__proyecto'&&abierto) abrirProyecto(abierto.p,abierto.archivo,abierto.opt); else if(s.value==='__terreno'&&terrenoUlt) terrenoRectangular(terrenoUlt); }; let fromMp=null; if(new URLSearchParams(location.search).has('desde')){ try{ const j=await (await fetch('/api/mass')).json(); if(j.mass){ massVer=j.version; fromMp=j.mass; } }catch(e){} } if(fromMp){ s.insertAdjacentHTML('afterbegin','<option value="__mp">Lote del Masterplan</option>'); s.value='__mp'; setMass(fromMp,true); } else setMass(samples[s.value]||{footprint}); window.addEventListener('resize',render); poll(); capas(); let g=null; try{ g=localStorage.getItem('trazo.grupo'); ['grilla','orto','snap'].forEach(id=>{ const v=localStorage.getItem('trazo.'+id); if(v==='0'||v==='1'){ const c=$(id); c.checked=v==='1'; c.parentNode.classList.toggle('on',c.checked); } }); }catch(e){} if(g&&document.querySelector('.grupo[data-grupo="'+g+'"]')) grupo(g); })();
+(async()=>{ fetch('/api/version').then(r=>r.json()).then(j=>{ VER=j.version; $('ver').textContent='v'+j.version; }); renderMix(); legend(); await loadStd(); fzAbrir(null); renderStories(); samples=await (await fetch('/api/samples')).json(); const s=$('sample'); s.innerHTML=Object.entries(samples).map(([k,v])=>`<option value="${k}">${v.name}</option>`).join(''); s.onchange=()=>{ if(samples[s.value]) setMass(samples[s.value]); else if(externa&&(s.value==='__rhino'||s.value==='__mp'||s.value==='__dxf')) setMass(externa,true); else if(s.value==='__proyecto'&&abierto) abrirProyecto(abierto.p,abierto.archivo,abierto.opt); else if(s.value==='__terreno'&&terrenoUlt) terrenoRectangular(terrenoUlt); }; let fromMp=null; if(new URLSearchParams(location.search).has('desde')){ try{ const j=await (await fetch('/api/mass')).json(); if(j.mass){ massVer=j.version; fromMp=j.mass; } }catch(e){} } if(fromMp){ s.insertAdjacentHTML('afterbegin','<option value="__mp">Lote del Masterplan</option>'); s.value='__mp'; setMass(fromMp,true); } else setMass(samples[s.value]||{footprint}); window.addEventListener('resize',render); poll(); capas(); let g=null; try{ g=localStorage.getItem('trazo.grupo'); ['grilla','orto','snap'].forEach(id=>{ const v=localStorage.getItem('trazo.'+id); if(v==='0'||v==='1'){ const c=$(id); c.checked=v==='1'; c.parentNode.classList.toggle('on',c.checked); } }); }catch(e){} if(g&&document.querySelector('.grupo[data-grupo="'+g+'"]')) grupo(g); })();
 </script></body></html>

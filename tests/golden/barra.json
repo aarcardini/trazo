@@ -1,7 +1,7 @@
 {
  "ejemplo": "samples/barra.json",
  "nombre": "Barra 60x16",
- "version_motor": "2.62",
+ "version_motor": "2.64",
  "metricas": {
   "unidades": 13,
   "unidades_totales": 65,
@@ -17,7 +17,7 @@
   "area_planta": 907.3,
   "eficiencia_planta": 78.3,
   "eficiencia_total": 74.0,
-  "sin_usar": 23.4,
+  "sin_usar": 38.5,
   "circulacion": 19.2,
   "match_score": 96.5,
   "fit_m2": 3.2,

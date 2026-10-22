@@ -503,10 +503,12 @@ def test_sin_restos():
         assert min(b[0] for b in bb) < 0.4 and max(b[2] for b in bb) > 59.6, bb
     m, m0 = r["metrics"], run([[0, 0], [60, 0], [60, 16], [0, 16]])["metrics"]
     assert m["efficiency"] >= m0["efficiency"] - 0.1 and m["egress_max"] <= L.DEFAULT_PARAMS["egress_multi"], (m, m0)
-    # el ejemplo «L con polilínea»: de 49,6 a menos de 25 m² sin usar
+    # el ejemplo «L con polilínea»: de 49,6 a menos de 25 m² sin usar. Desde v2.64 «sin usar» no cuenta dos veces el pasillo
+    # bajo los núcleos (la caja de cada núcleo incluye su tramo de pasillo): la misma planta pasó de 22,5 a 52,2 m², así que
+    # los límites subieron lo que se contaba de más (unos 30 m²)
     s = json.load(open(os.path.join(os.path.dirname(__file__), "..", "samples", "L_polilinea.json"), encoding="utf-8"))
     m = run(s["footprint"], centerlines=s["centerlines"])["metrics"]
-    assert m["unused_area"] < 25 and m["efficiency"] > 72, m
+    assert m["unused_area"] < 55 and m["efficiency"] > 72, m
     # si detrás del núcleo hay un bolsillo, la franja y el bolsillo ya forman una vivienda: el núcleo no se mueve
     fp = [[0, 0], [21.21, 0], [21.21, 23.5], [14.85, 23.5], [14.85, 9.4], [6.36, 9.4], [6.36, 23.5], [0, 23.5]]
     r = run(fp, h=6, centerlines=[[[1.06, 7.05], [19.09, 7.05]]],
@@ -526,7 +528,7 @@ def test_codos():
     s = json.load(open(os.path.join(os.path.dirname(__file__), "..", "samples", "L.json"), encoding="utf-8"))
     r = run(s["footprint"])
     m = r["metrics"]
-    assert not oscuras(r) and m["unused_area"] < 1 and m["efficiency"] >= 71.5 and m["egress_max"] <= 18, m
+    assert not oscuras(r) and m["unused_area"] < 40 and m["efficiency"] >= 71.5 and m["egress_max"] <= 18, m     # v2.64: 34,3 m² (los muros entre viviendas); antes, 0 por contar dos veces el pasillo bajo los núcleos
     assert any(8 < c["center"][0] < 16 and 7 < c["center"][1] < 14 for c in r["cores"]), [c["center"] for c in r["cores"]]
     # U y T: ninguna vivienda a oscuras; las esquinas sin luz se marcan y se avisan (con núcleos de 2 ascensores, que no
     # entran en la esquina interior)
@@ -4385,9 +4387,11 @@ def test_tabla_csv():
         assert all("," in f[i] and "." not in f[i] for i in (4, 5, 6, 7, 9, 10)), f          # coma decimal, nunca punto
     assert {f[11] for f in filas} == {"cumple", "fondo de saco", "no cumple"}
     m = res["metrics"]
-    assert m["units_total"] == 45 and tot == {"Viviendas totales": "45", "Niveles residenciales": "5",
-                                              "Superficie vendible total, NSA (m²)": coma(m["nsa_total"], 1),
-                                              "Eficiencia (%)": coma(m["efficiency_total"], 1)}, tot
+    assert m["units_total"] == 45 and list(tot)[:4] == ["Viviendas totales", "Niveles residenciales", "Superficie vendible total, NSA (m²)", "Eficiencia (%)"]
+    assert {k: tot[k] for k in list(tot)[:4]} == {"Viviendas totales": "45", "Niveles residenciales": "5",
+                                                  "Superficie vendible total, NSA (m²)": coma(m["nsa_total"], 1),
+                                                  "Eficiencia (%)": coma(m["efficiency_total"], 1)}, tot
+    assert [k for k in tot if k.startswith("Factibilidad")] == list(tot)[4:] and len(tot) == 10        # R10.13: al final, la factibilidad (test_factibilidad)
     assert "None" not in texto and texto.split("\r\n")[1 + 45] == "" and texto.endswith("\r\n")
 
     # 2. las observaciones: los avisos de la vivienda que no cumplen, separados por « | » (T_dos_lineas tiene planos con fallas)
@@ -5198,7 +5202,7 @@ def test_galeria():
     e0, e1 = ejes(r0), ejes(r1)
     otros = [k for k in e0 if k != p1["id"]]
     assert all(e1[k] == e0[k] for k in otros), (e0, e1)                     # la tira y el brazo de arriba, con su pasillo
-    assert 40 <= r1["metrics"]["circulation_pct"] <= 42 and r1["metrics"]["unused_area"] < 5
+    assert 40 <= r1["metrics"]["circulation_pct"] <= 42 and r1["metrics"]["unused_area"] < 60     # v2.64: 53,5 m² (antes, 1,9 por contar dos veces el pasillo bajo los núcleos)
     # (d) el núcleo manual en (3, 11), dentro del patio, se apoya en la galería del brazo de abajo
     c0 = next(c for c in r1["cores"] if c["spec"] == 0)
     assert abs(c0["center"][0] - 3.075) < 0.05 and abs(max(y for _, y in c0["poly"]) - 10) < 0.01 and min(y for _, y in c0["poly"]) < 1
@@ -6073,3 +6077,254 @@ def test_reparto_frente():
 if __name__ == "__main__":
     test_reparto_frente(); print("OK78")
     test_servidor_en_red(); print("OK79")
+
+
+def test_factibilidad():
+    """R10.13 (v2.64): factibilidad por gama de construcción (engine/factibilidad.py, medidas en standards.costos, datos y
+    fórmulas en COSTOS.md). Con el ejemplo de COSTOS.md, sección 7.3 (3.000 m² brutos, 2.400 vendibles, terreno de USD 490.000)
+    los rubros, el costo total, el margen y el precio de equilibrio salen como en la tabla; los honorarios del arancel SAU
+    coinciden con la tabla de honorarios efectivos; el semáforo (verde, amarillo, rojo), los costos de cada programa, el
+    terreno por m², lo que se cambia en Normativa, la tabla CSV y la web (grupo Factibilidad, ids, proyectos sin factibilidad)."""
+    import copy, csv, io, re
+    from engine import factibilidad as FZ, layout as LY, standards as ST, tabla_viviendas as TV
+    raiz = os.path.join(os.path.dirname(__file__), "..")
+    C = ST.merged(None)["costos"]
+    # ---- las medidas: una lista por gama (baja, media, alta) y cada precio y porcentaje en standards.costos, no en el código
+    assert FZ.GAMAS == ("baja", "media", "alta") and C["obra_m2"] == [1350, 1750, 2500]
+    assert C["coef_cochera"] == 0.55 and C["coef_balcon"] == 0.5 and C["precio_venta"] == [2800, 3115, 3430] and C["margen_objetivo"] == 15
+    assert all(len(C[k]) == 3 for k in ("obra_m2", "ingenieria_pct", "imprevistos_pct", "administracion_pct", "financieros_pct",
+                                         "comercializacion_pct", "precio_venta", "sau", "permiso_ui", "permiso_comercio_ui"))
+    assert all(len(f) == 5 for f in C["sau"]) and len(C["sau_tramos"]) == 4 and len(C["permiso_hasta"]) == 2
+    # ---- 1) honorarios del arancel SAU: la tabla «honorarios efectivos sobre obra neta» de COSTOS.md (TC 40, C = 9,13)
+    efectivos = {2e6: (6.5, 11.3, 13.0), 4e6: (5.8, 10.1, 11.6), 6e6: (5.2, 9.1, 10.5), 10e6: (4.6, 7.8, 9.1), 25e6: (4.0, 6.7, 7.9)}
+    for obra, esperados in efectivos.items():
+        for g, e in enumerate(esperados):
+            assert abs(FZ.honorarios_sau(obra, g, C) / obra * 100 - e) < 0.06, (obra, g, e)
+    # ---- 2) el ejemplo de COSTOS.md 7.3: rubro por rubro (USD; tasas y trámites = permiso + Caja + conexiones)
+    ejemplo = {"baja": dict(precio=3000, honorarios=233865, ingenieria=81000, tasas=116812, imprevistos=202500, administracion=81000,
+                            terreno=507934, financieros=136738, comercializacion=360000, total=5769850, margen=1430150, mv=19.9, eq=2373),
+               "media": dict(precio=3300, honorarios=501822, ingenieria=131250, tasas=147772, imprevistos=262500, administracion=105000,
+                             terreno=507934, financieros=230317, comercializacion=435600, total=7572196, margen=347804, mv=4.4, eq=3147),
+               "alta": dict(precio=3900, honorarios=736360, ingenieria=225000, tasas=205822, imprevistos=525000, administracion=187500,
+                            terreno=507934, financieros=400397, comercializacion=655200, total=10943213, margen=-1583213, mv=-16.9, eq=4609)}
+    obras = {"baja": 4050000, "media": 5250000, "alta": 7500000}
+    for gama, e in ejemplo.items():
+        fz = {"gama": gama, "terreno": {"modo": "total", "valor": 490000},
+              "precio_venta": {"bajo": e["precio"], "esperado": e["precio"], "alto": e["precio"]}}
+        f = FZ.calcular({"Residential": {"gfa": 3000.0, "stories": 10}}, 2400.0, [], fz, C)
+        r = {x["id"]: x["usd"] for x in f["rubros"]}
+        assert f["gama"] == gama and abs(r["obra"] - obras[gama]) < 1, (gama, r["obra"])
+        assert abs(r["honorarios"] - e["honorarios"]) < 2 and abs(r["ingenieria"] - e["ingenieria"]) < 1
+        assert abs(r["permiso"] + r["caja"] + r["conexiones"] - e["tasas"]) < 2, (gama, r)
+        assert abs(r["imprevistos"] - e["imprevistos"]) < 1 and abs(r["administracion"] - e["administracion"]) < 1
+        assert abs(r["terreno"] + r["compra"] - e["terreno"]) < 1 and abs(r["financieros"] - e["financieros"]) < 2
+        x = f["escenarios"]["esperado"]
+        assert abs(x["comercializacion"] - e["comercializacion"]) < 1 and abs(x["costo_total"] - e["total"]) < 5, (gama, x)
+        assert abs(x["ingreso"] - 2400 * e["precio"]) < 1 and abs(x["margen"] - e["margen"]) < 5, (gama, x)
+        assert abs(x["margen_venta"] - e["mv"]) < 0.06 and abs(x["roi"] - x["margen"] / x["costo_total"] * 100) < 0.01
+        assert abs(f["precio_equilibrio"] - e["eq"]) < 1, (gama, f["precio_equilibrio"])
+        # el costo total con el precio de equilibrio da un margen nulo: ingreso − comercialización = costo sin comercializar
+        p = f["precio_equilibrio"]
+        assert abs(p * 2400 * (1 - f["comercializacion_pct"] / 100) - f["costo_sin_comercializacion"]) < 15     # el precio va redondeado a 0,01
+        assert abs(sum(v for k, v in r.items()) - f["costo_sin_comercializacion"]) < 0.1
+    # ---- 3) el ROI es margen / costo total, y el semáforo: verde, amarillo (solo el alto) o rojo (ni el alto)
+    base = lambda precios, objetivo=None: FZ.calcular(
+        {"Residential": {"gfa": 3000.0, "stories": 10}}, 2400.0, [],
+        dict({"gama": "baja", "terreno": {"modo": "total", "valor": 490000}, "precio_venta": precios},
+             **({"margen_objetivo": objetivo} if objetivo is not None else {})), C)
+    verde = base({"bajo": 2800, "esperado": 3115, "alto": 3430})
+    amarillo = base({"bajo": 2400, "esperado": 2700, "alto": 2800})         # con estos costos, el ROI llega a 15 % desde USD 2.750 por m²
+    rojo = base({"bajo": 2000, "esperado": 2300, "alto": 2600})
+    assert [x["semaforo"] for x in (verde, amarillo, rojo)] == ["verde", "amarillo", "rojo"]
+    assert verde["escenarios"]["esperado"]["roi"] >= 15
+    assert amarillo["escenarios"]["esperado"]["roi"] < 15 <= amarillo["escenarios"]["alto"]["roi"], amarillo["escenarios"]
+    assert rojo["escenarios"]["alto"]["roi"] < 15
+    assert all(x["semaforo_texto"] and x["objetivo"] == 15 for x in (verde, amarillo, rojo))
+    roi_esp = verde["escenarios"]["esperado"]["roi"]            # justo en el objetivo: verde; un poco más: solo el alto lo alcanza
+    assert base({"bajo": 2800, "esperado": 3115, "alto": 3430}, roi_esp)["semaforo"] == "verde"
+    assert base({"bajo": 2800, "esperado": 3115, "alto": 3430}, roi_esp + 0.01)["semaforo"] == "amarillo"
+    assert base({"bajo": 2800, "esperado": 3115, "alto": 3430}, 80)["semaforo"] == "rojo"
+    # sin superficie vendible no hay ingreso: rojo y con aviso; el ROI no se inventa
+    sin = FZ.calcular({"Residential": {"gfa": 3000.0, "stories": 10}}, 0.0, [], {}, C)
+    assert sin["semaforo"] == "rojo" and sin["precio_equilibrio"] is None and sin["escenarios"]["esperado"]["ingreso"] == 0
+    # ---- 4) la tasa del permiso según el tamaño de la unidad, la cochera y las amenities con su coeficiente, los balcones
+    ui = FZ._ui_vivienda([60.0, 60.0, 100.0], C)
+    assert abs(ui - (25 * 120 + 30 * 100) / 220) < 1e-9 and FZ._ui_vivienda([200.0], C) == 35 and FZ._ui_vivienda([], C) == 25
+    mixto = FZ.calcular({"Parking": {"gfa": 1000.0, "stories": 1}, "Amenities": {"gfa": 400.0, "stories": 1},
+                         "Residential": {"gfa": 2000.0, "stories": 5}, "Office": {"gfa": 800.0, "stories": 2}}, 1500.0, [60.0],
+                        {"gama": "media", "balcones_m2": 100}, C)
+    eq = 1000 * 0.55 + 400 * 1.25 + 2000 + 800 + 100 * 0.5
+    assert abs(mixto["superficies"]["equivalente"] - eq) < 0.1 and abs({x["id"]: x["usd"] for x in mixto["rubros"]}["obra"] - eq * 1750) < 1
+    permiso = {x["id"]: x["usd"] for x in mixto["rubros"]}["permiso"]
+    assert abs(permiso - (1000 * 25 + 400 * 25 + 2000 * 25 + 800 * 47) * 0.1643) < 0.5, permiso   # vivienda de 60 m²: 25 UI; oficinas de 400 m² por nivel: 47 UI; cochera y amenities: 25
+    assert any("no ingreso" in a or "sin ingreso" in a or "suman costo" in a for a in mixto["avisos"]), mixto["avisos"]
+    # ---- 5) el terreno: total o por m²; sin precio o sin superficie, un aviso; una gama que no existe se avisa
+    por_m2 = FZ.calcular({"Residential": {"gfa": 3000.0, "stories": 10}}, 2400.0, [],
+                         {"terreno": {"modo": "m2", "valor": 900}, "superficie_terreno": 500}, C, huella=420)
+    assert por_m2["terreno"]["usd"] == 450000 and por_m2["terreno"]["fuente"] == "predio" and por_m2["terreno"]["superficie"] == 500
+    de_masa = FZ.calcular({"Residential": {"gfa": 3000.0, "stories": 10}}, 2400.0, [], {"terreno": {"modo": "m2", "valor": 900}}, C, huella=420)
+    assert de_masa["terreno"]["usd"] == 378000 and de_masa["terreno"]["fuente"] == "masa"
+    assert any("terreno" in a for a in sin["avisos"])
+    assert not any("terreno" in a for a in por_m2["avisos"])
+    assert any("gama" in a for a in FZ.calcular({"Residential": {"gfa": 1.0}}, 1.0, [], {"gama": "lujo"}, C)["avisos"])
+    # ---- 6) en el motor: metrics.factibilidad desde el mix; sin params.factibilidad, con los valores por defecto
+    s = json.load(open(os.path.join(raiz, "samples", "barra.json"), encoding="utf-8"))
+    r0 = run(s["footprint"], h=s["height"])
+    m0 = r0["metrics"]
+    f0 = m0["factibilidad"]
+    assert f0["gama"] == "baja" and f0["terreno"]["usd"] == 0 and any("terreno" in a for a in f0["avisos"])
+    assert abs(f0["superficies"]["gfa"] - m0["gfa"]) < 0.1 and abs(f0["superficies"]["nsa"] - m0["nsa_total"]) < 0.1
+    assert abs({x["id"]: x["usd"] for x in f0["rubros"]}["obra"] - m0["gfa"] * 1350) < 1
+    esp = f0["escenarios"]["esperado"]
+    assert abs(esp["ingreso"] - m0["nsa_total"] * 3115) < 1 and abs(esp["roi"] - esp["margen"] / esp["costo_total"] * 100) < 0.01
+    assert [f0["escenarios"][k]["precio"] for k in ("bajo", "esperado", "alto")] == [2800, 3115, 3430]
+    explicito = {"gama": "baja", "terreno": {"modo": "total", "valor": 0}, "precio_venta": {"bajo": 2800, "esperado": 3115, "alto": 3430},
+                 "margen_objetivo": 15, "balcones_m2": 0}
+    assert run(s["footprint"], h=s["height"], factibilidad=explicito)["metrics"]["factibilidad"] == f0     # lo de la web = los valores por defecto
+    for etapa in ("massing", "corridor"):                                        # sin viviendas no hay ingreso: no se calcula
+        assert "factibilidad" not in generate({"footprint": s["footprint"], "height": s["height"], "stage": etapa})["metrics"]
+    assert "factibilidad" in generate({"footprint": s["footprint"], "height": s["height"], "stage": "mix"})["metrics"]
+    # el pedido de la web: gama, terreno por m² sobre la superficie del predio, precios y margen propios, medidas cambiadas
+    pedido = {"gama": "media", "terreno": {"modo": "m2", "valor": 700}, "superficie_terreno": 1100,
+              "precio_venta": {"bajo": 3000, "esperado": 3500, "alto": 4000}, "margen_objetivo": 10, "balcones_m2": 50}
+    r1 = run(s["footprint"], h=s["height"], factibilidad=pedido, standards={"costos": {"obra_m2": [1000, 2000, 3000]}})
+    f1 = r1["metrics"]["factibilidad"]
+    assert f1["gama"] == "media" and f1["costo_m2"] == 2000 and f1["objetivo"] == 10 and f1["terreno"]["usd"] == 770000
+    assert abs({x["id"]: x["usd"] for x in f1["rubros"]}["obra"] - (m0["gfa"] + 50 * 0.5) * 2000) < 1
+    assert [f1["escenarios"][k]["precio"] for k in ("bajo", "esperado", "alto")] == [3000, 3500, 4000]
+    assert r1["metrics"]["nsa_total"] == m0["nsa_total"]                          # no toca la planta
+    assert json.dumps({k: v for k, v in r1.items() if k != "metrics"}, sort_keys=True) == \
+        json.dumps({k: v for k, v in r0.items() if k != "metrics"}, sort_keys=True)
+    # una torre mixta: la cochera cuesta 0,55 y el aviso dice que solo la vivienda genera ingreso
+    t = json.load(open(os.path.join(raiz, "samples", "torre_mixta.json"), encoding="utf-8"))
+    rt = generate({"footprint": t["footprint"], "height": t["height"], "stage": "plans", "params": {"stories": t["stories"]}})
+    ft = rt["metrics"]["factibilidad"]
+    pg = {p["programa"]: p for p in ft["superficies"]["programas"]}
+    assert set(pg) >= {"Parking", "Retail", "Office", "Residential"} and pg["Parking"]["coef"] == 0.55 and pg["Residential"]["coef"] == 1.0
+    assert abs(pg["Parking"]["obra"] - pg["Parking"]["gfa"] * 0.55 * 1350) < 1 and any("cocheras" in a for a in ft["avisos"])
+    # ---- 7) la tabla CSV: al final de los totales, la factibilidad con el precio esperado
+    res = r1
+    texto = TV.result_to_csv(res)
+    filas = list(csv.reader(io.StringIO(texto[1:], newline=""), delimiter=";"))
+    tot = dict(filas[filas.index([]) + 1:])
+    coma = lambda v, d: ("%.*f" % (d, v)).replace(".", ",")
+    e1 = f1["escenarios"]["esperado"]
+    assert list(tot)[-6:] == ["Factibilidad: gama de construcción", "Factibilidad: costo total (USD)",
+                              "Factibilidad: ingreso con el precio esperado (USD)", "Factibilidad: margen con el precio esperado (USD)",
+                              "Factibilidad: ROI con el precio esperado (%)", "Factibilidad: precio de equilibrio (USD por m² vendible)"], list(tot)
+    assert tot["Factibilidad: gama de construcción"] == "media" and tot["Factibilidad: costo total (USD)"] == coma(e1["costo_total"], 0)
+    assert tot["Factibilidad: ingreso con el precio esperado (USD)"] == coma(e1["ingreso"], 0)
+    assert tot["Factibilidad: margen con el precio esperado (USD)"] == coma(e1["margen"], 0)
+    assert tot["Factibilidad: ROI con el precio esperado (%)"] == coma(e1["roi"], 1)
+    assert tot["Factibilidad: precio de equilibrio (USD por m² vendible)"] == coma(f1["precio_equilibrio"], 0)
+    assert "Viviendas totales" in tot and "None" not in texto
+    sin_fz = copy.deepcopy(res)
+    del sin_fz["metrics"]["factibilidad"]                                         # un resultado de otra versión: sin esas filas
+    assert not any(k.startswith("Factibilidad") for k in dict(list(csv.reader(io.StringIO(TV.result_to_csv(sin_fz)[1:], newline=""), delimiter=";"))[-4:]))
+    # ---- 8) la web: el grupo en el riel, sus controles con id (los lee params() y los devuelve abrirProyecto), Normativa y el resumen
+    html = open(os.path.join(raiz, "web", "index.html"), encoding="utf-8").read()
+    cuerpo_html = html.split("<body>", 1)[1].split("<script>", 1)[0]
+    js = html.split("<script>", 1)[1]
+    cuerpo = lambda f: js.split(f, 1)[1].split("\nfunction ", 1)[0].split("\nasync function ", 1)[0].split("\nconst ", 1)[0]
+    rail = cuerpo_html.split('<nav class="rail"', 1)[1].split("</nav>", 1)[0]
+    assert "data-grupo=\"factibilidad\" onclick=\"grupo('factibilidad')\"" in rail
+    panel = cuerpo_html.split('<div class="grupo" data-grupo="factibilidad"', 1)[1].split('<div class="grupo"', 1)[0]
+    ids = ("fz_gama", "fz_costo", "fz_terreno", "fz_terreno_modo", "fz_p_bajo", "fz_p_esperado", "fz_p_alto", "fz_margen", "fz_balcones", "fzTabla")
+    assert all('id="%s"' % i in panel for i in ids), [i for i in ids if 'id="%s"' % i not in panel]
+    assert all(o in panel for o in ('<option value="baja">', '<option value="media">', '<option value="alta">', '<option value="m2">'))
+    assert "validarlos con presupuestos" in panel and "triangulados" in panel and "COSTOS.md" in panel      # la advertencia de los costos
+    assert 'id="fzResumen"' in cuerpo_html.split('<aside class="r">', 1)[1].split("</aside>", 1)[0]
+    assert "factibilidad:factibilidadParams()" in cuerpo("function params(){")
+    params_fz = cuerpo("function factibilidadParams(")
+    assert all("'%s'" % i in params_fz for i in ids[:9] if i != "fz_costo"), params_fz      # cada control entra en el pedido
+    assert all(k in params_fz for k in ("gama", "terreno", "superficie_terreno", "precio_venta", "bajo", "esperado", "alto", "margen_objetivo", "balcones_m2"))
+    abrir_fz, abrir = cuerpo("function fzAbrir("), cuerpo("function abrirProyecto(")
+    assert "fzAbrir(P.factibilidad)" in abrir and "if(P.factibilidad" not in abrir         # también sin ella: los valores por defecto
+    assert all(("$('%s')" % i in abrir_fz or "$('fz_p_'+k)" in abrir_fz) for i in ids[:9] if i not in ("fz_costo", "fz_p_bajo", "fz_p_esperado", "fz_p_alto"))
+    assert "STD_DEF.costos" in abrir_fz and "precio_venta" in abrir_fz and "margen_objetivo" in abrir_fz
+    assert "fzResultado()" in cuerpo("function resumenPanel(") and "fzAbrir(null)" in js and "fzOlvidar()" in cuerpo("async function nuevo(")
+    assert "result.metrics.factibilidad" in cuerpo("function fzResultado(") and "semaforo" in cuerpo("function fzResultado(")
+    assert "m.factibilidad" in cuerpo("function resumen(") and "roi" in cuerpo("function resumen(")                    # las variantes guardan el ROI
+    # Normativa: cada medida de standards.costos tiene su etiqueta (o se carga en Factibilidad) y 'costos' está en la lista de grupos
+    etiquetas = re.search(r"const STD_COSTOS=\{(.*?)\};", js, re.S).group(1)
+    ocultas = re.search(r"const STD_OCULTAS=\{costos:\[(.*?)\]\}", js).group(1)
+    for k in C:
+        assert ("%s:'" % k) in etiquetas or ("'%s'" % k) in ocultas, k
+    assert "'estacionamiento','costos']" in cuerpo("function renderStd(") and "costos:'Costos y factibilidad" in js
+    # el servidor recarga el módulo nuevo y la web recibe las medidas
+    srv = open(os.path.join(raiz, "server.py"), encoding="utf-8").read()
+    assert "import engine.factibilidad as _factibilidad" in srv and "_patios, _factibilidad, _layout" in srv
+    assert tuple(int(x) for x in LY.VERSION.split(".")) >= (2, 64)
+
+
+def test_sin_usar():
+    """v2.64: «sin usar» (metrics.unused_area) mide la planta que no cubren pasillos, núcleos ni viviendas. La caja de cada
+    núcleo incluye su tramo de pasillo, que ya está en res["corridors"] (y en un anillo, las esquinas donde se encuentran dos
+    pasillos): antes se contaban dos veces y «sin usar» quedaba por debajo de la planta libre real (en «Barra 60x16», 23,4 m²
+    contra 38,5: la intersección de los dos núcleos con el pasillo, 15,15 m²). Se mide con un barrido horizontal (exacto a lo
+    largo de x, con un paso en y que no coincide con la grilla de 5 cm de las medidas). La circulación (circulation_pct) se
+    deja como estaba: sigue sumando ese tramo dos veces; queda para decidir."""
+    from engine import geometry as G
+
+    def une(ivs):                                     # unión de intervalos [a, b]
+        out = []
+        for a, b in sorted((a, b) for a, b in ivs):
+            if out and a <= out[-1][1]:
+                out[-1][1] = max(out[-1][1], b)
+            else:
+                out.append([a, b])
+        return out
+
+    def corta(A, B):                                  # intersección de dos uniones de intervalos
+        out, i, k = [], 0, 0
+        while i < len(A) and k < len(B):
+            a, b = max(A[i][0], B[k][0]), min(A[i][1], B[k][1])
+            if b > a:
+                out.append([a, b])
+            if A[i][1] < B[k][1]:
+                i += 1
+            else:
+                k += 1
+        return out
+    largo = lambda ivs: sum(b - a for a, b in ivs)
+
+    def barrer(r, bloques, dy=0.0137):
+        """(planta, planta libre, núcleos ∩ pasillos) en m², por barrido de bandas horizontales de alto dy."""
+        plate = libre = inter = 0.0
+        y0, y1 = min(G.bbox(o)[1] for o, _ in bloques), max(G.bbox(o)[3] for o, _ in bloques)
+        n = int((y1 - y0) / dy) + 1
+        dy = (y1 - y0) / n                            # bandas que cubren justo todo el alto
+        for i in range(n):
+            y = y0 + (i + 0.5) * dy
+            planta = une([iv for o, hs in bloques for iv in G.line_intervals_multi([o] + hs, y)])
+            pasillos = une([iv for p in r["corridors"] for iv in G.line_intervals(p, y)])
+            nucleos = une([iv for c in r["cores"] for iv in G.line_intervals(c["poly"], y)])
+            usado = une([iv for u in r["units"] for iv in G.line_intervals(u["poly"], y)] + pasillos + nucleos)
+            plate += largo(planta) * dy
+            libre += (largo(planta) - largo(corta(planta, usado))) * dy
+            inter += largo(corta(pasillos, nucleos)) * dy
+        return plate, libre, inter
+
+    A = lambda ps: sum(abs(G.area(p)) for p in ps)
+    muestra = lambda n: json.load(open(os.path.join(os.path.dirname(__file__), "..", "samples", n + ".json"), encoding="utf-8"))
+    # 1) «Barra 60x16»: dos núcleos de 5,05 × 1,50 m sobre el pasillo
+    s = muestra("barra")
+    r = run(s["footprint"], h=s["height"])
+    m = r["metrics"]
+    plate, libre, inter = barrer(r, [(r["plate"], [])])
+    viejo = max(0.0, m["plate_area"] - (A(r["corridors"]) + A([c["poly"] for c in r["cores"]]) + A([u["poly"] for u in r["units"]])) - m.get("dark_area", 0.0))
+    assert abs(viejo - 23.4) < 0.05 and abs(inter - 2 * 5.05 * 1.5) < 0.1, (viejo, inter)            # la cuenta de antes y lo que repetía
+    assert m["unused_area"] > viejo and abs(m["unused_area"] - viejo - inter) < 0.2, (m["unused_area"], viejo, inter)
+    assert abs(plate - m["plate_area"]) < 0.3 and abs(m["unused_area"] - libre) < 0.5, (m["unused_area"], libre)    # planta − unión
+    assert m["circulation_pct"] == round((A(r["corridors"]) + A([c["poly"] for c in r["cores"]])) / m["plate_area"] * 100, 1)   # sin cambio
+    # 2) una L (núcleo en el codo) y un anillo con patio central (esquinas donde dos pasillos se cruzan): igual a planta − unión
+    for nombre in ("L", "patio_central"):
+        s = muestra(nombre)
+        extra = {"patios_mode": "manual", "patios": s["patios"]} if nombre == "patio_central" else {}
+        r = run(s["footprint"], h=s["height"], **extra)
+        plate, libre, inter = barrer(r, [(b["plate"], b.get("plate_holes") or []) for b in r["blocks"]])
+        assert inter > 5 and abs(plate - r["metrics"]["plate_area"]) < 0.5, (nombre, inter, plate)
+        assert abs(r["metrics"]["unused_area"] - max(0.0, libre - r["metrics"].get("dark_area", 0.0))) < 0.5, (nombre, r["metrics"]["unused_area"], libre)
+
+if __name__ == "__main__":
+    test_factibilidad(); test_sin_usar(); print("OK80")

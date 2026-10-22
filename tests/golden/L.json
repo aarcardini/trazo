@@ -1,7 +1,7 @@
 {
  "ejemplo": "samples/L.json",
  "nombre": "Forma en L",
- "version_motor": "2.62",
+ "version_motor": "2.64",
  "metricas": {
   "unidades": 13,
   "unidades_totales": 65,
@@ -17,7 +17,7 @@
   "area_planta": 1053.5,
   "eficiencia_planta": 76.1,
   "eficiencia_total": 71.8,
-  "sin_usar": 14.4,
+  "sin_usar": 39.3,
   "circulacion": 21.9,
   "match_score": 96.5,
   "fit_m2": 10.3,

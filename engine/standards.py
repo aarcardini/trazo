@@ -23,6 +23,10 @@ Fuentes principales (ver STANDARDS.md):
   monoambiente: 32 m², criterio del usuario, art. 2); cocina integrada al estar sin ventana de 3 a 5 m² con lado 1,40 y
   el vano del estar de 1/10 de los dos locales, con 2 m² como mínimo (art. 27); retiro de 1 m como mínimo si el edificio
   se separa de la divisoria (art. 53 e).
+- R10.13, costos y factibilidad (`costos`, COSTOS.md): costo de obra por m² bruto y por gama, honorarios del arancel de la
+  SAU (1997, vigente como mínimo), permiso de construcción de la Intendencia de Montevideo (Digesto, art. 224), Caja de
+  Profesionales (Ley 17.738, art. 71 E), precio de venta de la ANV (informe n.º 50, mayo de 2026). Los costos por gama y
+  los porcentajes sin fuente son triangulados o supuestos: hay que validarlos con presupuestos de constructoras.
 Las medidas "típicas" son criterios de proyecto (no normativos) y pueden ajustarse.
 """
 import copy
@@ -133,6 +137,54 @@ DEFAULTS = {
     "estacionamiento": {
         "plaza": [2.50, 5.00],           # ancho x largo
         "calle": 6.00,                   # calle de circulación
+    },
+    # R10.13 (COSTOS.md, investigación del 14/10/2026): costo y factibilidad por gama de construcción. Las listas por gama
+    # van en el orden [baja, media, alta]. Marcas de COSTOS.md: (F) dato de la fuente, (D) derivado de ella, (S) supuesto
+    # propio sin fuente. Valores de referencia: no hay una fuente pública del costo de obra por m² de edificios en
+    # Uruguay, y los costos por gama están triangulados (rangos de prensa y portales, precios de la ANV y un tope de
+    # lujo): validarlos con dos o tres presupuestos de constructoras antes de confiar en ellos
+    "costos": {
+        # obra, USD por m² bruto cerrado, neto de IVA (recuperable en la Vivienda Promovida): materiales, mano de obra con
+        # leyes sociales, gastos generales y beneficio de la constructora; sin terreno, honorarios, tasas ni imprevistos.
+        # (S) triangulado: baja 1.200-1.500, media 1.600-1.900, alta 2.200-2.800
+        "obra_m2": [1350, 1750, 2500],
+        # coeficientes del costo de obra por tipo de superficie: subsuelo y cochera, la relación de la Comunidad de Madrid
+        # entre el garaje bajo rasante y la vivienda (D, método de costes de referencia, 2022); balcones y terrazas
+        # cubiertas y amenities interiores (S)
+        "coef_cochera": 0.55,            # programa Estacionamiento (subsuelo y cochera)
+        "coef_balcon": 0.50,             # balcones y terrazas cubiertas: la superficie se carga aparte (balcones_m2)
+        "coef_amenities": 1.25,          # programa Amenities (1,2 a 1,3)
+        # honorarios de arquitectura y dirección de obra: arancel de la SAU (F, 1997, vigente como mínimo), tramos
+        # acumulativos sobre el valor de la obra en millones de pesos de marzo de 1997; categoría A (económica) para la
+        # gama baja, B (media y confortable) para la media y C (suntuaria) para la alta; filas A, B y C, % por tramo
+        "sau_tramos": [5, 13, 26, 130],
+        "sau": [[6, 5, 4, 3, 2], [10, 9, 7, 5, 3], [12, 10, 8, 6, 4]],
+        "sau_iva": 1.19,                 # la obra del arancel incluye IVA (F): obra neta × 1,19 (D, COSTOS.md 7.2; el IVA no recuperable da 1,17 a 1,19)
+        "sau_actualizacion": 9.13,       # C = IPC / 12,68 en marzo de 2026 (F, SAU: coeficientes de actualización)
+        "tipo_cambio": 40.0,             # pesos por USD (S)
+        "ingenieria_pct": [2.0, 2.5, 3.0],      # % de la obra: instalaciones, suelos, mensura, que el arancel no incluye (F); solo la estructura (1,3 %) tiene fuente, los valores son (S)
+        # permiso de construcción, Intendencia de Montevideo (F, Digesto art. 224): UI por m² según el tamaño de la unidad
+        # (vivienda: hasta 70 m², hasta 140 m² y más; comercio y oficinas 35, 42 y 47; otros 25)
+        "permiso_ui": [25, 30, 35],
+        "permiso_hasta": [70, 140],
+        "permiso_comercio_ui": [35, 42, 47],
+        "permiso_otros_ui": 25,
+        "ui_usd": 0.1643,                # USD por UI (D, ANV, primer semestre de 2026; ≈ 0,164, el ejemplo de COSTOS.md usa 0,1643)
+        # Caja de Profesionales: 4 % del monto de mano de obra en obras de arquitectura (F, Ley 17.738, art. 71 E); la
+        # mano de obra imponible es ≈ 27 % de la obra neta (D) → ≈ 1,1 % de la obra
+        "caja_pct": 4.0,
+        "mano_obra_pct": 27.0,
+        "conexiones_pct": 1.5,           # % de la obra: conexiones de UTE, OSE y gas, Bomberos, escribanía y reglamento (S)
+        "imprevistos_pct": [5.0, 5.0, 7.0],     # % de la obra (S)
+        "administracion_pct": [2.0, 2.0, 2.5],  # % de la obra, administración del desarrollador (S)
+        "financieros_pct": [3.0, 4.0, 5.0],     # % de (obra + terreno) (S)
+        "comercializacion_pct": [5.0, 5.5, 7.0],  # % del ingreso por venta: comisión de 3 % + IVA (F, aviso de InfoCasas); el resto (S)
+        "compra_terreno_pct": 3.66,      # comisión inmobiliaria por la compra del terreno, 3 % + IVA (F, aviso de InfoCasas)
+        # precio de venta por m² vendible, USD: [bajo, esperado, alto]. Esperado: ANV, Vivienda Promovida de Montevideo, año
+        # móvil a abril de 2026, 3.115 por m² habitable (F, informe n.º 50); bajo y alto, ± 10 % (S). Por barrio (m²
+        # construido de la ANV y precios pedidos): ver COSTOS.md, sección 5
+        "precio_venta": [2800, 3115, 3430],
+        "margen_objetivo": 15.0,         # % sobre el costo total (ROI): criterio del usuario
     },
     "equipamiento": {                    # F5: artefactos dentro de las estancias (engine/equipamiento.py)
         "puerta_interior": 0.70,         # ancho de hoja: dormitorios, baños, lavadero (criterio del usuario)
