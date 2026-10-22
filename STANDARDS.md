@@ -11,7 +11,7 @@ Las medidas de mercado (superficie típica de cada tipología, frente y fondo, m
 |---|---|---|---|
 | Dormitorio principal | 8,5 m² / 2,60 m | 11,5 m² / 3,20 × 3,60 | Normativa Nacional de Edificación (NNE), art. 8 b) |
 | Dormitorio secundario | 7,0 m² / 2,00 m | 9,0 m² / 2,80 × 3,20 | NNE, art. 8 c): dormitorios adicionales |
-| Estar-comedor | 10,0 m² / 2,60 m | 18–27 m² según dormitorios | NNE, art. 8 a): al menos un local principal habitable de 10 m² y lado 2,60. Típico: 18 (monoamb./1 dorm.), 20 (2), 24 (3), 27 (4) |
+| Estar-comedor | 10,0 m² / 2,60 m | 15–24 m² según dormitorios | NNE, art. 8 a): al menos un local principal habitable de 10 m² y lado 2,60. Típico (`estar_por_dorms`, R5.16, v2.61): 18 (monoamb.), 15 (1 dorm.), 18 (2), 21 (3), 24 (4); fuente: base de tipologías (`data/tipologias/RESUMEN.md`, 4.3), medianas de 18,1 / 14,5 / 17,3 / 21,2 / 23,2 m² en 49 viviendas de Montevideo (antes 18 / 18 / 20 / 24 / 27) |
 | Estudio | 7,0 m² / 2,00 m | 8,0 m² / 2,60 × 3,10 | NNE, art. 8 c): un local que puede usarse como dormitorio (presunción de destino, art. 6). Más chico es un local secundario, sin mínimo (art. 29) |
 | Cocina | 4,0 m² / 1,60 m (3 m² si abre a un local principal o a un corredor en el 70 % del lado mayor) | 7,0 m² / 2,40 × 2,90 | NNE, arts. 21 y 22. Hoy Trazo no dibuja cocinas con ventana propia: todas son integradas (fila siguiente) |
 | Cocina integrada al estar sin ventana (R10.8) | 3,0 m² / 1,40 m; **máximo 5,0 m²** | — | NNE, art. 27: integrada al estar sin ventana propia, de 3 a 5 m² con lado 1,40; el vano del estar ilumina los dos locales (1/10 de su superficie, con 2 m² como mínimo); más grande necesita su propia luz y ventilación (art. 24). Trazo la dibuja con 5 m² como máximo (criterio del usuario): ver abajo |

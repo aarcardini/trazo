@@ -1,26 +1,28 @@
 {
  "ejemplo": "samples/barra.json",
  "nombre": "Barra 60x16",
- "version_motor": "2.60",
+ "version_motor": "2.61",
  "metricas": {
-  "unidades": 8,
-  "unidades_totales": 40,
+  "unidades": 15,
+  "unidades_totales": 75,
   "por_tipo": {
+   "1 dorm": 8,
    "2 dorm": 4,
-   "3 dorm": 4
+   "3 dorm": 1,
+   "Mono": 2
   },
   "nucleos": 2,
   "ascensores": 1,
   "tramos": 1,
   "area_planta": 907.3,
-  "eficiencia_planta": 79.4,
-  "eficiencia_total": 75.0,
-  "sin_usar": 13.3,
+  "eficiencia_planta": 77.8,
+  "eficiencia_total": 73.6,
+  "sin_usar": 27.4,
   "circulacion": 19.2,
-  "match_score": 100.0,
-  "fit_m2": 5.0,
-  "calidad_planos": 100,
+  "match_score": 95.0,
+  "fit_m2": 2.5,
+  "calidad_planos": 80,
   "evacuacion_max": 26.6,
-  "nsa_total": 3601.0
+  "nsa_total": 3530.5
  }
 }

@@ -57,8 +57,9 @@ DEFAULTS = {
         # regula; Neufert: módulo de 0,60 m con su paso delante, de 0,60 m (mínimo: 1,20 m) a 0,90 m (típico: 1,50 m).
         # typ: [frente, fondo]
         "vestidor": {"min_area": 3.0, "min_side": 1.20, "typ": [2.00, 1.50]},
-        # estar-comedor típico según dormitorios (m²)
-        "estar_por_dorms": [18.0, 18.0, 20.0, 24.0, 27.0],
+        # estar-comedor típico según dormitorios (m²). R5.16 (v2.61): medianas de la base de tipologías
+        # (data/tipologias/RESUMEN.md, 4.3): 18,1 / 14,5 / 17,3 / 21,2 / 23,2 m² (antes 18 / 18 / 20 / 24 / 27)
+        "estar_por_dorms": [18.0, 15.0, 18.0, 21.0, 24.0],
         # rangos de superficie de la vivienda según dormitorios (ANV): [mín, máx]
         "rango_vivienda": [[25, 40], [35, 50], [50, 75], [65, 100], [80, 125]],
         # R10.8 (norma nacional, art. 3): superficie mínima con muros (hasta la cara exterior de los muros exteriores y el

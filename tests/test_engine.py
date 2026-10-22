@@ -6,25 +6,56 @@ from engine.layout import generate
 def run(fp, h=15, **p):
     return generate({"footprint": fp, "height": h, "stage": "plans", "params": p})
 
-def calibracion_anterior(f):
-    """R5.16 (v2.60): las medidas por defecto de la planta se calibraron con la base de tipologías (pasillo de 1,5 m, frente
-    mínimo de 3,5 m, fondo máximo de 16 m, escalera de 1,00 m con ascensor). Las pruebas de geometría exacta escritas antes
-    (posiciones de núcleos y puertas, superficies, fondos) siguen midiendo la lógica del motor con las medidas de antes
-    (2,0 m, 5,0 m, 14 m y 1,20 m); las medidas nuevas las cubren test_calibracion_planta y las referencias de samples/."""
-    import functools
+def _medidas_anteriores(planta, vivienda):
+    """Context manager: pone en `layout.DEFAULT_PARAMS` y `standards.DEFAULTS` las medidas de antes de la calibración con la
+    base de tipologías (R5.16) y las restaura al salir. `planta` (v2.60): pasillo de 2,0 m, frente mínimo de 5,0 m, fondo
+    máximo de 14 m y escalera de 1,20 m con ascensor. `vivienda` (v2.61): estar-comedor por dormitorios [18, 18, 20, 24, 27] y
+    el mix de 2 y 3 dormitorios de 75 y 95 m² al 50 % (el «Inversor» de v2.61 lo reemplazó)."""
+    import contextlib
 
-    @functools.wraps(f)
-    def con_medidas_anteriores(*a, **k):
+    @contextlib.contextmanager
+    def cm():
         from engine import layout as LY, standards as ST
         params, escalera = dict(LY.DEFAULT_PARAMS), ST.DEFAULTS["nucleo"]["escalera_ancho_con_ascensor"]
-        LY.DEFAULT_PARAMS.update(corridor_width=2.0, min_unit_width=5.0, max_unit_depth=14.0)
-        ST.DEFAULTS["nucleo"]["escalera_ancho_con_ascensor"] = 1.20
+        estar = ST.DEFAULTS["vivienda"]["estar_por_dorms"]
+        if planta:
+            LY.DEFAULT_PARAMS.update(corridor_width=2.0, min_unit_width=5.0, max_unit_depth=14.0)
+            ST.DEFAULTS["nucleo"]["escalera_ancho_con_ascensor"] = 1.20
+        if vivienda:
+            LY.DEFAULT_PARAMS.update(unit_mix=[{"name": "2 dorm", "area": 75, "percent": 50, "dorms": 2},
+                                               {"name": "3 dorm", "area": 95, "percent": 50, "dorms": 3}])
+            ST.DEFAULTS["vivienda"]["estar_por_dorms"] = [18.0, 18.0, 20.0, 24.0, 27.0]
         try:
-            return f(*a, **k)
+            yield
         finally:
             LY.DEFAULT_PARAMS.update(params)
             ST.DEFAULTS["nucleo"]["escalera_ancho_con_ascensor"] = escalera
-    return con_medidas_anteriores
+            ST.DEFAULTS["vivienda"]["estar_por_dorms"] = estar
+    return cm()
+
+def _con(planta, vivienda):
+    import functools
+
+    def decorador(f):
+        @functools.wraps(f)
+        def con_medidas_anteriores(*a, **k):
+            with _medidas_anteriores(planta, vivienda):
+                return f(*a, **k)
+        return con_medidas_anteriores
+    return decorador
+
+def calibracion_anterior(f):
+    """R5.16 (v2.60 y v2.61): las medidas por defecto se calibraron con la base de tipologías (planta en v2.60, vivienda en
+    v2.61: ver `_medidas_anteriores`). Las pruebas de geometría exacta escritas antes (posiciones de núcleos y puertas,
+    superficies, fondos) siguen midiendo la lógica del motor con todas las medidas de antes; las nuevas las cubren
+    test_calibracion_planta, test_calibracion_vivienda y las referencias de samples/."""
+    return _con(True, True)(f)
+
+def vivienda_anterior(f):
+    """R5.16 (v2.61): como `calibracion_anterior`, pero solo con el mix y el estar-comedor de antes; la planta (pasillo,
+    frente mínimo, fondo máximo, escalera) queda con las medidas nuevas de v2.60. Para las pruebas que ya corrían con ellas
+    y solo suponían el mix de 2 y 3 dormitorios (cantidad de viviendas de cada tipo, qué vivienda es la U03...)."""
+    return _con(False, True)(f)
 
 def test_bar():
     r = run([[0,0],[60,0],[60,16],[0,16]])
@@ -82,6 +113,7 @@ if __name__ == "__main__":
     test_polyline_and_manual_cores(); print("OK2")
 
 
+@vivienda_anterior
 def test_unit_plans_graph():
     """Cada unidad tiene hall, estar y los dormitorios de su tipo, y todo se alcanza desde la entrada."""
     r = run([[0,0],[60,0],[60,16],[0,16]])
@@ -123,6 +155,7 @@ if __name__ == "__main__":
     test_programs_and_core(); print("OK4")
 
 
+@vivienda_anterior
 def test_medianeras():
     fp = [[0,0],[10,0],[10,28],[0,28]]
     meds = [{"a":[10,0],"b":[10,28],"retiro":0},{"a":[0,28],"b":[0,0],"retiro":0}]
@@ -283,6 +316,7 @@ if __name__ == "__main__":
     test_web_cotas_y_escala(); print("OK13")
 
 
+@vivienda_anterior
 def test_patios():
     """Patios (v2.4): automáticos en predios entre medianeras profundos, y manuales; cada bloque con su núcleo."""
     from engine import geometry as G
@@ -402,8 +436,10 @@ def test_modulos():
     assert layout.generate_circulation is circulation.generate_circulation and layout.unit_rooms is units.unit_rooms
     server._loaded[0] = 0                                  # como si hubiera cambiado un archivo del motor
     lay, _ = server.engine()
-    r = lay.generate({"footprint": [[0, 0], [60, 0], [60, 16], [0, 16]], "height": 15, "stage": "plans"})
-    assert len(r["units"]) == 8 and lay.split_blocks is patios.split_blocks, len(r["units"])
+    entrada = {"footprint": [[0, 0], [60, 0], [60, 16], [0, 16]], "height": 15, "stage": "plans"}
+    r = lay.generate(entrada)                              # el motor recargado da lo mismo que el cargado antes
+    assert r["units"] and len(r["units"]) == len(layout.generate(entrada)["units"]) and lay.split_blocks is patios.split_blocks, \
+        len(r["units"])
 
 if __name__ == "__main__":
     test_modulos(); print("OK16")
@@ -598,6 +634,7 @@ if __name__ == "__main__":
     test_lavadero(); print("OK21")
 
 
+@vivienda_anterior
 def test_no_ortogonales():
     """R3.4: una planta no ortogonal se divide en alas, cada una con su propio eje: una barra con quiebre, una L con
     ochava, el tallo oblicuo de una T. Las plantas convexas (un trapecio) siguen con un solo pasillo y una estrella no
@@ -699,6 +736,7 @@ if __name__ == "__main__":
     test_nucleos_editables(); print("OK23")
 
 
+@vivienda_anterior
 def test_evacuacion():
     """R3.6: desde la puerta de cada vivienda se mide el recorrido hasta el núcleo más cercano y el fondo de saco (el
     tramo con una sola salida hasta un núcleo o hasta un punto desde el que se puede salir en dos direcciones). Las
@@ -979,6 +1017,7 @@ if __name__ == "__main__":
     test_editar_viviendas(); print("OK31")
 
 
+@vivienda_anterior
 def test_equipamiento():
     """F5 (R5.6, primera parte): artefactos de baños, cocina y lavadero dentro de sus estancias, contra paredes macizas,
     sin pisarse ni pisar el barrido de las puertas. Las puertas interiores miden 0,70 y la de entrada 0,90 (editables).
@@ -1368,6 +1407,7 @@ def test_editar_interior():
 if __name__ == "__main__":
     test_editar_interior(); print("OK35")
 
+@vivienda_anterior
 def test_ventanas():
     """R5.5: una ventana por estancia habitable (dormitorios, estar, comedor y estudio con fachada), centrada en su
     tramo de fachada (primero el fondo), del ancho típico o del que pida el vano mínimo (10 % de la superficie, con
@@ -1562,7 +1602,9 @@ def test_normativa_nacional():
     Intendentes, MVOTMA y SAU, 2016). Las comprobaciones de cada plano los usan: un dormitorio principal de 2,55 m de lado
     ya no cumple (art. 8 b: 2,60 m) y uno de 9,2 m² sí (8,5 m²); un dormitorio adicional de 6,8 m² no cumple (art. 8 c:
     7 m²). La web guarda en el navegador solo las medidas cambiadas; en lo guardado antes de v2.27 (o en un proyecto
-    anterior), un mínimo con su valor viejo pasa al nuevo y uno elegido a mano se respeta (STD_ANTES)."""
+    anterior), un mínimo con su valor viejo pasa al nuevo y uno elegido a mano se respeta (STD_ANTES). v2.61: el
+    estar-comedor por dormitorios también cambió (R5.16): su valor viejo está en STD_ANTES y un proyecto guardado antes de
+    v2.61 con ese valor toma el nuevo (la versión de corte pasó de 2.27 a 2.61)."""
     import copy
     import re
     from engine import plans as P, standards as ST
@@ -1597,15 +1639,18 @@ def test_normativa_nacional():
     antes = re.search(r"const STD_ANTES=(\{.*?\}\}\});", html).group(1)
     antes = json.loads(re.sub(r"([{,])(\w+):", r'\1"\2":', antes))
     assert antes == {"vivienda": {"dorm_principal": {"min_area": 10, "min_side": 2.5}, "dorm_secundario": {"min_area": 6.5},
-                                  "estar_comedor": {"min_side": 2.5}, "estudio": {"min_area": 6.5},
-                                  "bano": {"min_area": 2.4}}}, antes
+                                  "estar_comedor": {"min_side": 2.5}, "estar_por_dorms": [18, 18, 20, 24, 27],
+                                  "estudio": {"min_area": 6.5}, "bano": {"min_area": 2.4}}}, antes
     for estancia, valores in antes["vivienda"].items():
+        if isinstance(valores, list):                                   # una lista de medidas (estar_por_dorms)
+            assert V[estancia] != valores, estancia
+            continue
         for k, v in valores.items():
             assert V[estancia][k] != v, (estancia, k)
-    # se guarda solo lo cambiado, y los valores viejos se pasan solo en lo guardado antes de v2.27
+    # se guarda solo lo cambiado, y los valores viejos se pasan solo en lo guardado antes de v2.27 (navegador) o de v2.61 (proyecto)
     assert "localStorage.setItem('trazo.std',JSON.stringify(Object.assign({_v:2},medidasCambiadas())))" in html
     assert "mezclarStd(STD,sv,viejo?STD_ANTES:null)" in html and "const viejo=!sv._v" in html
-    assert "mezclarStd(STD,P.standards||{},verMenor(p.version_motor,'2.27')?STD_ANTES:null)" in html
+    assert "mezclarStd(STD,P.standards||{},verMenor(p.version_motor,'2.61')?STD_ANTES:null)" in html
 
 if __name__ == "__main__":
     test_normativa_nacional(); print("OK38")
@@ -1686,6 +1731,7 @@ if __name__ == "__main__":
     test_medianeras_parciales(); print("OK41")
 
 
+@vivienda_anterior
 def test_ascensores_por_nucleo():
     """R10.7 (v2.32): cada núcleo lleva los ascensores que piden las viviendas que sirve (las que tienen en él su
     recorrido más corto, por los niveles residenciales): 1 cada 60 y al menos 1 si el edificio necesita ascensor. En
@@ -3648,6 +3694,7 @@ def test_medidas_tipeadas():
 if __name__ == "__main__":
     test_medidas_tipeadas(); print("OK61")
 
+@vivienda_anterior
 def test_cocina_ventana():
     """R10.9 (decisión del usuario, v2.41; norma nacional, art. 24): la cocina con un tramo de fachada en el que entra una
     ventana lleva la suya (de ventanas["ancho_cocina"], con ventanas["vano_cocina"] como mínimo y más ancha si el 10 % de
@@ -4529,6 +4576,7 @@ if __name__ == "__main__":
     test_puerta_en_la_punta(); print("OK68")
 
 
+@vivienda_anterior
 def test_medidas_en_vivo():
     """R4.13a: medidas en vivo (solo web; el motor no cambia). Mientras se dibuja o se arrastra, una etiqueta con la medida va
     junto a lo que se mueve, con el mismo formato de las cotas (2 decimales): la línea muestra su largo y su ángulo en el SCP
@@ -5624,10 +5672,11 @@ def test_tipologias():
     cm = cat["resumen"]["comparacion"]
     assert [c["tipologia"] for c in cm["viviendas"]] == ["Mono", "1D", "2D", "3D", "4D"]
     assert [c["referencias"] for c in cm["viviendas"]] == [30, 42, 58, 78, 100]
-    assert [c["superficie_min"] for c in cm["viviendas"]] == [32, 32, 44, 56, 68] and cm["viviendas"][2]["mix_motor"] == 75
+    assert [c["superficie_min"] for c in cm["viviendas"]] == [32, 32, 44, 56, 68]
+    assert [c["mix_motor"] for c in cm["viviendas"]] == [33, 42, 62, 93, None]       # v2.61: el mix «Inversor» (antes solo 2D 75 y 3D 95)
     est = {c["estancia"]: c for c in cm["estancias"]}
     assert est["Dormitorio 1"]["tipico_area"] == 11.5 and est["Dormitorio 1"]["n"] > 30 and est["Cocina integrada"]["tope_area"] == 5.0
-    assert [c["estar_por_dorms"] for c in cm["zona_estar"]] == [18.0, 18.0, 20.0, 24.0, 27.0]
+    assert [c["estar_por_dorms"] for c in cm["zona_estar"]] == [18.0, 15.0, 18.0, 21.0, 24.0]     # v2.61 (antes 18, 18, 20, 24, 27)
     assert cm["plantas"]["ancho_pasillo"]["motor"] == 1.5                 # v2.60: el de la base (1,50 m), antes 2,0 m
     nm = cm["plantas"]["nucleo"]["motor"]               # el núcleo del motor: sin el palier (como Trazo_Nucleos) y con él
     assert nm["ascensores"] == 1 and 18 < nm["giro_0"]["area_sin_palier"] < 21 and 15 < nm["giro_90"]["area_sin_palier"] < 18   # v2.60: 19,5 y 16,7 m² (antes 23,5 y 19,6)
@@ -5753,3 +5802,131 @@ def test_calibracion_planta():
 
 if __name__ == "__main__":
     test_calibracion_planta(); print("OK76")
+
+
+def test_calibracion_vivienda():
+    """R5.16 (v2.61, usos a, segunda parte) y R10.12: el estar-comedor por dormitorios sigue lo medido en la base de
+    tipologías (RESUMEN.md, 4.3) y el mix por defecto es el «Inversor» de REFERENCIAS.md (Mono 33 m² 10 %, 1 dorm 42 m²
+    55 %, 2 dorm 62 m² 30 %, 3 dorm 93 m² 5 %: superficies con muros medianas de la base). La web trae el mismo mix inicial
+    y un selector «Mix predeterminado» con Inversor, Equilibrado, Familiar y Personalizado. Un proyecto guardado conserva
+    su tabla de mix y sus medidas elegidas; el estar viejo pasa al nuevo (STD_ANTES, corte 2.61). Un monoambiente (dorms: 0)
+    pasa por el reparto, el plano (Estar-Dormitorio, cocina y baño) y el equipamiento."""
+    import re
+    import shutil
+    import subprocess
+    import tempfile
+    from engine import layout as LY, standards as ST
+    base = os.path.join(os.path.dirname(__file__), "..")
+    # 1) valores por defecto del motor
+    assert ST.DEFAULTS["vivienda"]["estar_por_dorms"] == [18.0, 15.0, 18.0, 21.0, 24.0], ST.DEFAULTS["vivienda"]
+    inversor = [{"name": "Mono", "area": 33, "percent": 10, "dorms": 0}, {"name": "1 dorm", "area": 42, "percent": 55, "dorms": 1},
+                {"name": "2 dorm", "area": 62, "percent": 30, "dorms": 2}, {"name": "3 dorm", "area": 93, "percent": 5, "dorms": 3}]
+    equilibrado = [{"name": "Mono", "area": 33, "percent": 5, "dorms": 0}, {"name": "1 dorm", "area": 42, "percent": 45, "dorms": 1},
+                   {"name": "2 dorm", "area": 62, "percent": 40, "dorms": 2}, {"name": "3 dorm", "area": 93, "percent": 10, "dorms": 3}]
+    familiar = [{"name": "1 dorm", "area": 42, "percent": 25, "dorms": 1}, {"name": "2 dorm", "area": 62, "percent": 55, "dorms": 2},
+                {"name": "3 dorm", "area": 93, "percent": 20, "dorms": 3}]
+    # (generate_unit_mix anota "_p" en los tipos del mix: no cuenta)
+    assert [{k: v for k, v in m.items() if not k.startswith("_")} for m in LY.DEFAULT_PARAMS["unit_mix"]] == inversor, \
+        LY.DEFAULT_PARAMS["unit_mix"]
+    assert LY.VERSION >= "2.61"
+    for mx in (inversor, equilibrado, familiar):
+        assert sum(m["percent"] for m in mx) == 100
+    # 2) la web: el mismo mix inicial, el selector y la función que aplica un predeterminado
+    html = open(os.path.join(base, "web", "index.html"), encoding="utf-8").read()
+    let_mix = re.search(r"^let mix=(\[.*?\]);", html, re.M).group(1)
+    web = json.loads(re.sub(r"([{,])(\w+):", r'\1"\2":', let_mix.replace("'", '"')))
+    assert web == inversor, web
+    sel = re.search(r'<select id="mixPre"[^>]*>(.*?)</select>', html, re.S)
+    assert sel and 'onchange="mixPredeterminado(this.value)"' in sel.group(0), "falta el selector #mixPre"
+    assert re.findall(r'<option value="(\w+)">([^<]+)</option>', sel.group(1)) == [
+        ("inversor", "Inversor"), ("equilibrado", "Equilibrado"), ("familiar", "Familiar"), ("personalizado", "Personalizado")]
+    assert html.index('id="mixPre"') < html.index('<div id="mix">') and 'class="hint">Inversor:' in html
+    aplica = re.search(r"function mixPredeterminado\(k\)\{(.*?)\n\w", html, re.S).group(1)
+    assert "renderMix()" in aplica and "legend()" in aplica and "run(lastStage,{keepView:true})" in aplica, aplica
+    assert "mixSel(); }" in re.search(r"function renderMix\(\)\{.*?\n", html).group(0)           # la tabla actualiza el selector
+    antes = re.search(r"const STD_ANTES=(\{.*?\}\}\});", html).group(1)
+    antes = json.loads(re.sub(r"([{,])(\w+):", r'\1"\2":', antes))
+    assert antes["vivienda"]["estar_por_dorms"] == [18, 18, 20, 24, 27], antes        # el valor de antes de v2.61
+    assert "verMenor(p.version_motor,'2.61')?STD_ANTES:null" in html
+    # 3) la página con node (si hay): elegir un predeterminado, editar la tabla y abrir proyectos guardados antes
+    node = shutil.which("node")
+    if not node:
+        print("(sin node: se omite el comportamiento del selector de mix y de STD_ANTES en la página)")
+    else:
+        def trozo(desde, hasta, incluir_hasta=False):
+            i = html.index(desde)
+            j = html.index(hasta, i)
+            return html[i:j + (len(hasta) if incluir_hasta else 0)]
+        mixes = trozo("let mix=[", "let mixPersonal=null;", True) + html[html.index("let mixPersonal=null;") + 21:].split("\n", 1)[0]
+        selector = trozo("const ACC_TIT=", "function renderStories")
+        medidas = trozo("const STD_ANTES=", "async function loadStd")
+        arnes = """
+const els = { mixPre: { value: 'inversor' }, mix: { innerHTML: '' }, tag: { textContent: '' } };
+const $ = id => els[id];
+let lastStage = 'plans'; const corridas = []; let legendas = 0;
+function run(st, o) { corridas.push([st, o && o.keepView]); }
+function legend() { legendas++; }
+%s
+%s
+%s
+const copia = x => JSON.parse(JSON.stringify(x)), R = {};
+renderMix(); R.inicial = { sel: els.mixPre.value, mix: copia(mix), filas: (els.mix.innerHTML.match(/data-acc=/g) || []).length };
+els.mixPre.value = 'personalizado'; mixPredeterminado('personalizado');           // todavía no hay tabla propia: no cambia nada
+R.sinPropia = { sel: els.mixPre.value, mix: copia(mix), corridas: corridas.length, aviso: els.tag.textContent };
+mixPredeterminado('equilibrado');
+R.equilibrado = { sel: els.mixPre.value, mix: copia(mix), corridas: corridas.slice(), legendas, filas: (els.mix.innerHTML.match(/data-acc=/g) || []).length };
+mix[1].percent = 50; mixSel(); R.editado = { sel: els.mixPre.value };           // como el onchange de una fila
+mixPredeterminado('familiar');
+R.familiar = { sel: els.mixPre.value, mix: copia(mix), filas: (els.mix.innerHTML.match(/data-acc=/g) || []).length };
+els.mixPre.value = 'personalizado'; mixPredeterminado('personalizado');
+R.vuelta = { sel: els.mixPre.value, mix: copia(mix) };                           // vuelve a la tabla propia
+mixPredeterminado('inversor'); mix.splice(3, 1); renderMix(); R.quitado = { sel: els.mixPre.value };           // quitar un tipo: «Personalizado»
+lastStage = null; const n = corridas.length; mixPredeterminado('inversor'); R.sinResultado = { sel: els.mixPre.value, nuevas: corridas.length - n };
+const abrir = (version, std) => { const d = { vivienda: { estar_por_dorms: [18, 15, 18, 21, 24], dorm_principal: { min_area: 8.5, min_side: 2.6 } } };
+  mezclarStd(d, { vivienda: { estar_por_dorms: std } }, verMenor(version, '2.61') ? STD_ANTES : null); return d.vivienda.estar_por_dorms; };
+const viejo = [18, 18, 20, 24, 27], propio = [20, 20, 22, 26, 29];
+R.std = { v260: abrir('2.60', viejo), v227: abrir('2.27', viejo), sinVersion: abrir(undefined, viejo), propio: abrir('2.60', propio), v261: abrir('2.61', viejo) };
+console.log(JSON.stringify(R));
+""" % (mixes, selector, medidas)
+        with tempfile.TemporaryDirectory() as tmp:
+            ruta = os.path.join(tmp, "arnes.js")
+            open(ruta, "w", encoding="utf-8").write(arnes)
+            p = subprocess.run([node, ruta], capture_output=True, text=True, encoding="utf-8")
+            assert p.returncode == 0, p.stderr
+        R = json.loads(p.stdout)
+        assert R["inicial"] == {"sel": "inversor", "mix": inversor, "filas": 4}, R["inicial"]
+        assert R["equilibrado"]["sel"] == "equilibrado" and R["equilibrado"]["mix"] == equilibrado, R["equilibrado"]
+        assert R["equilibrado"]["corridas"] == [["plans", True]] and R["equilibrado"]["legendas"] == 1 and R["equilibrado"]["filas"] == 4
+        assert R["editado"]["sel"] == "personalizado", R["editado"]                      # la tabla ya no repite ningún predeterminado
+        assert R["familiar"] == {"sel": "familiar", "mix": familiar, "filas": 3}, R["familiar"]
+        assert R["vuelta"]["sel"] == "personalizado" and R["vuelta"]["mix"][1]["percent"] == 50 and \
+            [m["percent"] for m in R["vuelta"]["mix"]] == [5, 50, 40, 10], R["vuelta"]
+        assert R["sinPropia"]["sel"] == "inversor" and R["sinPropia"]["mix"] == inversor and R["sinPropia"]["corridas"] == 0 and \
+            R["sinPropia"]["aviso"], R["sinPropia"]
+        assert R["quitado"]["sel"] == "personalizado", R["quitado"]
+        assert R["sinResultado"] == {"sel": "inversor", "nuevas": 0}, R["sinResultado"]  # sin resultado, solo cambia la tabla
+        nuevo, viejo = [18, 15, 18, 21, 24], [18, 18, 20, 24, 27]
+        assert R["std"] == {"v260": nuevo, "v227": nuevo, "sinVersion": nuevo, "propio": [20, 20, 22, 26, 29], "v261": viejo}, R["std"]
+    # 4) el motor con el mix nuevo: «Barra larga 90x18» (como tests/regresion.py: _edificio) da los cuatro tipos y el Mono ≈ 10 %
+    s = json.load(open(os.path.join(base, "samples", "barra_larga.json"), encoding="utf-8"))
+    r = run(s["footprint"], h=s["height"])
+    tipos = {}
+    for u in r["units"]:
+        tipos.setdefault(u["type"], []).append(u)
+    assert set(tipos) == {"Mono", "1 dorm", "2 dorm", "3 dorm"}, sorted(tipos)
+    assert abs(len(tipos["Mono"]) - 0.10 * len(r["units"])) <= 1.0, {k: len(v) for k, v in tipos.items()}
+    assert abs(len(tipos["1 dorm"]) - 0.55 * len(r["units"])) <= 1.5 and r["metrics"]["mix"]["match_score"] >= 90, r["metrics"]["mix"]
+    assert [u["bedrooms"] for u in tipos["Mono"]] == [0] * len(tipos["Mono"])
+    for u in tipos["Mono"]:                                   # monoambiente: Estar-Dormitorio, cocina y baño, con su cama y su ventana
+        assert {"living", "kitchen", "bath"} <= {rm["kind"] for rm in u["rooms"]}, (u["id"], [rm["name"] for rm in u["rooms"]])
+        assert [rm["name"] for rm in u["rooms"] if rm["kind"] == "living"] == ["Estar-Dormitorio"], u["id"]
+        assert any(e["name"] == "Cama doble" for e in u["equipamiento"]) and any(v["room"] == "living" for v in u["ventanas"]), u["id"]
+        assert any("Monoambiente" in c["msg"] for c in u["checks"]), u["id"]            # art. 2 (criterio del usuario): se evalúa
+    # el reparto no supone dormitorios: un mix solo de monoambientes (dorms: 0) y uno con dorms vacío (según los m²)
+    solo = run(s["footprint"], h=s["height"], unit_mix=[{"name": "M", "area": 33, "percent": 100, "dorms": 0}])
+    assert solo["units"] and {u["type"] for u in solo["units"]} == {"M"} and all(u["bedrooms"] == 0 for u in solo["units"])
+    auto = run(s["footprint"], h=s["height"], unit_mix=[{"name": "M", "area": 33, "percent": 50}, {"name": "D", "area": 62, "percent": 50}])
+    assert sorted({u["bedrooms"] for u in auto["units"]}) == [0, 1], sorted({u["bedrooms"] for u in auto["units"]})
+
+if __name__ == "__main__":
+    test_calibracion_vivienda(); print("OK77")
