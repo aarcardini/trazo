@@ -1,29 +1,29 @@
 {
  "ejemplo": "samples/patio_central.json",
  "nombre": "Edificio con patio central 40 × 30 (patio 14 × 8)",
- "version_motor": "2.64",
+ "version_motor": "2.65",
  "metricas": {
-  "unidades": 12,
-  "unidades_totales": 60,
+  "unidades": 13,
+  "unidades_totales": 65,
   "por_tipo": {
-   "1 dorm": 4,
-   "2 dorm": 4,
+   "1 dorm": 7,
+   "2 dorm": 3,
    "3 dorm": 1,
-   "Mono": 3
+   "Mono": 2
   },
   "nucleos": 2,
   "ascensores": 1,
   "tramos": 4,
   "area_planta": 1023.6,
-  "eficiencia_planta": 74.2,
-  "eficiencia_total": 69.8,
-  "sin_usar": 31.1,
+  "eficiencia_planta": 74.0,
+  "eficiencia_total": 69.6,
+  "sin_usar": 33.7,
   "circulacion": 25.1,
-  "match_score": 78.3,
-  "fit_m2": 12.6,
-  "calidad_planos": 96,
+  "match_score": 91.9,
+  "fit_m2": 9.1,
+  "calidad_planos": 100,
   "evacuacion_max": 21.3,
-  "nsa_total": 3798.5,
+  "nsa_total": 3785.5,
   "bloques": 1,
   "patios_m2": 112.0
  }
