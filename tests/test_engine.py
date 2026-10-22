@@ -6558,6 +6558,102 @@ def test_calibracion_frentes():
     assert R["bed1"]["area"] >= V["dorm_principal"]["min_area"] - 1e-6 and len([q for q in res["equipamiento"] if q["room"] == "vest"]) >= 1
 
 
+def test_esquema_fila():
+    """R5.16b (v2.67, fase 2, entrega 2): el esquema «dormitorios en fila sobre la segunda fachada» (`plans._plan_fila`,
+    elegido en `layout_unit` cuando `_fila_posible` ve una segunda fachada y el plano sale mejor que el de siempre sin
+    perder cocina, dormitorios, estar ni baño). (a) Pasante (la base: barras de 3,6 × 9,8 m con fachada en los dos
+    extremos, GR 1591): el estar sobre el borde del pasillo común (v = 0, la pasarela del patio) con la puerta de entrada
+    junto al paso, la cocina cerrada con puerta desde el paso, el paso a lo largo del costado, el baño junto a él y el
+    dormitorio al fondo con su ventana en la fachada opuesta: calidad 100 y `segunda_fachada = "fila"`, con el
+    equipamiento completo (sofá y rack, mesada y heladera, cama doble con placard); con el pasillo común solo sobre
+    un tramo del borde (`entrada`), la puerta se corre a ese tramo (y, si hace falta, el plano se hace al revés, con el
+    paso del otro lado). (b) Esquina (fachada principal y lateral): un 3 dormitorios de 7,7 × 11,8 m (Aruma, Barrios
+    Amorín) resuelve con los tres dormitorios en fila sobre la lateral, cada uno con su ventana en ella, y al revés
+    con la lateral en x0; un 2 dormitorios de 6,5 × 10 también; uno de 7,9 × 8,2 sigue con el plano de R5.3 (ya llegaba
+    a 100: la fila solo reemplaza al de siempre si es mejor). (c) Una vivienda sin segunda fachada da el mismo plano que
+    antes. (d) `frente_min(nb, D, fila)`: el pasante de 1 dormitorio pide 3,6 m con 9,8 de fondo (la cocina en línea con
+    el paso al costado) y el frente de siempre si el fondo no da para estar, cocina, baño y dormitorio en fila; el de
+    2 dormitorios, 5,5 (los dos al fondo, uno al lado del otro); de esquina, 6,0 (servicios, pasillo interno y el fondo
+    de un dormitorio) si el fondo da para la fila de dormitorios; sin `fila`, nada cambia. (e) Contra la base
+    (`data/tipologias/comparacion.json`): el motor resuelve 6 de 39 (antes 3): las tres barras de 1 dormitorio de
+    GR 1591 con calidad 100 y esquema pasante."""
+    from engine import plans as P, standards as ST
+    S = ST.merged({})
+    V = S["vivienda"]
+    P.configure(V, S["equipamiento"])
+    rect = lambda w, d: [(0.0, 0.0), (w, 0.0), (w, d), (0.0, d)]
+
+    def fachada(W, D, lados):
+        def f(p, q):
+            return any(l == "v0" and abs(p[1]) < 1e-6 and abs(q[1]) < 1e-6 or
+                       l == "v1" and abs(p[1] - D) < 1e-6 and abs(q[1] - D) < 1e-6 or
+                       l == "x0" and abs(p[0]) < 1e-6 and abs(q[0]) < 1e-6 or
+                       l == "x1" and abs(p[0] - W) < 1e-6 and abs(q[0] - W) < 1e-6 for l in lados)
+        f.ventana = f
+        return f
+
+    def plano(nb, W, D, lados, entrada=None):
+        res = P.layout_unit(rect(W, D), nb, fachada(W, D, lados), V, S["equipamiento"], False, None, S["ventanas"], entrada)
+        return res, {r["id"]: r for r in res["rooms"]}
+    fallas = lambda res: [c["msg"] for c in res["checks"] if not c["ok"]]
+    borde = lambda r, k, v: sum(1 for p in r["poly"] if abs(p[k] - v) < 1e-6) >= 2       # la estancia tiene un lado ahí
+    ventana_en = lambda res, room, k, v: any(w["room"] == room and abs(w["p"][k] - v) < 1e-6 and abs(w["q"][k] - v) < 1e-6
+                                             for w in res["ventanas"])
+    puerta = lambda res: next(d for d in res["doors"] if d.get("entry"))
+    # (a) pasante
+    res, R = plano(1, 3.6, 9.8, ("v0", "v1"))
+    assert res["score"] >= 90 and res.get("segunda_fachada") == "fila", (res["score"], fallas(res))
+    assert borde(R["living"], 1, 0.0) and borde(R["bed1"], 1, 9.8) and ventana_en(res, "bed1", 1, 9.8) and ventana_en(res, "living", 1, 0.0)
+    assert R["kitchen"]["name"] == "Cocina" and borde(R["hallway"], 0, 3.6) and R["bath1"]["kind"] == "bath", [r["name"] for r in res["rooms"]]
+    d = puerta(res)
+    assert d["b"] == "living" and abs(d["p"][1]) < 1e-6 and d["q"][0] > 3.6 - 0.9 - 0.2, d      # junto al paso (x1)
+    assert any(x["a"] == "hallway" and x["b"] == "kitchen" for x in res["doors"]) and not any(x["b"] == "kitchen" and x["a"] == "living" for x in res["doors"])
+    eq = {(e["room"], e["name"]) for e in res["equipamiento"]}
+    assert {("living", "Sofá"), ("living", "Rack de TV"), ("kitchen", "Mesada"), ("kitchen", "Heladera"), ("bed1", "Cama doble"),
+            ("bed1", "Placard"), ("bath1", "Ducha")} <= eq, sorted(eq)
+    assert any("Segunda fachada" in c["msg"] and "pasante" in c["msg"] for c in res["checks"])
+    for entrada in ((0.0, 1.5), (1.0, 2.6), (2.1, 3.6)):       # el pasillo común, solo sobre un tramo del borde
+        res, R = plano(1, 3.6, 9.8, ("v0", "v1"), entrada)
+        d = puerta(res)
+        assert res["score"] == 100 and res.get("segunda_fachada") == "fila" and P._entra(res, entrada), (entrada, res["score"], fallas(res), d)
+    for nb, W, D in ((1, 4.9, 15.9), (1, 5.0, 10.0), (2, 6.05, 11.71)):      # M5 e Isla de Flores (su rectángulo)
+        res, R = plano(nb, W, D, ("v0", "v1"))
+        assert res["score"] == 100 and res.get("segunda_fachada") == "fila" and all(borde(R["bed%d" % j], 1, D) for j in range(1, nb + 1)), \
+            (nb, W, D, res["score"], fallas(res))
+    # (b) esquina
+    for lado, x in (("x1", 7.7), ("x0", 0.0)):
+        res, R = plano(3, 7.7, 11.8, ("v1", lado))
+        assert res["score"] == 100 and res.get("segunda_fachada") == "fila", (lado, res["score"], fallas(res))
+        assert all(borde(R["bed%d" % j], 0, x) and ventana_en(res, "bed%d" % j, 0, x) for j in (1, 2, 3)), lado
+        assert borde(R["living"], 1, 11.8) and borde(R["hall"], 1, 0.0) and puerta(res)["b"] == "hall" and "bath2" in R
+        assert any("Segunda fachada" in c["msg"] and "lateral" in c["msg"] for c in res["checks"])
+    res, R = plano(2, 6.5, 10.0, ("v1", "x1"))
+    assert res["score"] == 100 and res.get("segunda_fachada") == "fila" and borde(R["bed1"], 0, 6.5) and borde(R["bed2"], 0, 6.5), fallas(res)
+    res, R = plano(2, 7.9, 8.2, ("v1", "x1"))
+    assert res["score"] == 100 and res.get("segunda_fachada") != "fila", (res["score"], res.get("segunda_fachada"), fallas(res))
+    # (c) sin segunda fachada, el plano de siempre
+    assert P._fila_posible(rect(6.05, 6.8), 1, fachada(6.05, 6.8, ("v1",))) is None
+    res, R = plano(1, 6.05, 6.8, ("v1",))
+    ref = P._distribuir(rect(6.05, 6.8), 1, fachada(6.05, 6.8, ("v1",)), S["equipamiento"], False, None, S["ventanas"])
+    assert res["score"] == 100 and res.get("segunda_fachada") is None
+    assert [(r["id"], r["poly"]) for r in res["rooms"]] == [(r["id"], r["poly"]) for r in ref["rooms"]]
+    # (d) frente_min con fila
+    assert round(P.frente_fila(1, 9.8, 0), 2) == 3.6 and P.frente_fila(1, 8.3, 0) is None and P.frente_fila(0, 9.8, 0) is None
+    assert round(P.frente_min(1, 9.8, 0), 2) == 3.6 and round(P.frente_min(1, 8.3, 0), 2) == 6.04 and round(P.frente_min(0, 9.8, 0), 2) == 4.8
+    assert round(P.frente_min(2, 11.7, 0), 2) == 5.5 and round(P.frente_min(2, 9.0, 0), 2) == 8.54
+    assert round(P.frente_min(2, 10.0, 1), 2) == 6.0 and round(P.frente_min(3, 12.0, -1), 2) == 6.0 and round(P.frente_min(2, 6.8, 1), 2) == 8.54
+    assert [round(P.frente_min(n, 6.8), 2) for n in (1, 2, 3)] == [6.04, 8.54, 11.04] and [round(P.frente_min(n, 9.8), 2) for n in (1, 2, 3)] == [6.04, 8.54, 11.04]
+    # (e) la base
+    raiz = os.path.join(os.path.dirname(__file__), "..")
+    cat = json.load(open(os.path.join(raiz, "data", "tipologias", "comparacion.json"), encoding="utf-8"))
+    R_ = cat["resumen"]["todas"]
+    assert R_["comparables"] == 39 and R_["resuelve"] >= 6 and R_["por_esquema"]["pasante"]["resuelve"] >= 3, \
+        (R_["resuelve"], R_["por_esquema"]["pasante"])
+    gr = [v for v in cat["viviendas"] if v["archivo"].startswith("U_MVD_GR1591_1D")]
+    assert len(gr) == 3 and all(v["motor"]["score"] == 100 and v["motor"]["resuelve"] and v["motor"]["esquema"] == "pasante" for v in gr), \
+        [(v["archivo"], v["motor"]["score"], v["motor"]["esquema"]) for v in gr]
+
+
 if __name__ == "__main__":
     test_comparar_tipologias(); test_calibracion_frentes(); print("OK81")
 
@@ -6806,3 +6902,4 @@ console.log(JSON.stringify(salida));
 
 if __name__ == "__main__":
     test_promovida(); test_informe(); print("OK82")
+    test_esquema_fila(); print("OK83")

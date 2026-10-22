@@ -14,7 +14,8 @@ lado); si el motor no puede poner ahí su puerta, se queda con su plano libre y 
 
 Por vivienda compara: las estancias del motor contra las reales por grupo (estar, cocina, dormitorios, baños…: cantidad
 y superficie), qué locales habitables tocan la fachada en cada uno, el esquema (dónde quedan la zona de día y la de
-noche respecto del pasillo común y de las fachadas), el frente que el motor pediría (`plans.frente_min`) contra el
+noche respecto del pasillo común y de las fachadas), el frente que el motor pediría (`plans.frente_min`; desde
+v2.67 también con el esquema en fila de su segunda fachada, `fila`: pasante o esquina, `frente_min_fila`) contra el
 real, la calidad del plano del motor con sus avisos (agrupados en fallas: frente, luz, mínimos, programa, acceso,
 fondo, sin uso, equipamiento…) y la superficie sin uso. Resume por tipología y por esquema real. Escribe
 `comparacion.json` y `COMPARACION.md` en la carpeta.
@@ -316,12 +317,16 @@ def comparar_vivienda(v, datos, S=None):
     if not marco["fachadas"]:
         out["motivo"] = "sin Trazo_Fachada"
     # el frente que pide el motor, con el fondo real (y con el de la convención: frente × fondo del catálogo)
+    fila = P._fila_posible(marco["poly"], nb, is_facade_de(marco["fachadas"]))     # R5.16b (v2.67): la segunda fachada
     out["motor"] = {"frente_min": T._r(P.frente_min(nb, marco["fondo"]), 2),
                     "frente_min_convencion": T._r(P.frente_min(nb, v["fondo"]), 2),
+                    "fila": fila, "frente_min_fila": T._r(P.frente_min(nb, v["fondo"], fila), 2),
                     "facade_min": T._r(P.facade_min(nb), 2), "fondo_min": T._r(P.fondo_min(), 2),
                     "fondo_sin_tira": T._r(P.fondo_sin_tira(), 2)}
     out["frente_sobre_min"] = T._r(v["frente"] / out["motor"]["frente_min_convencion"], 2) \
         if out["motor"]["frente_min_convencion"] else None
+    out["frente_sobre_min_fila"] = T._r(v["frente"] / out["motor"]["frente_min_fila"], 2) \
+        if out["motor"]["frente_min_fila"] else None
     if not out["comparable"]:
         return out
     libre = _plano_motor(marco, nb, S, None)
@@ -453,6 +458,7 @@ def _resumen_tipologia(vs):
             "frente_min_motor": _med([v["motor"]["frente_min_convencion"] for v in vs]),
             "frente_sobre_min": _med([v["frente_sobre_min"] for v in vs]),
             "entran_con_su_frente": sum(1 for v in vs if v["frente_sobre_min"] is not None and v["frente_sobre_min"] >= 1.0),
+            "entran_con_su_frente_fila": _con_su_frente_fila(vs),
             "esquemas": _cuenta(v["real"]["esquema"] for v in vs),
             "score": _med([v["motor"]["score"] for v in comp], 0),
             "score_libre": _med([v["motor"]["score_libre"] for v in comp], 0),
@@ -489,7 +495,14 @@ def _resumen_esquema(vs):
             "resuelve_rect": sum(1 for v in comp if v["motor"]["rectangulo"]["resuelve"]),
             "esquema_motor": _cuenta(v["motor"]["esquema"] for v in comp),
             "fallas": _cuenta(f for v in comp for f in v["motor"]["fallas"]),
-            "frente_sobre_min": _med([v["frente_sobre_min"] for v in us])}
+            "frente_sobre_min": _med([v["frente_sobre_min"] for v in us]),
+            "entran_con_su_frente": sum(1 for v in vs if v["frente_sobre_min"] is not None and v["frente_sobre_min"] >= 1.0),
+            "entran_con_su_frente_fila": _con_su_frente_fila(vs)}
+
+
+def _con_su_frente_fila(vs):
+    """Cuántas viviendas tienen al menos el frente que el motor pide con el esquema de su segunda fachada (v2.67)."""
+    return sum(1 for v in vs if v.get("frente_sobre_min_fila") is not None and v["frente_sobre_min_fila"] >= 1.0)
 
 
 def _resumen_grupos(comp):
@@ -565,6 +578,7 @@ def resumen(viviendas):
                       "irregulares": sum(1 for v in comp if not v["motor"]["rectangulo"]["rectangular"]),
                       "entran_con_su_frente": sum(1 for v in vs if v["frente_sobre_min"] is not None and
                                                   v["frente_sobre_min"] >= 1.0),
+                      "entran_con_su_frente_fila": _con_su_frente_fila(vs),
                       "fallas": _cuenta(f for v in comp for f in v["motor"]["fallas"]),
                       "esquema_igual": sum(1 for v in comp if v["comparacion"]["esquema_igual"])}
     return out
@@ -593,19 +607,20 @@ def comparacion_md(cat):
              "(lo que el reparto del mix le daría a esa tipología con ese fondo) y «calidad», la del plano del motor "
              "(100 = todas sus comprobaciones cumplen). «Resuelve» es un plano sin fallas graves (frente, fondo, luz, "
              "programa, acceso, mínimos, superficie); «con su frente», cuántas viviendas reales tienen al menos el frente "
-             "que el motor pediría. Los dúplex no se comparan (el motor hace un solo nivel) pero sí se caracterizan. Las "
+             "que el motor pediría (entre paréntesis, con el esquema en fila de su segunda fachada —pasante o esquina—, "
+             "que pide menos: v2.67). Los dúplex no se comparan (el motor hace un solo nivel) pero sí se caracterizan. Las "
              "medidas son medianas en metros; las superficies, m². Se leyeron %d archivos." % cat["archivos"])
     L.append("")
     A, Td = r["alta"], r["todas"]
     L.append("**Lectura rápida.** Precisión alta: %d viviendas comparables, calidad mediana del motor %s, resuelve "
              "%d, con el mismo esquema que la base %d, con al menos el frente que el motor pide %d de %d; en el "
              "rectángulo envolvente (sin los entrantes del contorno), calidad %s y resuelve %d. Todas: %d "
-             "comparables, calidad mediana %s, resuelve %d (en el rectángulo, %s y %d), con su frente %d de %d. "
-             "Esquemas reales (viviendas, los dúplex una vez): %s. Fallas del motor más frecuentes (viviendas "
-             "comparables): %s." % (
+             "comparables, calidad mediana %s, resuelve %d (en el rectángulo, %s y %d), con su frente %d de %d "
+             "(con el esquema de su segunda fachada, %d). Esquemas reales (viviendas, los dúplex una vez): %s. "
+             "Fallas del motor más frecuentes (viviendas comparables): %s." % (
                  A["comparables"], A["score"], A["resuelve"], A["esquema_igual"], A["entran_con_su_frente"], A["n"],
                  A["score_rect"], A["resuelve_rect"], Td["comparables"], Td["score"], Td["resuelve"], Td["score_rect"],
-                 Td["resuelve_rect"], Td["entran_con_su_frente"], Td["n"],
+                 Td["resuelve_rect"], Td["entran_con_su_frente"], Td["n"], Td["entran_con_su_frente_fila"],
                  _lista({e: d["n"] for e, d in Td["por_esquema"].items()}, 6), _lista(Td["fallas"], 6)))
     L.append("")
     L.append("«En el rectángulo»: el mismo plano del motor en el rectángulo envolvente de la vivienda (frente × fondo, "
@@ -621,7 +636,8 @@ def comparacion_md(cat):
         filas = []
         for t, d in R["por_tipologia"].items():
             filas.append([t, d["n"], _fyf(d["frente_real"], d["fondo_real"]), _f(d["frente_min_motor"]),
-                          _f(d["frente_sobre_min"], 2), "%d de %d" % (d["entran_con_su_frente"], d["n"]),
+                          _f(d["frente_sobre_min"], 2), "%d de %d (%d)" % (d["entran_con_su_frente"], d["n"],
+                                                                            d["entran_con_su_frente_fila"]),
                           _lista(d["esquemas"], 4), d["comparables"],
                           "—" if d["score"] is None else "%d" % d["score"],
                           "%d de %d" % (d["resuelve"], d["comparables"]) if d["comparables"] else "—",
@@ -645,7 +661,9 @@ def comparacion_md(cat):
                           "día: %s; noche: %s; %s" % (_lista(d["posicion_dia"], 2), _lista(d["posicion_noche"], 2),
                                                       _lista(d["disposicion"], 2)),
                           _fyf(d["noche_ancho"], d["noche_fondo"]), _fyf(d["dia_ancho"], d["dia_fondo"]),
-                          _f(d["frente_sobre_min"], 2), d["comparables"],
+                          _f(d["frente_sobre_min"], 2), "%d de %d (%d)" % (d["entran_con_su_frente"], d["archivos"],
+                                                                            d["entran_con_su_frente_fila"]),
+                          d["comparables"],
                           "—" if d["score"] is None else "%d" % d["score"],
                           "%d de %d" % (d["resuelve"], d["comparables"]) if d["comparables"] else "—",
                           "—" if d["score_rect"] is None else "%d" % d["score_rect"],
@@ -653,8 +671,8 @@ def comparacion_md(cat):
                           _lista(d["esquema_motor"], 2), _lista(d["fallas"], 3)])
         L += _tabla(["Esquema real", "Viviendas", "Tipologías", "Frente × fondo", "Fachadas", "Rótulos",
                      "Posición de las zonas", "Zona de noche (ancho × fondo)", "Zona de día (ancho × fondo)",
-                     "Frente real / mínimo", "Comparables", "Calidad del motor", "Resuelve", "Calidad en el rectángulo",
-                     "Resuelve en el rectángulo", "Esquema del motor", "Fallas del motor"], filas)
+                     "Frente real / mínimo", "Con su frente", "Comparables", "Calidad del motor", "Resuelve",
+                     "Calidad en el rectángulo", "Resuelve en el rectángulo", "Esquema del motor", "Fallas del motor"], filas)
     R = r["alta"]
     L.append("## 5. Estancias: la base contra el motor (precisión alta, viviendas comparables)")
     L.append("")
@@ -714,7 +732,8 @@ def comparacion_md(cat):
     L.append("")
     L.append("«Esquema motor» es el que resulta del plano del motor con la misma regla que la base; «puerta»: el motor "
              "pudo poner su puerta de entrada donde está la real (acepta `entrada`); si no, la calidad es la de su plano "
-             "libre. «Real / mín.»: el frente real sobre el que pide `plans.frente_min` con el fondo real.")
+             "libre. «Real / mín.»: el frente real sobre el que pide `plans.frente_min` con el fondo real (y, si la "
+             "vivienda tiene segunda fachada, entre paréntesis el frente que pide el esquema en fila y la razón con él).")
     L.append("")
     filas = []
     for v in cat["viviendas"]:
@@ -733,7 +752,9 @@ def comparacion_md(cat):
                       real["esquema"],
                       ", ".join("%s %d" % (g, n) for g, n in _cuenta(e["grupo"] for e in real["estancias"]).items()),
                       ", ".join(real["habitables_con_fachada"]) or "ninguno",
-                      _f(m["frente_min_convencion"]), _f(v["frente_sobre_min"], 2)] + motor)
+                      _f(m["frente_min_convencion"]) + ("" if m.get("fila") is None else " (%s)" % _f(m["frente_min_fila"])),
+                      _f(v["frente_sobre_min"], 2) + ("" if m.get("fila") is None else " (%s)" % _f(v["frente_sobre_min_fila"], 2))]
+                     + motor)
     L += _tabla(["Vivienda", "Tip.", "Prec.", "Frente × fondo", "Esquema real", "Estancias reales",
                  "Con fachada (real)", "Frente mín. motor", "Real / mín.", "Esquema motor", "Calidad", "Puerta",
                  "Fallas", "Sin uso", "Estancias del motor", "Con fachada (motor)",
