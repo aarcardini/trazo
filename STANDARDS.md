@@ -37,6 +37,16 @@ Superficie con muros (`area_muros`, la ficha la muestra junto a la libre): cada 
 Rango de referencia ANV según dormitorios: monoambiente 25–40 m², 1 dorm. 35–50, 2 dorm. 50–75, 3 dorm. 65–100, 4 dorm. 80–125.
 Ley 13.728, art. 18: mínimo 25 m²; 35 m² para 1 dormitorio y +15 m² por dormitorio adicional.
 
+Aviso de Vivienda Promovida y superficie media (R10.12b, v2.66; claves `vivienda.promovida` y `vivienda.superficie_media_mercado`, editables en «Normativa → Vivienda»; el motor solo avisa, no cambia el mix):
+
+| Medida | Valor | Referencia |
+|---|---|---|
+| `promovida.mono_max_pct`: monoambientes, como máximo, del total de viviendas de la planta | 25 % | (F) Reglamentación de la Ley 18.795 (MVOTMA, texto de abril de 2020), art. 6 A: los monoambientes no pueden pasar del 25 % de las viviendas promovidas del proyecto (`REFERENCIAS.md`, sección 1) |
+| `promovida.mono_min_area`: superficie mínima de un monoambiente, con muros | 35 m² | (S) Criterio de proyecto, no una exigencia vigente: el proyecto de ley de 2026 (senador Gustavo González) pediría 35 m² mínimos en la Vivienda Promovida y estaba en discusión en el Senado en julio de 2026 (`REFERENCIAS.md`, sección 1). Hoy la tabla de la ANV admite monoambientes de 25 a 40 m² (Decreto 355/011, art. 5, con la redacción del Decreto 129/020): el aviso se adelanta a ese riesgo |
+| `superficie_media_mercado`: superficie media de lo vendido, para compararla con la media del mix | 58 m² | (F) ANV: m² construidos (con la cuota de bienes comunes) de lo vendido en Montevideo en la Vivienda Promovida, 68 m² en 2015, 59 en 2023 y 58 en 2025 (`REFERENCIAS.md`, secciones 2 y 3.2). Es una referencia de mercado, no una exigencia: el motor la compara con la media de la superficie con muros (`area_muros`) de las viviendas de la planta tipo |
+
+Un monoambiente es una vivienda sin dormitorios (`dorms: 0` en su tipo del mix o, sin ese dato, la que le toca por su superficie).
+
 Muros: el muro entre viviendas es de 0,30 m («Muro entre viviendas» en la web, antes «Muro medianero»); la NNE pide al menos 0,20 m de hormigón o mampostería, o un aislamiento acústico Rw de 45 dB o más (art. 54).
 
 Reglas de distribución que aplica el motor: dormitorios y estar con fachada; dormitorios y baños accesibles desde el pasillo interno; cocina, comedor y estar integrados (conexión abierta); frente mínimo de la unidad = estar + dormitorios (para que todos tengan ventana). Toda vivienda lleva baño y cocina (NNE, arts. 17 y 21): si el plano no los tiene, la ficha lo avisa y baja la calidad del plano; la cocina dentro del hall («Hall / Cocina») cuenta (v2.30).

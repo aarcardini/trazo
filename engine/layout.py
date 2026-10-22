@@ -25,7 +25,7 @@ from .units import (_bisect_x, _chain_union, _is_rect, _segments, generate_unit_
                     superficie_con_muros)  # noqa: F401
 from .patios import (auto_patios, _anillo, split_blocks, make_patio_dark, _block_of, _block_of_line)  # noqa: F401
 
-VERSION = "2.65"
+VERSION = "2.66"
 
 DEFAULT_PARAMS = {
     # Masa
@@ -112,6 +112,45 @@ def _ascensores_pedidos(cores, S, n_niveles, sube, units=None, n_res=1, por_nucl
     if n_niveles >= S["pisos_dos_ascensores"] and n * len(auto) + propios < 2:
         n = 2 - propios if len(auto) == 1 else n
     return n
+
+
+# ---------------------------------------------------------------- superficie media y Vivienda Promovida (R10.12b)
+def superficie_y_promovida(units, mix, V):
+    """R10.12b (v2.66): la superficie media de las viviendas de la planta tipo y el criterio de la Vivienda Promovida.
+    `units`: las viviendas del resultado (con `area_muros`; sin ella, `area`); `mix`: params["unit_mix"]; `V`:
+    standards["vivienda"]. Devuelve las métricas `superficie_media` (con muros, 1 decimal), `superficie_media_ref` (la
+    referencia de mercado, `superficie_media_mercado`) y `promovida`: {mono_count, mono_pct, mono_min_area (la del
+    monoambiente más chico, None sin monoambientes), limite_mono_pct, limite_mono_area, ok, avisos}. Un monoambiente es
+    una vivienda sin dormitorios (los `dorms` de su tipo del mix o, sin ellos, los que le tocan por su superficie: la
+    misma regla que usa `units.unit_rooms`). `ok` es falso si pasan del `mono_max_pct` de las viviendas de la planta
+    o si alguno mide menos de `mono_min_area`; `avisos` son los textos que `generate` suma a los avisos. Solo avisa:
+    el mix no cambia. Vacío si no hay viviendas."""
+    if not units:
+        return {}
+    con_muros = lambda u: float(u["area_muros"]) if isinstance(u.get("area_muros"), (int, float)) else float(u["area"])
+    areas = [con_muros(u) for u in units]
+    monos = []
+    for u, a in zip(units, areas):
+        spec = next((m for m in mix if m.get("name") == u["type"]), {})
+        nb = int(spec["dorms"]) if spec.get("dorms") is not None else P.bedrooms_for(u.get("target") or u["area"])
+        if nb == 0:
+            monos.append(a)
+    lim_pct, lim_area = V["promovida"]["mono_max_pct"], V["promovida"]["mono_min_area"]
+    pct = len(monos) / float(len(units)) * 100.0
+    chicos = [a for a in monos if a < lim_area - 1e-9]
+    avisos = []
+    if pct > lim_pct + 1e-9:
+        avisos.append("Vivienda Promovida: los monoambientes son el %.1f %% de las viviendas de la planta y la reglamentación "
+                      "de la Ley 18.795 admite hasta el %g %% (art. 6 A)" % (pct, lim_pct))
+    if chicos:
+        n = len(chicos)
+        avisos.append("Vivienda Promovida: %d monoambiente%s menos de %g m² con muros (el más chico, %.1f m²); el proyecto "
+                      "de ley en discusión pediría %g m² como mínimo" % (
+                          n, " mide" if n == 1 else "s miden", lim_area, min(chicos), lim_area))
+    return {"superficie_media": round(sum(areas) / len(areas), 1), "superficie_media_ref": V["superficie_media_mercado"],
+            "promovida": {"mono_count": len(monos), "mono_pct": round(pct, 1),
+                          "mono_min_area": round(min(monos), 1) if monos else None,
+                          "limite_mono_pct": lim_pct, "limite_mono_area": lim_area, "ok": not avisos, "avisos": avisos}}
 
 
 def _pasillo(pc, pb, bi, partes, W):
@@ -676,6 +715,11 @@ def generate(data):
     res["metrics"]["efficiency_total"] = round(res["metrics"]["nsa_total"] / res["metrics"]["gfa"] * 100, 1) \
         if res["metrics"]["gfa"] else 0
     res["metrics"]["units_total"] = mm["count"] * n_res
+    sp = superficie_y_promovida(res["units"], params["unit_mix"], S["vivienda"])      # R10.12b: superficie media y aviso de Vivienda Promovida
+    if sp:
+        res["metrics"]["superficie_media"], res["metrics"]["superficie_media_ref"] = sp["superficie_media"], sp["superficie_media_ref"]
+        res["metrics"]["promovida"] = sp["promovida"]
+        res["warnings"] += sp["promovida"]["avisos"]
     res["metrics"]["factibilidad"] = FZ.estimar(res, params, S, footprint)     # R10.13: costo, ingreso, margen y ROI por gama
     served_ratio = served / gfa_plate if gfa_plate else 0
     if served_ratio < 0.55:
