@@ -70,6 +70,13 @@ DEFAULTS = {
         # eje de los divisorios) según dormitorios: monoambiente (criterio del usuario, art. 2), 1, 2, 3 y 4; con más, el
         # último más el último salto por cada dormitorio (12 m²). El estudio cuenta como dormitorio (art. 6)
         "superficie_min": [32, 32, 44, 56, 68],
+        # R10.12b (v2.66): superficie media de lo vendido en Montevideo, para compararla con la media del mix: 58 m²
+        # construidos en 2025 (ANV; REFERENCIAS.md, secciones 2 y 3.2)
+        "superficie_media_mercado": 58.0,
+        # R10.12b: criterio de la Vivienda Promovida (Ley 18.795) para avisar: los monoambientes no pasan del 25 % de las
+        # viviendas (Reglamentación, art. 6 A) y, criterio, miden 35 m² con muros o más (proyecto de ley de 2026 en
+        # discusión; REFERENCIAS.md, sección 1). Solo avisa: el mix no se cambia
+        "promovida": {"mono_max_pct": 25, "mono_min_area": 35},
     },
     "nucleo": {
         "escalera_ancho": 1.20,          # ancho de cada tramo (IT 19)

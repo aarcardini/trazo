@@ -2978,7 +2978,7 @@ def test_proporcion_y_divisoria():
     # la web: rótulos de las medidas nuevas, la lista de superficies mínimas en «Normativa → Vivienda»
     html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
     for t in ("cocina_integrada:'", "vano_min:'", "superficie_min:'", "retiro_divisoria:'", "proporcion_max:'",
-              "superficie_min:1}", "else if(g==='vivienda'&&k!=='superficie_min') continue;"):
+              "superficie_min:1}", "else if(g==='vivienda'&&k!=='superficie_min'&&k!=='superficie_media_mercado') continue;"):   # (v2.66: y la referencia de mercado, R10.12b)
         assert t in html, t
 
 if __name__ == "__main__":
@@ -6243,7 +6243,9 @@ def test_factibilidad():
     assert all(("$('%s')" % i in abrir_fz or "$('fz_p_'+k)" in abrir_fz) for i in ids[:9] if i not in ("fz_costo", "fz_p_bajo", "fz_p_esperado", "fz_p_alto"))
     assert "STD_DEF.costos" in abrir_fz and "precio_venta" in abrir_fz and "margen_objetivo" in abrir_fz
     assert "fzResultado()" in cuerpo("function resumenPanel(") and "fzAbrir(null)" in js and "fzOlvidar()" in cuerpo("async function nuevo(")
-    assert "result.metrics.factibilidad" in cuerpo("function fzResultado(") and "semaforo" in cuerpo("function fzResultado(")
+    # (v2.66, R7.4: fzResultado arma el panel con fzHtml, que también usa el informe)
+    assert "result.metrics.factibilidad" in cuerpo("function fzResultado(") and "fzHtml(f)" in cuerpo("function fzResultado(")
+    assert "semaforo" in cuerpo("function fzHtml(") and "opt.base" in cuerpo("function fzHtml(")
     assert "m.factibilidad" in cuerpo("function resumen(") and "roi" in cuerpo("function resumen(")                    # las variantes guardan el ROI
     # Normativa: cada medida de standards.costos tiene su etiqueta (o se carga en Factibilidad) y 'costos' está en la lista de grupos
     etiquetas = re.search(r"const STD_COSTOS=\{(.*?)\};", js, re.S).group(1)
@@ -6328,3 +6330,249 @@ def test_sin_usar():
 
 if __name__ == "__main__":
     test_factibilidad(); test_sin_usar(); print("OK80")
+
+
+def test_promovida():
+    """R10.12b (v2.66): superficie media y aviso de Vivienda Promovida. metrics.superficie_media es la media de la superficie
+    con muros de las viviendas de la planta tipo (1 decimal) y superficie_media_ref la referencia de mercado (58 m²: ANV,
+    Montevideo, 2025). El aviso (res["warnings"] y metrics.promovida) sale en las etapas del mix y de los planos si los
+    monoambientes pasan del 25 % de las viviendas de la planta o si alguno mide menos de 35 m² con muros; las dos
+    medidas están en standards.vivienda.promovida. Solo avisa: el mix no cambia."""
+    import copy
+    from engine import layout as LY, standards as ST
+    V = ST.DEFAULTS["vivienda"]
+    assert V["superficie_media_mercado"] == 58.0 and V["promovida"] == {"mono_max_pct": 25, "mono_min_area": 35}
+    barra = [[0, 0], [60, 0], [60, 16], [0, 16]]
+    # 1) con el mix por defecto: cumple, sin aviso, y la media es la de area_muros
+    r = run(barra)
+    m, pr = r["metrics"], r["metrics"]["promovida"]
+    medias = [u["area_muros"] for u in r["units"]]
+    assert m["superficie_media"] == round(sum(medias) / len(medias), 1) and 40 <= m["superficie_media"] <= 70, m["superficie_media"]
+    assert m["superficie_media_ref"] == 58.0
+    assert pr["ok"] and pr["avisos"] == [] and not any("Promovida" in w for w in r["warnings"]), pr
+    assert pr["mono_count"] == sum(1 for u in r["units"] if u["bedrooms"] == 0) and pr["mono_count"] >= 1
+    assert pr["mono_pct"] == round(pr["mono_count"] / len(r["units"]) * 100, 1) and pr["mono_pct"] <= 25
+    assert pr["mono_min_area"] == min(u["area_muros"] for u in r["units"] if u["bedrooms"] == 0) >= 35
+    assert (pr["limite_mono_pct"], pr["limite_mono_area"]) == (25, 35)
+    # 2) con 40 % de monoambientes de 30 m²: avisa (y los mismos textos van a los avisos del resultado)
+    mix40 = [{"name": "Mono", "area": 30, "percent": 40, "dorms": 0}, {"name": "2 dorm", "area": 62, "percent": 60, "dorms": 2}]
+    r = run(barra, unit_mix=mix40)
+    pr = r["metrics"]["promovida"]
+    assert not pr["ok"] and pr["mono_pct"] > 25 and pr["avisos"], pr
+    assert "Vivienda Promovida" in pr["avisos"][0] and "%.1f" % pr["mono_pct"] in pr["avisos"][0] and "25" in pr["avisos"][0]
+    assert all(a in r["warnings"] for a in pr["avisos"]), r["warnings"]
+    assert len({u["type"] for u in r["units"]}) == 2 and r["metrics"]["superficie_media"] > 0           # el mix no se toca
+    # 3) las dos medidas se leen de standards (se pueden cambiar)
+    r = run(barra, standards={"vivienda": {"promovida": {"mono_max_pct": 5}}})
+    assert not r["metrics"]["promovida"]["ok"] and r["metrics"]["promovida"]["limite_mono_pct"] == 5 and \
+        r["metrics"]["promovida"]["limite_mono_area"] == 35                                           # lo demás conserva su valor
+    r = run(barra, standards={"vivienda": {"superficie_media_mercado": 70}})
+    assert r["metrics"]["superficie_media_ref"] == 70
+    # 4) solo en las etapas con mix o planos
+    datos = {"footprint": barra, "height": 15, "params": dict(unit_mix=mix40)}
+    for etapa, hay in (("massing", False), ("corridor", False), ("mix", True), ("plans", True)):
+        res = LY.generate(dict(datos, stage=etapa))
+        assert ("promovida" in res["metrics"]) == hay and ("superficie_media" in res["metrics"]) == hay, etapa
+        assert any("Promovida" in w for w in res["warnings"]) == hay, etapa
+    # 5) la función sola, con viviendas inventadas: umbrales exactos, area_muros que falta, tipos que no son del mix
+    mix = [{"name": "Mono", "area": 33, "dorms": 0}, {"name": "1 dorm", "area": 42, "dorms": 1}]
+    u = lambda tipo, area, muros=None: dict({"type": tipo, "area": area, "target": area}, **({"area_muros": muros} if muros else {}))
+    assert LY.superficie_y_promovida([], mix, V) == {}
+    sp = LY.superficie_y_promovida([u("Mono", 30, 36), u("1 dorm", 40, 46), u("1 dorm", 40, 46), u("1 dorm", 40, 46)], mix, V)
+    assert sp["promovida"]["mono_pct"] == 25.0 and sp["promovida"]["ok"] and sp["superficie_media"] == 43.5     # el 25 % justo cumple
+    sp = LY.superficie_y_promovida([u("Mono", 30, 36), u("Mono", 30, 36), u("1 dorm", 40, 46), u("1 dorm", 40, 46)], mix, V)
+    assert sp["promovida"]["mono_pct"] == 50.0 and not sp["promovida"]["ok"] and len(sp["promovida"]["avisos"]) == 1
+    sp = LY.superficie_y_promovida([u("Mono", 30, 34.9), u("1 dorm", 40, 46), u("1 dorm", 40, 46), u("1 dorm", 40, 46)], mix, V)
+    assert sp["promovida"]["mono_min_area"] == 34.9 and not sp["promovida"]["ok"] and "34.9" in sp["promovida"]["avisos"][0]
+    assert LY.superficie_y_promovida([u("Mono", 35, 35.0), u("1 dorm", 40, 46)] * 3 + [u("1 dorm", 40, 46)] * 6, mix, V)["promovida"]["ok"]   # 35 m² justos
+    sp = LY.superficie_y_promovida([u("Mono", 30), u("1 dorm", 50)] + [u("1 dorm", 50)] * 4, mix, V)           # sin area_muros: la superficie libre
+    assert sp["superficie_media"] == round((30 + 50 * 5) / 6.0, 1) and sp["promovida"]["mono_min_area"] == 30.0
+    sp = LY.superficie_y_promovida([u("Monoambiente", 30, 36)] + [u("2 dorm", 70, 76)] * 5, mix, V)           # un tipo que no es del mix (vivienda editada)
+    assert sp["promovida"]["mono_count"] == 1 and sp["promovida"]["ok"]
+    sp = LY.superficie_y_promovida([u("1 dorm", 40, 46)], mix, V)
+    assert sp["promovida"]["mono_count"] == 0 and sp["promovida"]["mono_min_area"] is None and sp["promovida"]["ok"]
+
+
+def test_informe():
+    """R7.4 (v2.66): botón «Informe» en Proyecto → Exportar. Arma un documento HTML autónomo con las once secciones (encabezado,
+    predio y masa, normativa, planta tipo, viviendas, núcleos y evacuación, cocheras, costos, escenarios, advertencias y
+    fuentes), imprimible (A4, saltos de página, sin colores que hagan falta), y lo abre en una pestaña nueva. Las claves del
+    resultado que lee el informe existen en el motor; con node, informeHtml se ejecuta con resultados reales y no deja
+    «undefined» ni «NaN», escapa los textos y trae lo que corresponde a cada caso."""
+    import re
+    import shutil
+    import subprocess
+    import tempfile
+    from engine import layout as LY, standards as ST
+    base = os.path.join(os.path.dirname(__file__), "..")
+    html = open(os.path.join(base, "web", "index.html"), encoding="utf-8").read()
+    js = html.split("<script>", 1)[1].split("</script>", 1)[0]
+    cuerpo = lambda f: js.split(f, 1)[1].split("\nfunction ", 1)[0].split("\nasync function ", 1)[0].split("\nconst ", 1)[0]
+    # 1) el botón, junto a la tabla CSV y el DXF, y las funciones
+    exportar = html.split("<h2>Exportar</h2>", 1)[1].split("</div>", 1)[0]
+    assert re.search(r'<button class="s" id="btnInforme" onclick="informe\(\)"[^>]*>Informe</button>', exportar), "falta el botón Informe"
+    assert exportar.index('id="btnCsv"') < exportar.index('id="btnInforme"') and "dl('dxf')" in exportar
+    for f in ("function informe(", "function informeHtml(", "function datosInforme(", "function informePlano(", "function informeLeyenda(",
+              "function fzHtml(", "function iTabla(", "function origenInforme("):
+        assert f in js, f
+    # 2) sin resultado con viviendas avisa y no abre nada; con resultado, una pestaña nueva con un Blob de tipo text/html
+    inf = cuerpo("function informe(")
+    assert "!result||!result.units||!result.units.length" in inf and "alert(" in inf.split("window.open", 1)[0] and "text/html" in inf and "window.open(" in inf
+    assert "a.download=" in inf and "click()" in inf                                       # si el navegador bloquea la pestaña, se baja el archivo
+    # 3) las once secciones, en orden, y que cada una tenga su función
+    titulos = re.findall(r"iSec\((\d+),'([^']+)',(inf\w+)\(d\)", cuerpo("function informeHtml("))
+    assert [(int(n), t) for n, t, _ in titulos] == [
+        (1, "Encabezado"), (2, "Predio y masa"), (3, "Normativa aplicada"), (4, "Planta tipo"), (5, "Viviendas"),
+        (6, "Núcleos y evacuación"), (7, "Cocheras"), (8, "Costos y factibilidad"), (9, "Escenarios"),
+        (10, "Advertencias pendientes"), (11, "Fuentes")], titulos
+    # 4) imprimible: A4, saltos de página por sección, botón Imprimir que no se imprime, colores claros fijos
+    css = re.search(r"const INF_CSS=`(.*?)`;", js, re.S).group(1)
+    assert "@page{size:A4" in css and ".nueva{break-before:page" in css and "@media print" in css and ".no-print{display:none" in css
+    assert "color-scheme" in cuerpo("function informeHtml(") and "prefers-color-scheme" not in css and "window.print()" in cuerpo("function informeHtml(")
+    assert "gs.dataset.theme='light'" in cuerpo("function informePlano(") and "finally" in cuerpo("function informePlano(")   # el informe se imprime claro y la página vuelve a su tema
+    # 5) las claves que lee el informe existen en un resultado real del motor
+    muestra = lambda n: json.load(open(os.path.join(base, "samples", n + ".json"), encoding="utf-8"))
+    corridas = []
+    for n in ("barra", "torre_mixta", "patio_central", "entre_medianeras", "entre_medianeras_patio"):
+        s = muestra(n)
+        corridas.append(LY.generate({"footprint": s["footprint"], "height": s["height"], "stage": "plans",
+                                     "params": dict({k: s[k] for k in ("stories", "patios", "medianeras") if s.get(k) is not None},
+                                                    **({"patios_mode": "manual"} if s.get("patios") else {}))}))
+    metricas = [r["metrics"] for r in corridas]
+    fuente_motor = open(os.path.join(base, "engine", "layout.py"), encoding="utf-8").read()
+    funciones = {n: cuerpo("function %s(" % n) for n in ("infEncabezado", "infPredio", "infNormativa", "infPlanta", "infViviendas", "infNucleos",
+                                                          "infCocheras", "infFactibilidad", "infEscenarios", "infAdvertencias", "fzHtml")}
+    leen = lambda fs, v: {k for f in fs for k in re.findall(r"\b%s\.(\w+)" % v, funciones[f])}
+    todas = tuple(f for f in funciones if f != "fzHtml")
+    m_ = leen(todas, "m") - {"mix"}                                                       # m: result.metrics
+    assert len(m_) >= 15, m_
+    for k in m_:                                                                          # (dark_area, galeria_area…: solo en algunos resultados)
+        assert any(k in m for m in metricas) or ('"%s"' % k) in fuente_motor, k
+    for v, sub in (("mx", "mix"), ("pr", "promovida"), ("co", "core"), ("ev", "evacuacion"), ("pk", None), ("f", "factibilidad")):
+        ks = leen(("infViviendas",) if v in ("mx", "pr") else ("infNucleos",) if v in ("co", "ev") else ("infCocheras",) if v == "pk" else ("infFactibilidad", "fzHtml"), v)
+        if v == "mx":
+            assert ks, v
+            for k in ks:
+                assert all(k in m["mix"] for m in metricas), k
+        elif v == "pr":
+            assert {"mono_count", "mono_pct", "mono_min_area", "limite_mono_pct", "limite_mono_area", "ok", "avisos"} <= ks, ks
+            for k in ks:
+                assert all(k in m["promovida"] for m in metricas), k
+        elif v == "co":
+            for k in ks:
+                assert all(k in m["core"] for m in metricas), k
+        elif v == "ev":
+            for k in ks:
+                assert all(k in r["evacuacion"] for r in corridas), k
+        elif v == "pk":
+            for k in ks:
+                assert k in metricas[1]["programs"]["Parking"], k
+        else:
+            assert len(ks) >= 12, ks
+            for k in ks:
+                assert all(k in m["factibilidad"] for m in metricas), k
+    for k in leen(("fzHtml",), "t"):                                                        # f.terreno
+        assert k in metricas[0]["factibilidad"]["terreno"], k
+    for k in leen(("fzHtml",), "sp"):                                                       # f.superficies
+        assert k in metricas[0]["factibilidad"]["superficies"], k
+    usadas_u = set(re.findall(r"\bu\.(\w+)", funciones["infViviendas"] + funciones["infNucleos"]))          # las viviendas
+    for k in usadas_u:
+        assert all(k in x for x in corridas[0]["units"]), k
+    for k in set(re.findall(r"\bp\.(\w+)", funciones["infNucleos"])):                         # los tramos de pasillo
+        assert all(k in x for x in corridas[0]["pasillos"]), k
+    # 6) la superficie media en el resumen de la web y sus medidas en Normativa
+    assert "m.superficie_media" in cuerpo("function resumenPanel(") and "m.superficie_media_ref" in cuerpo("function resumenPanel(")
+    assert "mono_max_pct:" in js and "mono_min_area:" in js and "superficie_media_mercado:" in js and "promovida:" in js
+    node = shutil.which("node")
+    if not node:
+        print("(sin node: se omite la ejecución de informeHtml con resultados reales)")
+        return
+    # 7) informeHtml con node y resultados reales
+    def trozo(desde, hasta):
+        i = js.index(desde)
+        return js[i:js.index(hasta, i)]
+    previo = "\n".join([
+        re.search(r"^let PROGS=.*$", js, re.M).group(0), re.search(r"^const progOf=.*$", js, re.M).group(0),
+        re.search(r"^const progColor=.*$", js, re.M).group(0), re.search(r"^const esc=.*$", js, re.M).group(0),
+        re.search(r"^function areaPoly\(.*$", js, re.M).group(0), re.search(r"^const VCOL=.*$", js, re.M).group(0),
+        re.search(r"^const STD_COSTOS=.*$", js, re.M).group(0), trozo("const STD_LABELS=", "const STD_LISTA"),
+        trozo("const FZ_GAMAS=", "function factibilidadParams"), trozo("function resumen(", "function guardarVariante"),
+        trozo("function fzHtml(", "function fzResultado("), trozo("const ETAPA_TXT=", "function informeLeyenda")])
+    arnes = """const fs = require('fs');
+const E = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+let STD = E.std;
+%s
+const salida = E.casos.map(c => {
+  STD = c.std || E.std;
+  const r = c.result;
+  const d = Object.assign({ nombre: c.nombre || 'Prueba', fecha: '2026-10-22T12:00:00.000Z', ver: E.ver, etapa: c.etapa || 'plans', origen: c.origen || { v: '', nombre: 'x', ejemplo: 'Barra 60x16' },
+    footprint: c.footprint, terreno: c.terreno || null, result: r, std: STD, stdDef: E.stdDef, mix: E.mix, plano: '<svg class="planta"></svg>', leyenda: '<span class="lg">x</span>',
+    nivel: 0, params: { corridor_width: 1.5, egress_single: 18, egress_multi: 30, outer_wall: 0.35, cambio: c.cambio || {} }, avisoCostos: 'AVISO COSTOS', avisosDxf: c.dxf || [],
+    escenarios: [{ nombre: 'Variante A', m: resumen(r) }, { nombre: 'Actual (sin guardar)', actual: true, m: resumen(r) }] }, c.d || {});
+  return informeHtml(d);
+});
+console.log(JSON.stringify(salida));
+""" % previo
+    std = ST.merged(None)
+    fp_barra = muestra("barra")["footprint"]
+    cambios = {"predio": {"patio_min": 3.5}, "vivienda": {"promovida": {"mono_max_pct": 5}}}
+    std_cambiado = ST.merged(cambios)
+    mono40 = [{"name": "Mono", "area": 30, "percent": 40, "dorms": 0}, {"name": "2 dorm", "area": 62, "percent": 60, "dorms": 2}]
+    r_mono = LY.generate({"footprint": fp_barra, "height": 15, "stage": "plans", "params": {"unit_mix": mono40, "standards": cambios}})
+    mix = LY.DEFAULT_PARAMS["unit_mix"]
+    fp = lambda n: muestra(n)["footprint"]
+    mix_etapa = LY.generate({"footprint": fp("barra"), "height": 15, "stage": "mix", "params": {}})
+    casos = [{"result": corridas[0], "footprint": fp("barra"), "std": std},                                    # 0) barra, planos
+             {"result": corridas[1], "footprint": fp("torre_mixta"), "std": std},                               # 1) con cocheras, oficinas y comercio
+             {"result": corridas[2], "footprint": fp("patio_central"), "std": std},                             # 2) con patio
+             {"result": corridas[3], "footprint": fp("entre_medianeras"), "std": std},                          # 3) entre medianeras
+             {"result": mix_etapa, "footprint": fp("barra"), "std": std, "etapa": "mix"},                       # 4) solo el mix
+             {"result": r_mono, "footprint": fp("barra"), "std": std_cambiado, "nombre": "<img src=x onerror=alert(1)>",   # 5) medidas cambiadas, nombre con HTML, DXF
+              "dxf": ["<b>aviso</b> & más"], "terreno": {"frente": 10, "fondo": 30, "medianeras": {"i": True, "d": True, "b": False}, "retiros": {"i": 0, "d": 0, "b": 0, "f": 3}},
+              "origen": {"v": "__terreno", "nombre": "Terreno 10 × 30 m", "ejemplo": None}, "cambio": {"egress_single": True}}]
+    with tempfile.TemporaryDirectory() as tmp:
+        open(os.path.join(tmp, "arnes.js"), "w", encoding="utf-8").write(arnes)
+        open(os.path.join(tmp, "entrada.json"), "w", encoding="utf-8").write(json.dumps(
+            {"casos": casos, "std": std, "stdDef": ST.DEFAULTS, "mix": [{"name": t["name"], "area": t["area"], "percent": t["percent"], "dorms": t.get("dorms")} for t in mix],
+             "ver": LY.VERSION}))
+        p = subprocess.run([node, os.path.join(tmp, "arnes.js"), os.path.join(tmp, "entrada.json")], capture_output=True, text=True, encoding="utf-8")
+        assert p.returncode == 0, p.stderr
+    docs = json.loads(p.stdout)
+    sin_tags = lambda t: re.sub(r"<[^>]+>", " ", t)
+    for i, doc in enumerate(docs):
+        assert doc.startswith("<!doctype html>") and doc.rstrip().endswith("</html>"), i
+        assert "undefined" not in doc and "NaN" not in doc and "[object" not in doc and "Infinity" not in doc, (i, re.findall(r".{40}(?:undefined|NaN|\[object).{20}", doc)[:3])
+        assert [h for h in re.findall(r"<h2><span>(\d+)\.</span>([^<]+)</h2>", doc)] == [(str(n), t) for n, t, _ in titulos], i
+        for etiqueta in ("table", "section", "thead", "tbody", "ul"):
+            assert doc.count("<%s" % etiqueta) == doc.count("</%s>" % etiqueta), (i, etiqueta)
+        assert "<script" not in doc and "onerror" not in doc.replace("&#", "") or i == 5, i               # sin scripts propios (el botón usa window.print)
+        assert "AVISO COSTOS" in doc and "Imprimir" in doc and "v" + LY.VERSION in doc, i
+    r0, d0 = corridas[0], docs[0]
+    m0 = r0["metrics"]
+    fmt = lambda n, d=1: ("%.*f" % (d, n)).replace(".", ",")
+    assert "Ejemplo de Trazo: Barra 60x16" in d0 and "planos de vivienda" in d0 and "22 de octubre de 2026" in d0
+    assert d0.count('class="viv"') == 1 and len(re.findall(r"<tr>", d0.split('class="viv"', 1)[1].split("</table>", 1)[0])) == len(r0["units"]) + 1
+    for u in r0["units"]:
+        assert ">%s<" % u["id"] in d0
+    assert fmt(m0["superficie_media"]) in d0 and "Cumple</b> el criterio de Vivienda Promovida" in d0 and "58 m²" in d0
+    assert "Viable" in d0 and fmt(m0["factibilidad"]["objetivo"]).replace(",0", ",0") in d0 and "Base de cálculo" in d0
+    assert "Pasillos comunes" in d0 and "Variante A" in d0 and "Actual (sin guardar)" in d0 and "Sin advertencias" not in d0
+    assert "No se cambió ninguna medida" in d0 and "El edificio no tiene niveles con programa" in d0
+    d1 = docs[1]
+    assert "Plazas en total" in d1 and str(corridas[1]["metrics"]["programs"]["Parking"]["stalls"]) in d1 and "No viable" in d1
+    assert "Estacionamiento" in d1 and "Oficinas" in d1 and "Comercial" in d1 and "El ingreso cuenta solo la superficie vendible" in d1
+    assert "1 patio dibujado por el usuario, 112,0 m² en total" in docs[2] and "Sin patios" not in docs[2] and "Sin patios" in docs[0]
+    assert "Medianera 1" in docs[3] and "Adosada al lindero" in docs[3]
+    d4 = docs[4]                                                                                           # solo el mix: sin dormitorios ni calidad, pero completo
+    assert "mix de unidades" in d4 and "Cumple</b>" in d4 and len(re.findall(r"<h2>", d4)) == 11
+    d5 = docs[5]
+    assert "&lt;img src=x onerror=alert(1)&gt;" in d5.replace("&#60;", "&lt;").replace("&#62;", "&gt;") or "&#60;img" in d5
+    assert "<img" not in d5 and "<b>aviso</b>" not in d5 and "DXF: " in d5
+    assert "cambiada" in d5 and "Ancho mínimo de patio para iluminar" in d5 and "3,5" in d5 and "5" in d5   # medidas cambiadas con su valor por defecto
+    assert "Terreno rectangular" in d5 and "10,00 × 30,00 m" in d5 and "izquierdo, derecho" in d5 and "edificabilidad (GFA / terreno)" in d5
+    assert "No cumple</b> el criterio de Vivienda Promovida" in d5 and "Vivienda Promovida: los monoambientes son el" in sin_tags(d5)
+    assert all(a in d5 for a in r_mono["metrics"]["promovida"]["avisos"])                                 # los avisos, también en «Advertencias pendientes»
+    assert d5.count("por defecto") < d0.count("por defecto")                                              # dos medidas pasaron a «cambiada»
+
+if __name__ == "__main__":
+    test_promovida(); test_informe(); print("OK82")
