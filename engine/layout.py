@@ -18,7 +18,8 @@ from .circulation import (pick_frame, core_positions, side_for, _frame_for_poly,
                           _choose_single, _ring_single, _single_frame, _bridge_axis, build_pieces, _link, _connect,
                           _franjas_sin_luz, _clip_sr, build_user_pieces, _stem_vs_trunk, _split_parallel, egress_at,
                           _add_core, _propagate_core_blocks, generate_circulation, is_between, _between_depth,
-                          _generate_circulation, nucleo_punto, medidas_nucleo, ancho_de)  # noqa: F401
+                          _generate_circulation, nucleo_punto, medidas_nucleo, ancho_de, plan_lateral,
+                          fachadas_diente)  # noqa: F401
 from .units import (_bisect_x, _chain_union, _is_rect, _segments, generate_unit_mix, metrics_mix, bedrooms_for,
                     unit_rooms, sin_solapes, editar_unidades, vecinas, formar_frentes, entradas, puntas_libres,
                     acceso_cerca, ACCESO_CERCA,
@@ -26,7 +27,7 @@ from .units import (_bisect_x, _chain_union, _is_rect, _segments, generate_unit_
                     superficie_con_muros)  # noqa: F401
 from .patios import (auto_patios, _anillo, split_blocks, make_patio_dark, _block_of, _block_of_line)  # noqa: F401
 
-VERSION = "2.71"
+VERSION = "2.72"
 
 DEFAULT_PARAMS = {
     # Masa
@@ -64,6 +65,9 @@ DEFAULT_PARAMS = {
     "standards": None,          # valores que sobrescriben engine/standards.py
     "medianeras": None,         # [{"a":[x,y],"b":[x,y],"retiro":m}] bordes del predio contra linderos
     "patios_mode": "auto",      # auto (patios en predios entre medianeras demasiado profundos) | manual
+    "between_mode": "auto",     # R11.4: entre medianeras: auto (pasillo lateral con patios si entran 3 viviendas o más; si no,
+                                # el palier transversal) | transversal (núcleo en el medio, una vivienda hacia cada frente)
+                                # | lateral (pasillo contra una medianera, viviendas en hilera con patios; si no cabe, avisa)
     "patios": None,             # patios manuales: [[[x,y],...],...] en coordenadas de mundo
     "patios_galeria": None,     # R3.8: [bool] alineado con patios: el pasillo de borde del ala que da a ese patio va en el patio (galería)
     "unit_edits": None,         # R4.4: [{"op": "tabique"|"fusionar"|"dividir"|"extender", "p": [x,y], "a": [x,y]}] en orden (units.editar_unidades)
@@ -340,8 +344,19 @@ def generate(data):
     # ---- patios: la huella menos los patios da uno o más bloques, cada uno con su planta, su pasillo y su núcleo
     ancho_patio = S0["predio"]["patio_min"]
     auto = params.get("patios_mode", "auto") != "manual"
+    modo_em = str(params.get("between_mode") or "auto")      # R11.4: entre medianeras, auto | transversal | lateral
     if auto:
-        patios = auto_patios(fp, plate, params, ancho_patio)
+        lat = None
+        if modo_em != "transversal":
+            # R11.4: pasillo lateral con patios entre vivienda y vivienda (plan_lateral), si entran 3 viviendas o más;
+            # con «lateral» pedido y sin lugar, se avisa por qué y queda el palier transversal
+            lat, motivo = plan_lateral(fp, plate, params, ancho_patio)
+            if lat is None and modo_em == "lateral" and is_between(plate, params):
+                res["warnings"].append("Pasillo lateral con patios: %s; queda el palier transversal" % motivo)
+        if lat:
+            patios, params["_lateral"] = lat["patios"], lat
+        else:
+            patios = auto_patios(fp, plate, params, ancho_patio)
     else:                                                    # R3.8: la marca «galería» va alineada con params.patios
         marcas = list(params.get("patios_galeria") or [])
         pares = [(p, k < len(marcas) and bool(marcas[k])) for k, p in enumerate(params.get("patios") or [])]
@@ -408,10 +423,12 @@ def generate(data):
                 res["warnings"].append("Bloque %d: con un patio interior, el pasillo se traza solo alrededor del patio; "
                                        "las polilíneas dibujadas todavía no se usan ahí" % (bi + 1))
                 pb["centerlines"] = pb["centerline"] = None
-        if is_between(pl_b, pb) and not manual:
+        if pb.get("_lateral"):                               # R11.4: el pasillo lateral con patios (el pasillo no se ensancha)
+            res["metrics"]["between"], res["metrics"]["between_mode"] = True, "lateral"
+        elif is_between(pl_b, pb) and not manual:
             pb["_cw_base"] = pb["corridor_width"]
             pb["corridor_width"] = max(pb["corridor_width"], pb["core_depth"] - pb["corridor_width"])
-            res["metrics"]["between"] = True
+            res["metrics"]["between"], res["metrics"]["between_mode"] = True, "transversal"
         pieces = generate_circulation(pl_b, pb)
         if "frame" not in res:
             p0 = pieces[0]
@@ -617,15 +634,6 @@ def generate(data):
         if u.get("id"):
             res["warnings"].append("No hay planta libre al lado de %s: no se pudo extender (la planta cambió desde que lo "
                                    "pediste)" % u["id"])
-    lejos = ["%s (%.0f m)" % (u["id"], u["egress"]) for u in units if u["egress"] > params["egress_multi"]]
-    sacos = ["%s (%.0f m)" % (u["id"], u["saco"]) for u in units
-             if u["egress"] <= params["egress_multi"] and u["saco"] > params["egress_single"]]
-    if lejos:
-        res["warnings"].append("Evacuación: %s a más de %.0f m de un núcleo (recorrido máximo): agrega un núcleo o acorta "
-                               "el pasillo" % (", ".join(lejos[:10]), params["egress_multi"]))
-    if sacos:
-        res["warnings"].append("Fondo de saco: %s con una sola salida por más de %.0f m: agrega un núcleo o une el pasillo "
-                               "para poder salir en dos direcciones" % (", ".join(sacos[:10]), params["egress_single"]))
     mm = metrics_mix(units, params)
     res["metrics"].update({"mix": mm})
     served = sum(u["area"] for u in units)
@@ -651,13 +659,13 @@ def generate(data):
     mundo = [W(u["_pc"], u["poly_local"]) for u in units]
     muros = superficie_con_muros(mundo, [[u["_plate"]] + list(u["_pb"].get("_huecos") or []) for u in units],
                                  res["corridors"], [c["poly"] for c in res["cores"]], params, S)
+    estado = lambda eg, sc: "fail" if eg > params["egress_multi"] else ("saco" if sc > params["egress_single"] else "ok")
     for i_u, (u, um, am) in enumerate(zip(units, mundo, muros)):
         pc = u["_pc"]
         eg, sc = u["egress"], u["saco"]
-        status = "fail" if eg > params["egress_multi"] else ("saco" if sc > params["egress_single"] else "ok")
         item = {"id": u["id"], "type": u["type"], "area": round(u["area"], 1), "target": u["target"],
                 "width": round(u["width"], 2), "depth": round(u["depth"], 2), "egress": round(eg, 1),
-                "saco": round(sc, 1), "egress_status": status, "poly": um, "area_muros": round(am, 1),
+                "saco": round(sc, 1), "egress_status": estado(eg, sc), "poly": um, "area_muros": round(am, 1),
                 "door": [round(v, 3) for v in G.to_world([u["door_local"]], pc["origin"], pc["angle"])[0]]}
         item["pasillo"] = res["pasillos"][pc["_pas"]]["id"]   # R10.8: el tramo de pasillo de su puerta
         item["extensible"] = u.get("extensible") or {}      # R4.13b: lados con planta libre {"x0"|"x1": {largo, p}}
@@ -665,6 +673,8 @@ def generate(data):
             item["editada"] = True
         if u.get("frente"):
             item["al_frente"] = True                        # R3.7: todo el ancho en la punta del pasillo, que entra por ahí
+        if u.get("lateral") is not None:
+            item["lateral"] = u["lateral"]                  # R11.4: fachada en el costado x0 (-1), x1 (1) o en los dos (0)
         if any(m.get("accesible") and m.get("name") == u["type"] for m in params["unit_mix"]):
             item["accesible"] = True                        # tipo del mix marcado «accesible» (F5)
         if any(m.get("vestidor") and m.get("name") == u["type"] for m in params["unit_mix"]):
@@ -686,6 +696,17 @@ def generate(data):
                                        "ficha)" % (u["id"], a))
             item["doors"] = [{"p": Wp(d["p"]), "q": Wp(d["q"]), "entry": bool(d.get("entry")),
                               "a": d["a"], "b": d["b"]} for d in pl["doors"]]
+            ent = next((d for d in pl["doors"] if d.get("entry")), None)
+            if u.get("lateral") is not None and ent is not None:
+                # R11.4: la puerta de una vivienda con fachada lateral la pone el plano (en el costado, junto al hall): la
+                # evacuación se mide desde ahí (el reparto la estimó a PUERTA_LATERAL del fondo de la vivienda)
+                u["door_local"] = ((ent["p"][0] + ent["q"][0]) / 2.0, (ent["p"][1] + ent["q"][1]) / 2.0)
+                xd, extra = u["door_local"][0], pc.get("egress_extra", {}).get(u["side"], 0.0)
+                pb_ = u["_pb"]
+                u["egress"] = min(1e9, EV.recorrido(pb_["_evac"], u["_i"], xd) + extra)
+                u["saco"] = min(1e9, EV.saco(pb_["_evac"], u["_i"], xd) + extra)
+                item.update(egress=round(u["egress"], 1), saco=round(u["saco"], 1), egress_status=estado(u["egress"], u["saco"]),
+                            door=[round(v, 3) for v in G.to_world([u["door_local"]], pc["origin"], pc["angle"])[0]])
             item["graph"] = {"nodes": [{"id": n["id"], "name": n["name"], "kind": n["kind"], "pos": Wp(n["pos"])}
                                        for n in pl["graph"]["nodes"]], "edges": pl["graph"]["edges"]}
             item["equipamiento"] = [{"kind": q["kind"], "name": q["name"], "room": q["room"], "poly": W(pc, q["poly"]),
@@ -719,6 +740,16 @@ def generate(data):
     if faltan > 0:
         res["warnings"].append("%d cambio(s) dentro de las viviendas no se pudieron aplicar: la planta cambió desde que los "
                                "hiciste. Descártalos (en la ficha de la vivienda) o deshazlos (Ctrl+Z)" % faltan)
+    # evacuación por vivienda (R3.6), después de los planos: R11.4, la puerta de una vivienda con fachada lateral la pone el plano
+    lejos = ["%s (%.0f m)" % (u["id"], u["egress"]) for u in units if u["egress"] > params["egress_multi"]]
+    sacos = ["%s (%.0f m)" % (u["id"], u["saco"]) for u in units
+             if u["egress"] <= params["egress_multi"] and u["saco"] > params["egress_single"]]
+    if lejos:
+        res["warnings"].append("Evacuación: %s a más de %.0f m de un núcleo (recorrido máximo): agrega un núcleo o acorta "
+                               "el pasillo" % (", ".join(lejos[:10]), params["egress_multi"]))
+    if sacos:
+        res["warnings"].append("Fondo de saco: %s con una sola salida por más de %.0f m: agrega un núcleo o une el pasillo "
+                               "para poder salir en dos direcciones" % (", ".join(sacos[:10]), params["egress_single"]))
     res["tabiques"] = []                                    # tabiques entre vecinas de una franja: se arrastran en la web (R4.4)
     for a, b in vecinas(units, params):
         pc, x = a["_pc"], a["x1"] + params["party_wall"] / 2
