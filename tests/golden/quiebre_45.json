@@ -1,7 +1,7 @@
 {
  "ejemplo": "samples/quiebre_45.json",
  "nombre": "Barra con quiebre a 45° (no ortogonal)",
- "version_motor": "2.65",
+ "version_motor": "2.69",
  "metricas": {
   "unidades": 18,
   "unidades_totales": 90,
@@ -18,7 +18,7 @@
   "eficiencia_planta": 76.9,
   "eficiencia_total": 72.9,
   "sin_usar": 52.5,
-  "circulacion": 20.0,
+  "circulacion": 18.2,
   "match_score": 97.8,
   "fit_m2": 4.9,
   "calidad_planos": 93,

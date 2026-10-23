@@ -5224,7 +5224,7 @@ def test_galeria():
     e0, e1 = ejes(r0), ejes(r1)
     otros = [k for k in e0 if k != p1["id"]]
     assert all(e1[k] == e0[k] for k in otros), (e0, e1)                     # la tira y el brazo de arriba, con su pasillo
-    assert 40 <= r1["metrics"]["circulation_pct"] <= 42 and r1["metrics"]["unused_area"] < 60     # v2.64: 53,5 m² (antes, 1,9 por contar dos veces el pasillo bajo los núcleos)
+    assert 35 <= r1["metrics"]["circulation_pct"] <= 36 and r1["metrics"]["unused_area"] < 60     # v2.64: 53,5 m² (antes, 1,9 por contar dos veces el pasillo bajo los núcleos); v2.69: circulación 35,5 % (antes 40,7: los cuatro núcleos apoyados en el pasillo y en la banda contaban dos veces ese tramo)
     # (d) el núcleo manual en (3, 11), dentro del patio, se apoya en la galería del brazo de abajo
     c0 = next(c for c in r1["cores"] if c["spec"] == 0)
     assert abs(c0["center"][0] - 3.075) < 0.05 and abs(max(y for _, y in c0["poly"]) - 10) < 0.01 and min(y for _, y in c0["poly"]) < 1
@@ -6286,8 +6286,8 @@ def test_sin_usar():
     núcleo incluye su tramo de pasillo, que ya está en res["corridors"] (y en un anillo, las esquinas donde se encuentran dos
     pasillos): antes se contaban dos veces y «sin usar» quedaba por debajo de la planta libre real (en «Barra 60x16», 23,4 m²
     contra 38,5: la intersección de los dos núcleos con el pasillo, 15,15 m²). Se mide con un barrido horizontal (exacto a lo
-    largo de x, con un paso en y que no coincide con la grilla de 5 cm de las medidas). La circulación (circulation_pct) se
-    deja como estaba: sigue sumando ese tramo dos veces; queda para decidir."""
+    largo de x, con un paso en y que no coincide con la grilla de 5 cm de las medidas). La circulación (circulation_pct) siguió
+    sumando ese tramo dos veces hasta v2.69, cuando pasó a la misma unión (`test_circulacion_real`)."""
     from engine import geometry as G
 
     def une(ivs):                                     # unión de intervalos [a, b]
@@ -6341,7 +6341,8 @@ def test_sin_usar():
     assert abs(viejo - 25.4) < 0.05 and abs(inter - 2 * 5.05 * 1.5) < 0.1, (viejo, inter)            # la cuenta de antes y lo que repetía
     assert m["unused_area"] > viejo and abs(m["unused_area"] - viejo - inter) < 0.2, (m["unused_area"], viejo, inter)
     assert abs(plate - m["plate_area"]) < 0.3 and abs(m["unused_area"] - libre) < 0.5, (m["unused_area"], libre)    # planta − unión
-    assert m["circulation_pct"] == round((A(r["corridors"]) + A([c["poly"] for c in r["cores"]])) / m["plate_area"] * 100, 1)   # sin cambio
+    # v2.69: la circulación es la unión (suma de las áreas menos lo que repetía), sobre la misma planta
+    assert abs(m["circulation_pct"] - (A(r["corridors"]) + A([c["poly"] for c in r["cores"]]) - inter) / m["plate_area"] * 100) < 0.1, m["circulation_pct"]
     # 2) una L (núcleo en el codo) y un anillo con patio central (esquinas donde dos pasillos se cruzan): igual a planta − unión
     for nombre in ("L", "patio_central"):
         s = muestra(nombre)
@@ -6903,3 +6904,67 @@ console.log(JSON.stringify(salida));
 if __name__ == "__main__":
     test_promovida(); test_informe(); print("OK82")
     test_esquema_fila(); print("OK83")
+
+
+def test_circulacion_real():
+    """v2.69: «Circulación %» (metrics.circulation_pct) mide la unión real de pasillos y núcleos, no la suma de sus áreas. La
+    caja de cada núcleo incluye su tramo de pasillo (que ya está en res["corridors"]) y, en un anillo, dos pasillos se cruzan
+    en cada esquina: la suma los contaba dos veces («Barra 60x16»: 19,2 % contra 17,5 % con la unión real). Se mide aparte con
+    un barrido de bandas horizontales de 0,137 m (exacto a lo largo de x), con los parámetros que arma `regresion._edificio`.
+    El denominador no cambia: planta más galería (R3.8)."""
+    from engine import geometry as G, layout as LY
+
+    def une(ivs):                                     # unión de intervalos [a, b]
+        out = []
+        for a, b in sorted((a, b) for a, b in ivs):
+            if out and a <= out[-1][1]:
+                out[-1][1] = max(out[-1][1], b)
+            else:
+                out.append([a, b])
+        return out
+    largo = lambda ivs: sum(b - a for a, b in ivs)
+    A = lambda ps: sum(abs(G.area(p)) for p in ps)
+
+    def barrer(r, dy=0.0137):
+        """(planta, pasillos y núcleos unidos) en m², por barrido de bandas horizontales de alto dy."""
+        bloques = [(b["plate"], b.get("plate_holes") or []) for b in r["blocks"]]
+        capas = r["corridors"] + [c["poly"] for c in r["cores"]]
+        y0, y1 = min(G.bbox(o)[1] for o, _ in bloques), max(G.bbox(o)[3] for o, _ in bloques)
+        n = int((y1 - y0) / dy) + 1
+        dy = (y1 - y0) / n                            # bandas que cubren justo todo el alto
+        plate = circ = 0.0
+        for i in range(n):
+            y = y0 + (i + 0.5) * dy
+            plate += largo(une([iv for o, hs in bloques for iv in G.line_intervals_multi([o] + hs, y)])) * dy
+            circ += largo(une([iv for p in capas for iv in G.line_intervals(p, y)])) * dy
+        return plate, circ
+
+    muestra = lambda n: json.load(open(os.path.join(os.path.dirname(__file__), "..", "samples", n + ".json"), encoding="utf-8"))
+    # «Barra 60x16» (dos núcleos sobre el pasillo), una L (núcleo en el codo) y el anillo con patio central (esquinas
+    # donde dos pasillos se cruzan): la circulación es la unión medida aparte y queda por debajo de la suma simple
+    for nombre, esperado_suma in (("barra", 19.2), ("L", 21.9), ("patio_central", 25.1)):
+        s = muestra(nombre)
+        p = {}
+        lineas = s.get("centerlines") or ([s["centerline"]] if s.get("centerline") else None)
+        if lineas:
+            p["centerlines"] = lineas
+        if s.get("cores"):
+            p["cores_mode"], p["cores"] = "manual", s["cores"]
+        if s.get("patios"):
+            p["patios_mode"], p["patios"] = "manual", s["patios"]
+        for k in ("stories", "medianeras"):
+            if s.get(k):
+                p[k] = s[k]
+        r = LY.generate({"footprint": s["footprint"], "height": s.get("height"), "stage": "plans", "params": p})
+        m = r["metrics"]
+        assert m.get("galeria_area", 0) == 0, nombre
+        plate, circ = barrer(r)
+        assert abs(plate - m["plate_area"]) < 0.5, (nombre, plate, m["plate_area"])
+        union = circ / m["plate_area"] * 100
+        suma = (A(r["corridors"]) + A([c["poly"] for c in r["cores"]])) / m["plate_area"] * 100
+        assert abs(m["circulation_pct"] - union) < 0.2, (nombre, m["circulation_pct"], union)          # la unión real
+        assert m["circulation_pct"] < suma - 1.0 and abs(suma - esperado_suma) < 0.1, (nombre, m["circulation_pct"], suma)
+
+
+if __name__ == "__main__":
+    test_circulacion_real(); print("OK85")
