@@ -26,7 +26,7 @@ from .units import (_bisect_x, _chain_union, _is_rect, _segments, generate_unit_
                     superficie_con_muros)  # noqa: F401
 from .patios import (auto_patios, _anillo, split_blocks, make_patio_dark, _block_of, _block_of_line)  # noqa: F401
 
-VERSION = "2.68"
+VERSION = "2.69"
 
 DEFAULT_PARAMS = {
     # Masa
@@ -730,10 +730,10 @@ def generate(data):
     _A = lambda ps: sum(abs(G.area(p)) for p in ps)
     # R3.8: la galería (y el muro que cruza) está fuera de la planta: no cuenta como planta usada, y la circulación se
     # mide sobre la planta más la galería (pasillos, con la galería, y núcleos / planta + galería)
-    used = _area_union(res["corridors"] + [c["poly"] for c in res["cores"]]) - fuera + _A([u["poly"] for u in res["units"]])
+    circ = _area_union(res["corridors"] + [c["poly"] for c in res["cores"]])   # la unión real: el tramo bajo el núcleo cuenta una vez
+    used = circ - fuera + _A([u["poly"] for u in res["units"]])
     res["metrics"]["unused_area"] = round(max(0.0, gfa_plate - used - res["metrics"].get("dark_area", 0.0)), 1)
-    res["metrics"]["circulation_pct"] = round((_A(res["corridors"]) + _A([c["poly"] for c in res["cores"]])) /
-                                              (gfa_plate + galeria) * 100, 1) if gfa_plate else 0
+    res["metrics"]["circulation_pct"] = round(circ / (gfa_plate + galeria) * 100, 1) if gfa_plate else 0   # v2.69: sin contar dos veces
     n_res = sum(1 for s_ in stories if s_["program"] == "Residential")
     if "Residential" in res["metrics"]["programs"]:
         res["metrics"]["programs"]["Residential"]["nsa"] = round(mm["nsa"] * n_res, 1)
