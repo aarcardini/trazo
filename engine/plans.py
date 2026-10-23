@@ -1657,7 +1657,7 @@ def _std_for(r, nb, integradas=()):
 
 
 def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None, accesible=False, ediciones=None, ventanas=None,
-                entrada=None, vestidor=False, punta=None):
+                entrada=None, vestidor=False, punta=None, acceso=None):
     """Distribuye una unidad. poly en el marco de la unidad. Devuelve dict con estancias, puertas, grafo, equipamiento y
     comprobaciones. is_facade(p, q): opcional, dice si el segmento p-q (marco de la unidad) está sobre la fachada.
     accesible: puertas de dormitorios y baño de DOOR_ACC, el baño abre hacia afuera y se equipa para silla de ruedas.
@@ -1674,7 +1674,13 @@ def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None, accesible=F
     punta (R3.7b): (lo, hi) del borde v0 junto a una punta libre del pasillo común (la vivienda es la del extremo): si
     la puerta de entrada no cae ahí, se prueba el plano con el hall en ese extremo (derecho o al revés) y se usa si no
     empeora (calidad y estancias del programa), así el pasillo termina en la última puerta; a diferencia de entrada,
-    no obliga ni avisa."""
+    no obliga ni avisa.
+    acceso (R5.13, v2.68): x del borde v0 donde el usuario quiere la puerta de entrada (el acceso a mano): el plano va
+    con la entrada en la más cercana de las tres posiciones que sabe armar —la punta x0 (hall_x0), la de siempre (junto
+    a la zona de noche, o la del esquema en fila) y la punta x1 (el plano al revés)—; con entrada, el acceso tiene que
+    caer en ese tramo, y si el plano con la entrada en la punta pierde cocina, dormitorios, estar o baño se avisa y se
+    ignora. El resultado trae "acceso" = {x: la puerta de entrada, posicion: x0 | medio | x1, aplicado, motivo?}; los
+    demás cambios a mano (ediciones) siguen valiendo (ver con_acceso)."""
     equip = equip or ST.DEFAULTS["equipamiento"]
     configure(vivienda or ST.DEFAULTS["vivienda"], equip, accesible)
     poly = G.ensure_ccw(poly)
@@ -1693,13 +1699,19 @@ def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None, accesible=F
         return _espejar(_distribuir([m(p) for p in poly][::-1], nb, fac if is_facade else None, equip, accesible, ed,
                                     ventanas, lateral, hall_x0, vestidor), m)
     programa = _programa
+    esencial = lambda r: [min(n, 1) if i == 0 else n for i, n in enumerate(programa(r)) if i != 3]   # un baño, cocina,
+                                                                                                    # dormitorios y estar
+    def dorm_lateral(con, sin):
+        """R5.3: el plano con el último dormitorio al costado vale si ese dormitorio llega a su mínimo y no pierde
+        estancias (el baño 2, solo con hasta 2 dormitorios: criterio del usuario)."""
+        lat = next((r for r in con["rooms"] if r["id"] == "bed%d" % nb), None)
+        pc, ps = programa(con), programa(sin)
+        return bool(lat and lat["area"] >= V["dorm_secundario"]["min_area"] - 1e-6 and
+                    pc[0] >= (1 if nb <= 2 else max(1, ps[0])) and all(a >= b for a, b in zip(pc[1:], ps[1:])))
     elegido = None                                     # se comparan sin los cambios a mano: la elección no depende
     if lateral:                                        # de ellos. El dormitorio al costado, solo si el plano mejora y
-        con, sin = plano(espejar, True, None), plano(lado == 1, False, None)   # no pierde estancias (el baño 2, solo
-        lat = next((r for r in con["rooms"] if r["id"] == "bed%d" % nb), None)  # con hasta 2 dormitorios: criterio
-        pc, ps = programa(con), programa(sin)                                    # del usuario)
-        if lat and lat["area"] >= V["dorm_secundario"]["min_area"] - 1e-6 and con["score"] > sin["score"] and \
-                pc[0] >= (1 if nb <= 2 else max(1, ps[0])) and all(a >= b for a, b in zip(pc[1:], ps[1:])):
+        con, sin = plano(espejar, True, None), plano(lado == 1, False, None)   # no pierde estancias
+        if dorm_lateral(con, sin) and con["score"] > sin["score"]:
             elegido = con
         else:
             espejar, lateral, elegido = lado == 1, False, sin
@@ -1709,22 +1721,28 @@ def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None, accesible=F
         if elegido["score"] < recto["score"] or any(a < b for a, b in zip(programa(elegido), programa(recto))):
             espejar, elegido = False, recto
     hall_x0 = False
+    puntas = []
+
+    def extremos():
+        """R3.7 y R5.13: los planos con el hall en una punta, (plano, espejar, lateral, hall_x0): derecho (x0), al revés
+        (x1) y, si la fachada lateral lo permite, con el último dormitorio al costado (R5.3, mismo criterio); se arman
+        una sola vez, sin los cambios a mano."""
+        if not puntas:
+            cands = [(e_, False, True) for e_ in (False, True)]
+            if lat_posible:
+                cands.append((lado == -1, True, True))
+            hechos = {}
+            for e_, l_, h_ in cands:
+                r_ = hechos[(e_, l_)] = plano(e_, l_, None, h_)
+                if l_ and not dorm_lateral(r_, hechos[(e_, False)]):
+                    continue                           # el dormitorio al costado, con el mismo criterio (R5.3)
+                puntas.append((r_, e_, l_, h_))
+        return puntas
     if entrada is not None and not _entra(elegido or plano(espejar, lateral, None), entrada):
         # R3.7: el pasillo común solo sigue sobre una parte del borde: el hall (y la entrada) a ese extremo, con el plano
         # derecho (x0) o al revés (x1); el mejor de los que cumplen
-        cands = [(e_, False, True) for e_ in (False, True)]
-        if lat_posible:
-            cands.append((lado == -1, True, True))
-        mejor, hechos = None, {}
-        for e_, l_, h_ in cands:
-            r_ = hechos[(e_, l_)] = plano(e_, l_, None, h_)
-            if l_:                                     # el dormitorio al costado, con el mismo criterio (R5.3)
-                sin_ = hechos[(e_, False)]
-                lat = next((r for r in r_["rooms"] if r["id"] == "bed%d" % nb), None)
-                pc, ps = programa(r_), programa(sin_)
-                if not (lat and lat["area"] >= V["dorm_secundario"]["min_area"] - 1e-6 and
-                        pc[0] >= (1 if nb <= 2 else max(1, ps[0])) and all(a >= b for a, b in zip(pc[1:], ps[1:]))):
-                    continue
+        mejor = None
+        for r_, e_, l_, h_ in extremos():
             if _entra(r_, entrada) and (mejor is None or r_["score"] > mejor[0]["score"]):
                 mejor = (r_, e_, l_, h_)
         if mejor:
@@ -1743,10 +1761,55 @@ def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None, accesible=F
                     mejor = (r_, e_)
             if mejor:
                 elegido, espejar, lateral, hall_x0 = mejor[0], mejor[1], False, True
+
+    def con_acceso(res, base):
+        """R5.13 (v2.68): el acceso a mano. Entre las tres posiciones de la entrada que el plano sabe armar —la punta x0
+        (hall_x0, derecho), la de siempre (junto a la zona de noche, o la del esquema en fila) y la punta x1 (hall_x0 con
+        el plano al revés)— elige la que deja la puerta de entrada más cerca de acceso; por punta, el plano de más calidad
+        entre el derecho y el del dormitorio al costado (extremos). res: el plano de siempre, con los cambios a mano;
+        base: el mismo sin ellos (la elección no depende de ellos, como lo demás). Devuelve (plano, espejar, lateral): el
+        mismo res si la más cercana es la de siempre, o si el pedido no vale —fuera del tramo de entrada (R3.7), o un
+        plano que pierde cocina, dormitorios, estar o baño (esencial)—, que se avisa y se ignora. El plano trae "acceso"
+        = {x, x_medio (la puerta de la posición de siempre: la web la usa para decir a cuál va), posicion, aplicado,
+        motivo?}."""
+        px, motivo = _x_entrada(base), None
+        if px is None:
+            motivo = "la vivienda no tiene puerta de entrada"
+        elif entrada is not None and not (entrada[0] - 0.05 <= acceso <= entrada[1] + 0.05):
+            motivo = "la entrada pedida no da al pasillo común"
+        if motivo is None:
+            opciones = [("medio", base, espejar, lateral)]
+            for r_, e_, l_, h_ in extremos():
+                k = "x1" if e_ else "x0"
+                if _x_entrada(r_) is None:
+                    continue
+                i = next((j for j, o in enumerate(opciones) if o[0] == k), None)
+                if i is None:
+                    opciones.append((k, r_, e_, l_))
+                elif r_["score"] > opciones[i][1]["score"]:
+                    opciones[i] = (k, r_, e_, l_)
+            donde, cand, e_, l_ = min(opciones, key=lambda o: abs(_x_entrada(o[1]) - acceso))   # a igual distancia,
+            if donde == "medio":                                                                # la de siempre
+                res["acceso"] = {"x": _x_entrada(res), "x_medio": px, "posicion": "medio", "aplicado": True}
+                return res, espejar, lateral
+            if entrada is not None and not _entra(cand, entrada):
+                motivo = "la entrada pedida no da al pasillo común"
+            elif any(a < b for a, b in zip(esencial(cand), esencial(base))):
+                motivo = "con la entrada en la punta %s el plano pierde cocina, dormitorios, estar o baño" % donde
+            else:
+                out = cand if not ediciones else plano(e_, l_, ediciones, True)
+                out["checks"].append({"ok": True, "info": True, "msg": "Acceso a mano: la puerta de entrada en la punta "
+                                      "%s (plano %s)" % (donde, "al revés" if e_ else "derecho")})
+                out["acceso"] = {"x": _x_entrada(out), "x_medio": px, "posicion": donde, "aplicado": True}
+                return out, e_, l_
+        res["checks"].append({"ok": True, "info": True, "msg": "Acceso a mano: %s; el plano queda como estaba" % motivo})
+        res["acceso"] = {"x": px, "x_medio": px, "posicion": None, "aplicado": False, "motivo": motivo}
+        return res, espejar, lateral
     # R5.16b (v2.67): con una segunda fachada (el costado, o el borde del pasillo común al aire: pasante) el esquema en
     # fila (_plan_fila) compite con el plano lado a lado: va si tiene más calidad y no pierde estancias del programa
     # (se comparan sin los cambios a mano; con entrada, solo si su puerta cae ahí)
     fila = _fila_posible(poly, nb, is_facade)
+    fijo = None                                        # R5.13: el plano que el acceso a mano eligió en vez del esquema en fila
     if fila is not None:
         def plano_fila(ed, espejo=False, ent=None):
             if fila >= 0 and not espejo:
@@ -1772,13 +1835,16 @@ def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None, accesible=F
             if r is not None and (entrada is None or _entra(r, entrada)) and (cand is None or r["score"] > cand["score"]):
                 cand, modo = r, (esp, e)
         base = elegido if elegido is not None else plano(espejar, lateral, None, hall_x0)
-        esencial = lambda r: [min(n, 1) if i == 0 else n for i, n in enumerate(programa(r)) if i != 3]
         if cand is not None and cand["score"] > base["score"] and \
                 all(a >= b for a, b in zip(esencial(cand), esencial(base))):
             # mejor calidad sin perder cocina, dormitorios, estar ni el baño; el segundo baño o el lavadero pueden no
             # entrar en la columna de servicios (se avisa)
             res = cand if not ediciones else plano_fila(ediciones, *modo)
-            if res is not None:
+            if res is not None and acceso is not None:  # R5.13: la entrada en una punta manda sobre el esquema en fila
+                fijo, espejar, lateral = con_acceso(res, cand)
+                if fijo is res:
+                    fijo = None
+            if res is not None and fijo is None:
                 if vestidor:
                     res["checks"].append({"ok": True, "info": True, "msg": "Vestidor: no se dibuja en el esquema en fila"})
                 for i, nombre in ((0, "el segundo baño"), (3, "el lavadero")):
@@ -1788,13 +1854,20 @@ def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None, accesible=F
                     "la fachada lateral" if fila else "la fachada del fondo; el estar, sobre el borde del pasillo (pasante)")})
                 res["segunda_fachada"] = "fila"
                 return res
-    res = elegido if elegido is not None and not ediciones else plano(espejar, lateral, ediciones, hall_x0)
-    if entrada is not None and not _entra(res, entrada):
-        res["checks"].append({"ok": False, "msg": "La puerta de entrada no da al pasillo común"})
-        res["score"] = _calidad(res["checks"])
+    if fijo is not None:
+        res = fijo
+    else:
+        res = elegido if elegido is not None and not ediciones else plano(espejar, lateral, ediciones, hall_x0)
+        if entrada is not None and not _entra(res, entrada):
+            res["checks"].append({"ok": False, "msg": "La puerta de entrada no da al pasillo común"})
+            res["score"] = _calidad(res["checks"])
+        if acceso is not None:                         # R5.13: la entrada donde la pidió el usuario, si vale
+            base = elegido if elegido is not None else (res if not ediciones else plano(espejar, lateral, None, hall_x0))
+            res, espejar, lateral = con_acceso(res, base)
     if vestidor and any(r["id"] == "vest" for r in res["rooms"]):
         # R5.10: el vestidor, solo si el plano no empeora (calidad y estancias); si no, sin él y con aviso
-        sin = layout_unit(poly, nb, is_facade, vivienda, equip, accesible, ediciones, ventanas, entrada, punta=punta)
+        sin = layout_unit(poly, nb, is_facade, vivienda, equip, accesible, ediciones, ventanas, entrada, punta=punta,
+                          acceso=acceso)
         if res["score"] < sin["score"] or any(a < b for a, b in zip(programa(res), programa(sin))):
             antes = {c["msg"] for c in sin["checks"] if not c["ok"]}
             nuevos = [c["msg"].replace("Vestidor: ", "", 1) for c in res["checks"] if not c["ok"] and c["msg"] not in antes]
@@ -1808,6 +1881,12 @@ def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None, accesible=F
             "el estar en la esquina, con luz por dos fachadas")})
     res["segunda_fachada"] = usa
     return res
+
+
+def _x_entrada(res):
+    """R5.13: la x del medio de la puerta de entrada del plano (sobre el borde v0); None si no la tiene."""
+    d = next((d for d in res["doors"] if d.get("entry")), None)
+    return (d["p"][0] + d["q"][0]) / 2.0 if d else None
 
 
 def _entra(res, entrada, tol=0.05):
