@@ -9,7 +9,7 @@ Dice dónde estamos ahora. Cómo es el código está en `CLAUDE.md`; qué falta 
 
 ## 1. Estado del repositorio (23/10/2026)
 - `main` = v2.71 (8b77a15): #89 (R1.6 «Abrir padrón de Montevideo», v2.71) integrado el 23/10, después de #87 y #88; encima, dos commits chicos de este archivo.
-- PR abierto (base `main`, espera el «aceptá» del usuario): `entre-medianeras-lateral`: R11.4 «Entre medianeras con más de dos viviendas por piso» (pasillo lateral con patios), v2.72 / OK88. Al integrarlo: `git fetch` y `git merge --ff-only origin/main` en el clon, y quitar el worktree `scratchpad/lateral/repo`.
+- PR abierto (base `main`, espera el «aceptá» del usuario): **#90** `entre-medianeras-lateral`: R11.4 «Entre medianeras con más de dos viviendas por piso» (pasillo lateral con patios), v2.72 / OK88. Al integrarlo: `git fetch` y `git merge --ff-only origin/main` en el clon, y quitar el worktree `scratchpad/lateral/repo`.
 
 ## 2. Trabajo en curso (23/10/2026)
 - Ninguna tarea abierta fuera del PR de arriba.
