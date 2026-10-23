@@ -11,12 +11,13 @@ Dice dónde estamos ahora. Cómo es el código está en `CLAUDE.md`; qué falta 
 - `main` = v2.69 (a8f1ab4): #85 («Circulación %» con la unión real y las decisiones del 22/10 en el ROADMAP, v2.69) y #86 (R5.13 primera etapa y este archivo, v2.68) ya integrados, después de #82, #83 y #84.
 - Sin PRs abiertos. Las pruebas terminan en OK85; la próxima rama toma v2.70 y OK86.
 
-## 2. Trabajo en curso (23/10/2026)
-- Ninguna tarea abierta fuera de los PRs de arriba.
+## 2. Trabajo en curso (23/10/2026), en pausa por el límite de uso de la cuenta (se retoma unas tres horas después)
+- **R5.12 Estancias editables en el plano** — rama `estancias-editables` (worktree `scratchpad/estancias/repo`, sobre 4a2a980), v2.70 / OK86. Un agente Fable con el encargo completo (ficha por estancia: nombre, función, principal / secundario, «Quitar» y «Unir con…» como `room_edits` `nombre` / `tipo` / `quitar` / `unir` aplicados después de `_plan_rects`; prueba `test_estancias_editables`; navegador; docs) se cortó al empezar: ver el último commit «WIP» de la rama (si existe) para lo que alcanzó a escribir. Retomar: nuevo agente Fable con el mismo encargo (está en el historial de esta sesión y resumido aquí), en un worktree de esa rama.
+- **R1.6 Abrir padrón de Montevideo, investigación** — rama `padron-investigacion` (commit WIP da002ec): `PADRON.md` incompleto (marcado «INCOMPLETO» al principio) y una línea en R1.6 del ROADMAP. Hallazgo: el WFS de la IM (`https://montevideo.gub.uy/app/geoserver/wfs`, GeoServer, sin clave, GeoJSON en EPSG:32721 = UTM de Trazo, uso libre por resolución 640/10) devuelve la parcela por padrón (`mapstore-base:cb_v_mdg_parcelas_citim`, `cql_filter=padron=…`) y la normativa (`mapstore-tematicas:ot_v_mdg_parcelas_cat_suelo`: `retiro`, `altura`, `fos`, `usopre`, `rgs`, `promo`, códigos sin documentar). Falta: repetir con `urllib` (solo se probó con `curl` por el proxy), 3 o 4 padrones más contrastados con MontevIMap o la ficha CITIM, el significado de los códigos, cómo deducir medianeras (calles, aceras, puertas), y catalogodatos / ide.uy / Catastro (no respondieron desde aquí). Respuestas crudas en `scratchpad/out/padron/` (se pierden con la sesión; no están en el repo). Al cerrar: PR de docs (PADRON.md + ROADMAP), sin VERSION.
 - **Base de tipologías:** el usuario busca más planos. Cuando mande un `.zip`: descomprimir en una carpeta nueva del scratchpad, pasar cada DXF por `python tools/ver_dxf.py`, organizar en `data/tipologias/` (DXF, nota por proyecto, filas en `indice.csv`; sin SVG ni PNG), regenerar con `python -m engine.tipologias` y `python tools/comparar_tipologias.py`, y abrir un PR como el #73.
 - Decisiones de R5.13 que no se vuelven a discutir: primera etapa = la entrada en una de las tres posiciones que el plano ya arma (punta x0, junto a la zona de noche, punta x1 al revés); la posición cualquiera es la segunda etapa y queda en el ROADMAP.
 
-## 3. Cola de tareas (23/10/2026), en el orden acordado
+## 3. Cola de tareas (23/10/2026), en el orden acordado (R5.12 y la investigación de R1.6 ya están en curso, arriba)
 1. **R5.12 Estancias editables en el plano** (`plans.py`, Fable): ficha por estancia, quitar y unir dormitorios como `room_edits`.
 2. **R1.6 Abrir padrón de Montevideo**: primero la investigación corta (qué servicio abierto publica la IM y si se consulta solo con stdlib); sin código hasta tener la respuesta.
 3. **R11.4 Entre medianeras con más de dos viviendas por piso** (`circulation.py` y `units.py`): pasillo contra una medianera y viviendas pasantes o con patio; aprovecha el esquema en fila de v2.67.
@@ -24,6 +25,7 @@ Dice dónde estamos ahora. Cómo es el código está en `CLAUDE.md`; qué falta 
 5. **Reparto del mix con el frente de la segunda fachada** (`units.generate_unit_mix`; quedó fuera de v2.67): solo vale cuando se prioricen crujías simples y predios entre medianeras con franjas profundas.
 
 ## 4. Decisiones pendientes del usuario (23/10/2026)
+- R1.6: ¿aceptar que Trazo dependa del WFS público de la IM, sin garantía (su página dice que los geoservicios están «temporalmente solo en Intranet», aunque responde)? Si sí, R1.6 se programa (tamaño M) con la carga a mano o el DXF como respaldo; si no, queda solo la investigación.
 - ¿La segunda etapa de R5.13 (la entrada en cualquier posición, corriendo la división día / noche) va antes de R5.12? Si sí, entra primera en la cola; si no, queda en el ROADMAP hasta que la pida.
 - Cerradas el 22/10/2026 y ya anotadas en el ROADMAP (no reabrir): costos por gama cerrados con estos datos; ingreso de oficinas, comercio y cocheras para más adelante, con los layouts de oficina; el tope del 25 % de monoambientes queda; sin ventanas hacia galerías ni corredores (solo a patios y frentes); GitHub Pages desestimado, se sigue en la red local; los avisos del motor siguen con punto decimal.
 
