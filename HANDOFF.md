@@ -8,10 +8,8 @@ Dice dónde estamos ahora. Cómo es el código está en `CLAUDE.md`; qué falta 
 - Máximo unas 80 líneas; si crece, está repitiendo a `CLAUDE.md` o al `ROADMAP.md`.
 
 ## 1. Estado del repositorio (23/10/2026)
-- `main` = v2.67 (545bde1): #82 (frentes calibrados, v2.65), #83 (informe de prefactibilidad, v2.66) y #84 (esquema en fila, v2.67) ya integrados.
-- PRs abiertos, en el orden en que se integran (los dos con base `main`, CI verde, esperan el «aceptá» del usuario):
-  1. **#86** `acceso-a-mano`: R5.13 primera etapa, v2.68, pruebas hasta OK84. Trae este archivo.
-  2. **#85** `circulacion-real`: «Circulación %» con la unión real + decisiones del 22/10 en el ROADMAP, v2.69, OK85. Al integrarlo después de #86 hay que mezclar `main` en la rama y resolver: `VERSION` 2.69, la cola de `tests/test_engine.py` con OK84 antes de OK85, el bloque «Novedades v2.69» arriba del v2.68 y los `version_motor` de `tests/golden/` con `python tests/regresion.py --actualizar` (solo cambian los sellos).
+- `main` = v2.69 (a8f1ab4): #85 («Circulación %» con la unión real y las decisiones del 22/10 en el ROADMAP, v2.69) y #86 (R5.13 primera etapa y este archivo, v2.68) ya integrados, después de #82, #83 y #84.
+- Sin PRs abiertos. Las pruebas terminan en OK85; la próxima rama toma v2.70 y OK86.
 
 ## 2. Trabajo en curso (23/10/2026)
 - Ninguna tarea abierta fuera de los PRs de arriba.
