@@ -26,7 +26,7 @@ from .units import (_bisect_x, _chain_union, _is_rect, _segments, generate_unit_
                     superficie_con_muros)  # noqa: F401
 from .patios import (auto_patios, _anillo, split_blocks, make_patio_dark, _block_of, _block_of_line)  # noqa: F401
 
-VERSION = "2.69"
+VERSION = "2.70"
 
 DEFAULT_PARAMS = {
     # Masa
@@ -68,6 +68,8 @@ DEFAULT_PARAMS = {
     "patios_galeria": None,     # R3.8: [bool] alineado con patios: el pasillo de borde del ala que da a ese patio va en el patio (galería)
     "unit_edits": None,         # R4.4: [{"op": "tabique"|"fusionar"|"dividir"|"extender", "p": [x,y], "a": [x,y]}] en orden (units.editar_unidades)
     "room_edits": None,         # R5.7: [{"op": "pared", "p", "a"} | {"op": "puerta", "p", "entre"?, "a"?, "ancho"?, "abre"?}
+                                # | {"op": "acceso", "p"} (R5.13) | {"op": "nombre", "p", "nombre"} | {"op": "tipo", "p", "tipo"}
+                                # | {"op": "quitar", "p"} | {"op": "unir", "p", "a"} (R5.12: estancias editables)
                                 #       | {"op": "acceso", "p"} (R5.13: la entrada donde está p, sobre el pasillo común)] en orden (plans)
     # R10.13: {"gama": baja|media|alta, "terreno": {"modo": total|m2, "valor"}, "superficie_terreno"?, "precio_venta": {"bajo",
     # "esperado", "alto"}, "margen_objetivo" (%), "balcones_m2"}; lo que falta sale de standards.costos (engine/factibilidad.py)
@@ -676,8 +678,12 @@ def generate(data):
             item["bedrooms"] = pl["bedrooms"]
             item["rooms"] = [dict({"id": r["id"], "name": r["name"], "kind": r["kind"], "area": round(r["area"], 1),
                                    "poly": W(pc, r["poly_local"])},
-                                  **({"ventilacion": r["ventilacion"]} if r.get("ventilacion") else {}))   # R10.9
+                                  **({"ventilacion": r["ventilacion"]} if r.get("ventilacion") else {}),   # R10.9
+                                  **({"principal": True} if r.get("principal") else {}))     # R5.12: el dormitorio principal
                              for r in pl["rooms"]]
+            for a in pl.get("avisos_estancias") or []:      # R5.12: una estancia editada que no se pudo aplicar
+                res["warnings"].append("Estancia a mano de %s: %s (deshazlo o descarta los cambios por dentro en su "
+                                       "ficha)" % (u["id"], a))
             item["doors"] = [{"p": Wp(d["p"]), "q": Wp(d["q"]), "entry": bool(d.get("entry")),
                               "a": d["a"], "b": d["b"]} for d in pl["doors"]]
             item["graph"] = {"nodes": [{"id": n["id"], "name": n["name"], "kind": n["kind"], "pos": Wp(n["pos"])}

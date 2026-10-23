@@ -406,13 +406,13 @@ def _tipo(rm):
             "vestidor": "vestidor"}.get(k)
 
 
-def resolver(rm, puertas, aberturas, S, fachada=(), nb=1, mesa=True, ids=None, acc=False, placard=True):
+def resolver(rm, puertas, aberturas, S, fachada=(), nb=1, mesa=True, ids=None, acc=False, placard=True, principal="bed1"):
     """Equipamiento de una estancia (con memoria: estancias iguales se resuelven una vez). puertas: [{p, q, a, b, ancho}];
     aberturas: {id: [(p, q[, id de la otra estancia])]}; fachada: tramos de pared con ventana [(p, q)]; nb: dormitorios
     (los asientos de la mesa); mesa: si el estar lleva la mesa del comedor; ids: estancias que se amueblan juntas (el
     estar y el comedor); acc: vivienda accesible (el baño principal, para silla de ruedas); placard: un dormitorio sin
-    placard (R5.10: el principal con vestidor). Devuelve (piezas en el marco de la estancia trasladada al origen, lo que
-    no entra, avisos).
+    placard (R5.10: el principal con vestidor); principal (R5.12): el id del dormitorio principal (la cama doble y el
+    placard largo). Devuelve (piezas en el marco de la estancia trasladada al origen, lo que no entra, avisos).
     R5.14a: el resultado depende solo de la clave, nunca de qué se calculó antes. Las puertas, las aberturas y la fachada
     van redondeadas a 0,1 mm y se calcula con esos valores; el ancho y el fondo van tal cual, porque la estancia se calcula
     con ellos: en una estancia simétrica (la puerta al medio, la ventana de lado a lado), qué lado ocupan la cama o el
@@ -431,7 +431,7 @@ def resolver(rm, puertas, aberturas, S, fachada=(), nb=1, mesa=True, ids=None, a
         forma = tuple(rel(p) for p in rm["poly"])
     tipo = _tipo(rm)
     mueble = tipo in MUEBLES
-    clave = (tipo, rm["id"] in ("bath1", "bed1"), ancho, fondo, pts, abre, forma,
+    clave = (tipo, rm["id"] == "bath1" or (principal is not None and rm["id"] == principal), ancho, fondo, pts, abre, forma,
              tuple(sorted((rel(p), rel(q)) for p, q in fachada)) if mueble else (),
              nb if tipo in ("estar", "comedor") else None, mesa if tipo == "estar" else None,
              bool(acc) and tipo == "bath" and rm["id"] == "bath1",
@@ -456,12 +456,13 @@ def _contiguos(a, b):
     return abs(a[0] - b[0]) < 0.05 and abs(a[2] - b[2]) < 0.05 and (abs(a[3] - b[1]) < 0.05 or abs(b[3] - a[1]) < 0.05)
 
 
-def equipar(rooms, puertas, aberturas, S, nb, fachadas=None, chicas=(), acc=False, sin_placard=()):
+def equipar(rooms, puertas, aberturas, S, nb, fachadas=None, chicas=(), acc=False, sin_placard=(), principal="bed1"):
     """Artefactos y muebles de la vivienda. rooms: [{id, kind, name, rect[, poly]}]; puertas: [{p, q, a, b, ancho}] (la
     hoja abre hacia b); aberturas: {id: [(p, q[, id de la otra estancia])]} bordes abiertos a otra estancia; fachadas:
     {id: [(p, q)]} tramos de pared con ventana; chicas: estancias ya avisadas por no llegar a su medida mínima (se equipan
     igual, pero no se avisa además lo que no entra); acc: vivienda accesible; sin_placard: dormitorios sin placard (R5.10:
-    el principal con vestidor). El comedor y el estar contiguos se amueblan juntos. Devuelve (piezas, comprobaciones)."""
+    el principal con vestidor); principal (R5.12): el dormitorio principal (cama doble y placard largo; los demás, camas
+    individuales). El comedor y el estar contiguos se amueblan juntos. Devuelve (piezas, comprobaciones)."""
     fachadas = fachadas or {}
     piezas, checks = [], []
     por_id = {rm["id"]: rm for rm in rooms}
@@ -481,7 +482,7 @@ def equipar(rooms, puertas, aberturas, S, nb, fachadas=None, chicas=(), acc=Fals
             ids, nombre = ("living", "dining"), {"mesa": com["name"]}
         x0, v0 = sala["rect"][0], sala["rect"][1]
         hechas, faltan, info = resolver(sala, puertas, aberturas, S, [s for i in ids for s in fachadas.get(i, [])], nb,
-                                        junto or com is None, ids, acc, rm["id"] not in sin_placard)
+                                        junto or com is None, ids, acc, rm["id"] not in sin_placard, principal)
         for k, o, es, en, w, d in hechas:
             pz = _pieza(k, (o[0] + x0, o[1] + v0), es, en, w, d, rm["id"])
             if junto and rm is est:                       # cada mueble, en la estancia donde cae su centro

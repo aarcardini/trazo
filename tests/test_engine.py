@@ -7176,3 +7176,200 @@ def test_circulacion_real():
 
 if __name__ == "__main__":
     test_circulacion_real(); print("OK85")
+
+
+def test_estancias_editables():
+    """R5.12 (v2.70): estancias editables en el plano. Con una vivienda elegida, un clic en una estancia abre su ficha:
+    nombre, función (dormitorio, estudio, depósito, lavadero, comedor), dormitorio principal o secundario (la cama doble y
+    el placard largo siguen al principal), «Quitar» (el dormitorio se une al contiguo) y «Unir con…» (dos dormitorios
+    contiguos). Son room_edits (nombre, tipo, quitar, unir) con un punto dentro de la estancia, que plans.layout_unit
+    aplica después de _plan_rects, en orden con los tabiques movidos, y antes de puertas, ventanas y equipamiento; la
+    vivienda cuenta sus dormitorios reales (bedrooms, art. 3) y el tipo del mix no cambia. Tras quitar o unir, el dormitorio
+    más grande pasa a principal (salvo que el usuario lo haya fijado con tipo). Una unión que no da un rectángulo (o que no
+    cierra con el tramo de pasillo interno que sobra) avisa y no cambia nada. Sin room_edits el plano es idéntico."""
+    import math, shutil, subprocess, tempfile
+    from engine import plans as P, standards as ST
+    V = ST.DEFAULTS["vivienda"]
+    caja = lambda pl: tuple(round(v, 3) for v in (min(p[0] for p in pl), min(p[1] for p in pl), max(p[0] for p in pl), max(p[1] for p in pl)))
+    cen = lambda r, i: (lambda x: (sum(p[0] for p in x["poly"]) / len(x["poly"]), sum(p[1] for p in x["poly"]) / len(x["poly"])))(
+        next(x for x in r["rooms"] if x["id"] == i))
+    room = lambda r, i: next((x for x in r["rooms"] if x["id"] == i), None)
+    beds = lambda r: [x for x in r["rooms"] if x["kind"] == "bedroom"]
+    camas = lambda r, k: sorted(q["room"] for q in r["equipamiento"] if q["kind"] == k)
+    principal = lambda r: [x["id"] for x in r["rooms"] if x.get("principal")]
+    forma = lambda r: sorted((x["kind"], x["name"], round(x["area"], 2), caja(x["poly"])) for x in r["rooms"])
+    sin_nombre = lambda r: sorted((x["id"], x["kind"], round(x["area"], 2), caja(x["poly"])) for x in r["rooms"])
+    # ---- plans: una vivienda profunda de 3 dormitorios (franja de servicios, el principal en suite)
+    rect = [(0, 0), (12.0, 0), (12.0, 9.0), (0, 9.0)]
+    fac = lambda p, q: abs(p[1] - 9.0) < 1e-6 and abs(q[1] - 9.0) < 1e-6
+    plano = lambda *ed: P.layout_unit(rect, 3, fac, ediciones=list(enumerate(ed)))
+    base = plano()
+    assert [b["id"] for b in beds(base)] == ["bed2", "bed3", "bed1"] and base["bedrooms"] == 3 and base["avisos_estancias"] == []
+    assert principal(base) == ["bed1"] and camas(base, "cama_doble") == ["bed1"] and camas(base, "cama_individual") == ["bed2"] * 2 + ["bed3"] * 2
+    assert room(base, "bed1")["name"] == "Dormitorio principal" and room(base, "bed2")["name"] == "Dormitorio 2"
+    assert base == plano() and plano(*[]) == base                                   # sin cambios, idéntico
+    lejos = plano({"op": "quitar", "p": (-50.0, -50.0)}, {"op": "nombre", "p": (-50.0, -50.0), "nombre": "x"})
+    assert lejos["ediciones"] == [] and lejos == dict(base, ediciones=[])             # fuera de la vivienda: nada
+    # quitar: el dormitorio se une al contiguo, que se agranda (la suma de las dos superficies) y toma su cama; con 2
+    # dormitorios reales, el más grande pasa a principal (cama doble) y el que era principal queda con camas individuales
+    a2, a3, a1 = (room(base, i)["area"] for i in ("bed2", "bed3", "bed1"))
+    q = plano({"op": "quitar", "p": cen(base, "bed2")})
+    assert q["ediciones"] == [0] and q["bedrooms"] == 2 and q["avisos_estancias"] == [] and room(q, "bed2") is None
+    assert abs(room(q, "bed3")["area"] - (a2 + a3)) < 1e-6 and caja(room(q, "bed3")["poly"]) == (4.0, 4.5, 9.0, 9.0)
+    assert a2 + a3 > a1 and principal(q) == ["bed3"] and camas(q, "cama_doble") == ["bed3"] and camas(q, "cama_individual") == ["bed1"] * 2
+    assert room(q, "bed3")["name"] == "Dormitorio principal" and room(q, "bed1")["name"] == "Dormitorio 2"
+    assert any(e["a"] == "hallway" and e["b"] == "bed3" and e["type"] == "puerta" and e["ok"] for e in q["graph"]["edges"])
+    assert sum(1 for d in q["doors"] if "bed3" in (d["a"], d["b"])) == 1 and not any("bed2" in (d["a"], d["b"]) for d in q["doors"])
+    assert any(w["room"] == "bed3" for w in q["ventanas"]) and not any(w["room"] == "bed2" for w in q["ventanas"])
+    assert any(c["msg"].endswith("(mínimo %g m² para 2 dormitorios, art. 3)" % V["superficie_min"][2]) or "para 2 dormitorios" in c["msg"]
+               for c in P.superficie_vivienda(dict(q, checks=list(q["checks"])), 100.0)["checks"])   # cuenta los reales
+    for x in base["rooms"]:                                                        # lo demás no se mueve
+        if x["id"] not in ("bed2", "bed3"):
+            assert caja(room(q, x["id"])["poly"]) == caja(x["poly"]) and room(q, x["id"])["kind"] == x["kind"], x["id"]
+    # unir: dos contiguos (p en uno, a en el otro); el resultado es el mismo que quitar, con el id del de p
+    u = plano({"op": "unir", "p": cen(base, "bed2"), "a": cen(base, "bed3")})
+    assert u["avisos_estancias"] == [] and u["bedrooms"] == 2 and room(u, "bed3") is None and forma(u) == forma(q)
+    assert principal(u) == ["bed2"] and camas(u, "cama_doble") == ["bed2"]
+    # tipo: principal o secundario mueven la cama doble (y el placard) y los mínimos del dormitorio principal (standards)
+    t = plano({"op": "tipo", "p": cen(base, "bed3"), "tipo": "principal"})
+    assert principal(t) == ["bed3"] and camas(t, "cama_doble") == ["bed3"] and camas(t, "cama_individual") == ["bed1"] * 2 + ["bed2"] * 2
+    assert t["bedrooms"] == 3 and sin_nombre(t) == sin_nombre(base) and t["avisos_estancias"] == []
+    assert room(t, "bed3")["name"] == "Dormitorio principal" and room(t, "bed1")["name"] == "Dormitorio 3"
+    w3 = caja(room(base, "bed3")["poly"])
+    assert w3[2] - w3[0] < V["dorm_principal"]["min_side"] and any(
+        c["msg"] == "Dormitorio principal: lado %.2f m < mínimo %.2f m" % (w3[2] - w3[0], V["dorm_principal"]["min_side"])
+        for c in t["checks"]), [c["msg"] for c in t["checks"]]
+    s = plano({"op": "tipo", "p": cen(base, "bed1"), "tipo": "secundario"})
+    assert len(principal(s)) == 1 and principal(s) != ["bed1"] and len(camas(s, "cama_doble")) == 1 and camas(s, "cama_doble") != ["bed1"]
+    assert camas(s, "cama_individual").count("bed1") == 2
+    # fijado: con el principal elegido a mano, unir dos no lo cambia aunque el unido quede más grande
+    f = plano({"op": "tipo", "p": cen(base, "bed1"), "tipo": "principal"}, {"op": "unir", "p": cen(base, "bed2"), "a": cen(base, "bed3")})
+    assert f["ediciones"] == [0, 1] and principal(f) == ["bed1"] and camas(f, "cama_doble") == ["bed1"] and room(f, "bed2")["area"] > room(f, "bed1")["area"]
+    # tipo: estudio, depósito y lavadero conservan la puerta desde donde estaba; comedor se abre al estar si es contiguo
+    # (el 2, junto al estar) y si no (el 3) queda con su puerta, con aviso; los mínimos salen de standards
+    for tipo, kind, nombre in (("estudio", "study", "Estudio"), ("deposito", "storage", "Depósito"), ("lavadero", "laundry", "Lavadero")):
+        r = plano({"op": "tipo", "p": cen(base, "bed3"), "tipo": tipo})
+        x = room(r, "bed3")
+        assert x["kind"] == kind and x["name"] == nombre and r["bedrooms"] == 2 and r["avisos_estancias"] == [] and len(beds(r)) == 2, tipo
+        assert any(e["a"] == "hallway" and e["b"] == "bed3" and e["type"] == "puerta" and e["ok"] for e in r["graph"]["edges"]), tipo
+        assert sum(1 for d in r["doors"] if d["b"] == "bed3") == 1 and camas(r, "cama_doble") == ["bed1"] and "bed3" not in camas(r, "cama_individual")
+        assert not any("bed3" == w["room"] for w in r["ventanas"]) or kind == "study", tipo
+        assert "Todas las estancias se alcanzan desde la entrada" in [c["msg"] for c in r["checks"]]
+    r = plano({"op": "tipo", "p": cen(base, "bed3"), "tipo": "lavadero"})
+    assert any(q["room"] == "bed3" and q["kind"] == "lavarropas" for q in r["equipamiento"])     # se equipa como lavadero
+    chico = P.layout_unit(rect, 3, fac, ediciones=[(0, {"op": "tipo", "p": cen(base, "storage"), "tipo": "dormitorio"})])
+    sd = room(chico, "storage")
+    assert sd["kind"] == "bedroom" and chico["bedrooms"] == 4 and sd["name"].startswith("Dormitorio") and any(
+        c["msg"].startswith("%s: lado %.2f m < mínimo %.2f m" % (sd["name"], min(caja(sd["poly"])[2] - caja(sd["poly"])[0], caja(sd["poly"])[3] - caja(sd["poly"])[1]),
+                                                                 V["dorm_secundario"]["min_side"])) for c in chico["checks"]), [c["msg"] for c in chico["checks"]]
+    assert any(c["msg"] == "%s sin fachada (sin luz natural)" % sd["name"] for c in chico["checks"])
+    c2 = plano({"op": "tipo", "p": cen(base, "bed2"), "tipo": "comedor"})
+    assert room(c2, "bed2")["kind"] == "dining" and c2["avisos_estancias"] == [] and c2["bedrooms"] == 2
+    assert any({e["a"], e["b"]} == {"living", "bed2"} and e["type"] == "abierto" and e["ok"] for e in c2["graph"]["edges"])
+    assert not any("bed2" in (d["a"], d["b"]) for d in c2["doors"])
+    c3 = plano({"op": "tipo", "p": cen(base, "bed3"), "tipo": "comedor"})
+    assert room(c3, "bed3")["kind"] == "dining" and c3["avisos_estancias"] == ["«Dormitorio 3» pasa a comedor, pero no es contiguo al estar: queda cerrado, con su puerta"]
+    assert any(e["b"] == "bed3" and e["type"] == "puerta" and e["ok"] for e in c3["graph"]["edges"]) and c3["ediciones"] == [0]
+    assert any(c.get("info") and c["msg"].startswith("Estancia a mano: «Dormitorio 3» pasa a comedor") for c in c3["checks"])
+    malo = plano({"op": "tipo", "p": cen(base, "bath1"), "tipo": "dormitorio"})
+    assert malo["avisos_estancias"] == ["«Baño» no cambia de función: solo dormitorios, estudios, depósitos, lavaderos y comedores; el plano queda como estaba"]
+    assert sin_nombre(malo) == sin_nombre(base) and malo["ediciones"] == [0]
+    # nombre: cambia solo el rótulo
+    n = plano({"op": "nombre", "p": cen(base, "bed3"), "nombre": "Cuarto de huéspedes"})
+    assert room(n, "bed3")["name"] == "Cuarto de huéspedes" and sin_nombre(n) == sin_nombre(base) and n["doors"] == base["doors"]
+    assert n["equipamiento"] == base["equipamiento"] and n["bedrooms"] == 3 and n["ediciones"] == [0]
+    n2 = plano({"op": "nombre", "p": cen(base, "bed3"), "nombre": "Cuarto de huéspedes"}, {"op": "quitar", "p": cen(base, "bed2")})
+    assert room(n2, "bed3")["name"] == "Cuarto de huéspedes" and principal(n2) == ["bed3"]     # el nombre propio se conserva
+    # una unión que no da un rectángulo (el principal en suite es más profundo que el 3, contiguo): aviso y nada cambia
+    no = plano({"op": "unir", "p": cen(base, "bed3"), "a": cen(base, "bed1")})
+    assert no["avisos_estancias"] == ["«Dormitorio 3» y «Dormitorio principal» no se unen: la unión no da un rectángulo; el plano queda como estaba"]
+    assert no["ediciones"] == [0] and no["rooms"] == base["rooms"] and no["doors"] == base["doors"] and no["equipamiento"] == base["equipamiento"]
+    assert any(c.get("info") and c["msg"] == "Estancia a mano: " + no["avisos_estancias"][0] for c in no["checks"])
+    assert P._union_rect((0, 0, 2, 3), (2, 0, 4, 3)) == (0, 0, 4, 3) and P._union_rect((0, 0, 2, 3), (0, 3, 2, 5)) == (0, 0, 2, 5)
+    assert P._union_rect((0, 0, 2, 3), (2, 0, 4, 4)) is None and P._union_rect((0, 0, 2, 3), (3, 0, 5, 3)) is None
+    # los cambios se conservan tras mover un tabique de la misma vivienda (en cualquier orden)
+    pared = next((a, b) for a, b in q["paredes"] if abs(a[0] - b[0]) < 1e-6 and abs(a[0] - 4.0) < 1e-6)
+    m = ((pared[0][0] + pared[1][0]) / 2, (pared[0][1] + pared[1][1]) / 2)
+    mov = {"op": "pared", "p": m, "a": (m[0] + 0.3, m[1])}
+    for orden in (({"op": "quitar", "p": cen(base, "bed2")}, mov), (mov, {"op": "quitar", "p": cen(base, "bed2")})):
+        r = plano(*orden)
+        assert r["ediciones"] == [0, 1] and r["bedrooms"] == 2 and principal(r) == ["bed3"] and camas(r, "cama_doble") == ["bed3"], orden
+        assert abs(caja(room(r, "bed3")["poly"])[0] - 4.3) < 1e-6 and abs(caja(room(r, "living")["poly"])[2] - 4.3) < 1e-6
+    # vivienda poco profunda: el último dormitorio toma la punta (v0..v1) y el anterior queda detrás del pasillo interno;
+    # quitar el de la punta cierra la unión con el tramo de pasillo que ya no sirve a nadie (el pasillo se recorta)
+    rect2 = [(0, 0), (12.0, 0), (12.0, 5.5), (0, 5.5)]
+    fac2 = lambda p, q: abs(p[1] - 5.5) < 1e-6 and abs(q[1] - 5.5) < 1e-6
+    b2 = P.layout_unit(rect2, 3, fac2)
+    assert caja(room(b2, "bed3")["poly"])[1] == 0.0 and caja(room(b2, "bed2")["poly"])[1] > 0.5     # la punta y el anterior
+    h0, x2 = caja(room(b2, "hallway")["poly"]), caja(room(b2, "bed2")["poly"])
+    q2 = P.layout_unit(rect2, 3, fac2, ediciones=[(0, {"op": "quitar", "p": cen(b2, "bed3")})])
+    assert q2["avisos_estancias"] == [] and q2["bedrooms"] == 2 and room(q2, "bed3") is None
+    assert caja(room(q2, "bed2")["poly"]) == (x2[0], 0.0, 12.0, 5.5) and caja(room(q2, "hallway")["poly"]) == (h0[0], h0[1], x2[0], h0[3])
+    assert any(e["a"] == "hallway" and e["b"] == "bed2" and e["ok"] for e in q2["graph"]["edges"]) and principal(q2) == ["bed2"]
+    assert "Todas las estancias se alcanzan desde la entrada" in [c["msg"] for c in q2["checks"]]
+    no2 = P.layout_unit(rect2, 3, fac2, ediciones=[(0, {"op": "unir", "p": cen(b2, "bed1"), "a": cen(b2, "bed3")})])
+    assert no2["avisos_estancias"] == ["«Dormitorio 3» y «Dormitorio principal» no se unen: no son contiguos; el plano queda como estaba"]
+    assert no2["rooms"] == b2["rooms"]
+    # un estudio (anexo con fachada: el bolsillo de una vivienda en L) pasa a dormitorio, con su puerta y sus camas, y cuenta
+    L = [(0.0, 0.0), (9.5, 0.0), (9.5, 8.0), (3.0, 8.0), (3.0, 11.0), (0.0, 11.0)]
+    facL = lambda p, q: (abs(p[1] - 8.0) < 1e-6 and abs(q[1] - 8.0) < 1e-6) or (abs(p[1] - 11.0) < 1e-6 and abs(q[1] - 11.0) < 1e-6)
+    bl = P.layout_unit(L, 2, facL)
+    an = next(x for x in bl["rooms"] if x["id"].startswith("annex"))
+    assert an["kind"] == "study" and an["name"] == "Estudio" and bl["bedrooms"] == 2
+    dl = P.layout_unit(L, 2, facL, ediciones=[(0, {"op": "tipo", "p": cen(bl, an["id"]), "tipo": "dormitorio"})])
+    assert room(dl, an["id"])["kind"] == "bedroom" and room(dl, an["id"])["name"] == "Dormitorio 3" and dl["bedrooms"] == 3
+    assert dl["ediciones"] == [0] and dl["avisos_estancias"] == [] and sum(1 for d in dl["doors"] if d["b"] == an["id"]) == 1
+    assert camas(dl, "cama_individual").count(an["id"]) == 2 and camas(dl, "cama_doble") == ["bed1"] and principal(dl) == ["bed1"]
+    assert sin_nombre(P.layout_unit(L, 2, facL, ediciones=[])) == sin_nombre(bl) and bl["graph"] == P.layout_unit(L, 2, facL)["graph"]
+    # ---- el edificio («Barra 60x16», U11 es de 3 dormitorios): con puntos de mundo, solo cambia esa vivienda
+    barra = [[0, 0], [60, 0], [60, 16], [0, 16]]
+    base_e = run(barra)
+    u = next(x for x in base_e["units"] if x["type"] == "3 dorm")
+    assert u["bedrooms"] == 3 and [x["id"] for x in u["rooms"] if x.get("principal")] == ["bed1"]
+    cw = lambda u_, i: [round(v, 3) for v in cen(u_, i)]
+    otras = lambda r: all(x["rooms"] == y["rooms"] and x["doors"] == y["doors"] and not y.get("editada_dentro")
+                          for x, y in zip(base_e["units"], r["units"]) if x["id"] != u["id"])
+    r = run(barra, room_edits=[{"op": "quitar", "p": cw(u, "bed2")}])
+    v = next(x for x in r["units"] if x["id"] == u["id"])
+    assert v["bedrooms"] == 2 and v["type"] == u["type"] and v.get("editada_dentro") and otras(r) and not any("Estancia" in w or "dentro de las viviendas" in w for w in r["warnings"])
+    assert len([x for x in v["rooms"] if x["kind"] == "bedroom"]) == 2 and len(principal(v)) == 1
+    grande = max((x for x in v["rooms"] if x["kind"] == "bedroom"), key=lambda x: x["area"])
+    assert grande.get("principal") and camas(v, "cama_doble") == [grande["id"]] and abs(grande["area"] - (room(u, "bed2")["area"] + room(u, grande["id"])["area"])) < 0.15
+    assert any("para 2 dormitorios" in c["msg"] for c in v["checks"])                   # art. 3 con los dormitorios reales
+    otro = next(x["id"] for x in v["rooms"] if x["kind"] == "bedroom" and x["id"] != grande["id"])
+    r2 = run(barra, room_edits=[{"op": "quitar", "p": cw(u, "bed2")}, {"op": "tipo", "p": cw(v, otro), "tipo": "principal"}])
+    v2 = next(x for x in r2["units"] if x["id"] == u["id"])
+    assert principal(v2) == [otro] and camas(v2, "cama_doble") == [otro] and v2["bedrooms"] == 2 and otras(r2)
+    r3 = run(barra, room_edits=[{"op": "unir", "p": cw(u, "bed2"), "a": cw(u, "bed1")}])
+    v3 = next(x for x in r3["units"] if x["id"] == u["id"])
+    rechazo = [w for w in r3["warnings"] if w.startswith("Estancia a mano de %s: " % u["id"])]
+    if room(u, "bed1")["poly"] and P._union_rect(tuple(caja(room(u, "bed1")["poly"])), tuple(caja(room(u, "bed2")["poly"]))) is None:
+        assert len(rechazo) == 1 and "no se unen" in rechazo[0] and rechazo[0].endswith("(deshazlo o descarta los cambios por dentro en su ficha)")
+        assert v3["rooms"] == u["rooms"] and v3.get("editada_dentro") and not any("no se pudieron aplicar" in w for w in r3["warnings"])
+    r4 = run(barra, room_edits=[{"op": "nombre", "p": cw(u, "bed3"), "nombre": "Escritorio"}])
+    v4 = next(x for x in r4["units"] if x["id"] == u["id"])
+    assert room(v4, "bed3")["name"] == "Escritorio" and sin_nombre(v4) == sin_nombre(u) and otras(r4)
+    # ---- web: data-room en cada estancia, el segundo clic elige la estancia (selRoom), el bloque «Estancia» de la ficha,
+    # cada operación pasa por editarInterior (registra para deshacer) y «Descartar» vive en la línea de los cambios por dentro
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    js = html.split("<script>", 1)[1].split("</script>", 1)[0]
+    for t_ in ("'data-room':r.id", "selRoom=null;", "const estanciaSel=", "function estanciaPanel(", "function cambiosDentro(",
+               "function estanciaOp(", "function nombreEstancia(", "function funcionEstancia(", "function dormitorioEstancia(",
+               "function quitarEstancia(", "function unirEstancias(", "const vecinasEstancia=", "function bordeComun(",
+               "${puertasPanel(u)}${estanciaPanel(u)}${cambiosDentro(u)}", "selRoom=r?{u:uid,id:r.id}:null;",
+               "{op:'nombre',nombre:v}", "{op:'tipo',tipo:v}", "{op:'quitar'}", "{op:'unir',a:centroEstancia(s)}",
+               'id="estNombre"', 'id="estFuncion"', 'id="estDorm"', "Descartar los cambios por dentro", "Unir con ${esc(s.name)}"):
+        assert t_ in js, t_
+    assert "Descartar los cambios por dentro" not in js.split("function puertasPanel(", 1)[1].split("\nfunction ", 1)[0]
+    assert "return editarInterior(Object.assign({p:centroEstancia(r)},op)" in js.split("function estanciaOp(", 1)[1].split("\n", 1)[0]
+    assert "selRoom" in js.split("let selUnit=", 1)[1].split("\n", 1)[0]
+    node = shutil.which("node")
+    if node:
+        with tempfile.TemporaryDirectory() as tmp:
+            ruta = os.path.join(tmp, "programa.js")
+            open(ruta, "w", encoding="utf-8").write(js)
+            c = subprocess.run([node, "--check", ruta], capture_output=True, text=True, encoding="utf-8")
+            assert c.returncode == 0, c.stderr
+
+if __name__ == "__main__":
+    test_estancias_editables(); print("OK86")

@@ -328,7 +328,7 @@ const roomColor=(kind,prog)=>tone(progColor(prog||'Residential'),ROOM_L[kind]??0
 const COL=new Proxy({},{get:(t,k)=>roomColor(k)});
 const KLABEL={bedroom:'Dormitorio',living:'Estar',dining:'Comedor',kitchen:'Cocina',bath:'Baño',hall:'Hall',hallway:'Pasillo',laundry:'Lavadero',storage:'Depósito',study:'Estudio',vestidor:'Vestidor'};
 let anchosPasillo=[], anchosRes=null, selPas=null, selPasP=null, selPasK=null;   // R10.8: anchos propios de algunos tramos [{p|seg, ancho}]; tramo elegido (índice en result.pasillos), su punto y su pedido, para volver a elegirlo al recalcular
-let selUnit=null, selCore=null, selSpec=null, showGraph=true, showDims=true, showEvac=true, showEquip=true, showTip=true;
+let selUnit=null, selCore=null, selSpec=null, showGraph=true, showDims=true, showEvac=true, showEquip=true, showTip=true, selRoom=null;   // selRoom (R5.12): la estancia elegida {u: vivienda, id} con un segundo clic dentro de la vivienda elegida
 let selPatio=null, selPatioC=null, flechas=null, tFlechas=null;   // R4.12: el patio elegido (índice en result.patios) y, tras cambiarlo, dónde esperarlo al recalcular; lo que mueven las flechas del teclado (un patio o un núcleo) y el temporizador de su recálculo
 let ptr=null, ptrAlt=false, medModo='', herrTxt='', selTab=null, frenteBusy=false;   // R4.13b: dónde está el puntero (mundo, sin ajustar) y si Alt estaba apretada; qué campos de medida trae la barra ('linea', 'patio', 'tab|a|b' o ''); el texto de la herramienta en la barra; el tabique elegido {a, b, u: la vivienda elegida}
 const EVAC={ok:'#1a9d5b',saco:'#e8890c',fail:'#d63b3b'};   // puerta de cada vivienda: cumple, fondo de saco largo, recorrido largo
@@ -457,8 +457,9 @@ function draw(){ const gb=$('gb'); gb.innerHTML='';
    gb.appendChild(el('text',{x:X(c),y:Y(c)-4,'text-anchor':'middle','font-size':12,fill:TENUE(),'pointer-events':'none'},'Sin luz natural'));
    if(!(result.dark_corners||[]).some(q=>JSON.stringify(q)===JSON.stringify(d)))      // en un codo, el aviso lo explica
     gb.appendChild(el('text',{x:X(c),y:Y(c)+12,'text-anchor':'middle','font-size':11,fill:TENUE(),'pointer-events':'none'},'requiere patio')); });
-  (result.units||[]).forEach(u=>{ if(u.rooms) u.rooms.forEach(r=>gb.appendChild(el('polygon',{points:pts(r.poly),fill:roomColor(r.kind),stroke:tone(progColor('Residential'),0.30),'stroke-width':.7})));
+  (result.units||[]).forEach(u=>{ if(u.rooms) u.rooms.forEach(r=>gb.appendChild(el('polygon',{points:pts(r.poly),fill:roomColor(r.kind),stroke:tone(progColor('Residential'),0.30),'stroke-width':.7,'data-room':r.id})));
    else gb.appendChild(el('polygon',{points:pts(u.poly),fill:unitColor(u)}));
+   const rs=estanciaSel(u); if(rs) gb.appendChild(el('polygon',{points:pts(rs.poly),fill:'none',stroke:'#2f6fed','stroke-width':2.5,'stroke-dasharray':'6 3','pointer-events':'none'}));   // R5.12: la estancia elegida
    (u.sin_uso||[]).forEach(s=>{ const h=el('polygon',{points:pts(s.poly),fill:'url(#hatch)',stroke:'#8a8f99','stroke-dasharray':'4 3','stroke-width':.7});   // v2.33: lo que queda sin uso
     h.appendChild(el('title',{},'Sin uso: '+s.area+' m² (el aviso está en la ficha de la vivienda)')); gb.appendChild(h); });
    gb.appendChild(el('polygon',{points:pts(u.poly),fill:'none',stroke:u.id===selUnit?'#2f6fed':'#1b2430','stroke-width':u.id===selUnit?3:sw}));
@@ -704,8 +705,8 @@ function unitPanel(){ const c=$('ctx'); marcaExt=null; if(selCore!=null&&result&
   <h2 style="margin:10px 0 4px">Comprobaciones (${ok}/${n})</h2>
   ${(u.checks||[]).map(x=>`<div class="${x.ok?'hint':'w'}">${x.info?'ℹ':x.ok?'✓':'⚠'} ${x.msg}</div>`).join('')}
   <h2 style="margin:10px 0 4px">Editar vivienda${u.editada?' (editada)':''}${u.editada_dentro?' · cambiada por dentro':''}</h2><div class="hint">Arrastra sus tabiques con las vecinas (azules) para cambiar su ancho, o haz clic en uno y escribe el frente exacto de una de las dos; sus tabiques interiores (verdes) y sus puertas, para ajustarla por dentro. La puerta de entrada, por el pasillo común: la distribución se rehace con el hall ahí.</div>
-  <button class="s" onclick="dividirVivienda()">Dividir en dos</button>${(result.tabiques||[]).map((t,k)=>t.a===u.id||t.b===u.id?`<button class="s" onclick="unirViviendas(${k})">Unir con ${t.a===u.id?t.b:t.a}</button>`:'').join('')}${extenderBotones(u)}${accesoBotones(u)}${puertasPanel(u)}
-  <button class="s" onclick="selUnit=null;draw();unitPanel()">Cerrar</button>`;
+  <button class="s" onclick="dividirVivienda()">Dividir en dos</button>${(result.tabiques||[]).map((t,k)=>t.a===u.id||t.b===u.id?`<button class="s" onclick="unirViviendas(${k})">Unir con ${t.a===u.id?t.b:t.a}</button>`:'').join('')}${extenderBotones(u)}${accesoBotones(u)}${puertasPanel(u)}${estanciaPanel(u)}${cambiosDentro(u)}
+  <button class="s" onclick="selUnit=null;selRoom=null;draw();unitPanel()">Cerrar</button>`;
  c.style.display='block'; }
 
 /* ---------- núcleo elegido: medidas propias y giro (R3.5) ---------- */
@@ -977,11 +978,34 @@ function ventanasDe(u){ const vs=u.ventanas||[]; if(!vs.length) return ''; const
  return `<div class="hint" style="margin-top:4px">Ventanas (alto ${vs[0].alto.toFixed(2)} m): ${vs.map(w=>nom(w.room)+' '+w.ancho.toFixed(2)+' m').join(' · ')}</div>`; }
 function puertasPanel(u){ if(!(u.doors||[]).length) return ''; const nom=i=>i==='exterior'?'pasillo común':((u.rooms||[]).find(r=>r.id===i)||{}).name||i;   // con los planos
  return '<h2 style="margin:10px 0 4px">Puertas</h2><div class="hint">Arrástralas en la planta para correrlas. Ancho en metros; ⇄ la hace abrir hacia el otro lado.</div>'+(u.doors||[]).map((d,k)=>{ const L=Math.hypot(d.q[0]-d.p[0],d.q[1]-d.p[1]);
-  return `<div class="hint" style="display:flex;gap:4px;align-items:center;justify-content:space-between"><span>${nom(d.a)} → ${nom(d.b)}</span><span style="white-space:nowrap"><input type="number" step="0.05" min="0.5" value="${L.toFixed(2)}" style="width:56px" title="Ancho de la puerta (m)" data-ancho="${k}" onchange="anchoPuerta(${k},+this.value)">${d.entry?'':`<button class="s" style="padding:0 6px" title="Que abra hacia el otro lado" data-invertir="${k}" onclick="invertirPuerta(${k})">⇄</button>`}</span></div>`; }).join('')
-  +(interioresDe(u).length?`<button class="s" onclick="descartarInteriores()">Descartar los cambios por dentro (${interioresDe(u).length})</button>`:''); }
+  return `<div class="hint" style="display:flex;gap:4px;align-items:center;justify-content:space-between"><span>${nom(d.a)} → ${nom(d.b)}</span><span style="white-space:nowrap"><input type="number" step="0.05" min="0.5" value="${L.toFixed(2)}" style="width:56px" title="Ancho de la puerta (m)" data-ancho="${k}" onchange="anchoPuerta(${k},+this.value)">${d.entry?'':`<button class="s" style="padding:0 6px" title="Que abra hacia el otro lado" data-invertir="${k}" onclick="invertirPuerta(${k})">⇄</button>`}</span></div>`; }).join(''); }
+function cambiosDentro(u){ const n=interioresDe(u).length; return n?`<div class="hint" style="margin-top:6px">${n} cambio(s) por dentro de ${u.id} (tabiques, puertas, entrada y estancias) · <button class="s" style="padding:0 6px" onclick="descartarInteriores()">Descartar los cambios por dentro (${n})</button></div>`:''; }   // R5.12: una línea con todos los cambios por dentro de la vivienda (antes, el botón estaba en «Puertas»)
 function anchoPuerta(k,v){ const u=result.units.find(x=>x.id===selUnit), d=u&&u.doors[k]; if(d&&v>0) editarInterior({op:'puerta',p:mitad([d.p,d.q]),entre:[d.a,d.b],ancho:v},'cambiar el ancho de una puerta de '+u.id); }
 function invertirPuerta(k){ const u=result.units.find(x=>x.id===selUnit), d=u&&u.doors[k]; if(d) editarInterior({op:'puerta',p:mitad([d.p,d.q]),entre:[d.a,d.b],abre:true},'invertir una puerta de '+u.id); }
 function descartarInteriores(){ const u=result&&result.units.find(x=>x.id===selUnit); if(!u) return; recordar('descartar los cambios por dentro de '+u.id); interiores=interiores.filter(e=>!enPoli(e.p,u.poly)); run('plans',{keepView:true}); }
+/* ---------- estancias editables (R5.12): con la vivienda elegida, un segundo clic en una estancia abre su ficha: nombre, función, dormitorio principal o secundario, «Quitar» (se une al contiguo) y «Unir con…»; todo son room_edits (nombre, tipo, quitar, unir) con un punto dentro de la estancia ---------- */
+const estanciaSel=u=>u&&selRoom&&selRoom.u===u.id?(u.rooms||[]).find(r=>r.id===selRoom.id)||null:null;   // la estancia elegida de la vivienda u (null si es de otra o ya no está)
+const centroEstancia=r=>{ const c=centroidOf(r.poly); return [+c[0].toFixed(3),+c[1].toFixed(3)]; };   // el punto que se manda al motor (dentro de la estancia)
+function bordeComun(P,Q){ let L=0; P.forEach((a,i)=>{ const b=P[(i+1)%P.length], dx=b[0]-a[0], dy=b[1]-a[1], l=Math.hypot(dx,dy); if(l<1e-6) return; const ux=dx/l, uy=dy/l;   // largo del borde que comparten dos polígonos (tramos colineales a 5 cm)
+  Q.forEach((c,j)=>{ const d=Q[(j+1)%Q.length]; if(Math.abs((c[0]-a[0])*uy-(c[1]-a[1])*ux)>0.05||Math.abs((d[0]-a[0])*uy-(d[1]-a[1])*ux)>0.05) return;
+   const tc=(c[0]-a[0])*ux+(c[1]-a[1])*uy, td=(d[0]-a[0])*ux+(d[1]-a[1])*uy; L+=Math.max(0,Math.min(l,Math.max(tc,td))-Math.max(0,Math.min(tc,td))); }); }); return L; }
+const vecinasEstancia=(u,r)=>(u.rooms||[]).filter(s=>s.id!==r.id&&s.kind==='bedroom'&&bordeComun(r.poly,s.poly)>=0.3);   // los dormitorios contiguos (el motor decide si la unión da un rectángulo)
+const FUNCIONES=[['dormitorio','Dormitorio'],['estudio','Estudio'],['deposito','Depósito'],['lavadero','Lavadero'],['comedor','Comedor']], FUNCION_DE={bedroom:'dormitorio',study:'estudio',storage:'deposito',laundry:'lavadero',dining:'comedor'};
+function estanciaPanel(u){ const r=estanciaSel(u);
+ if(!r) return '<h2 style="margin:10px 0 4px">Estancia</h2><div class="hint">Clic en una estancia de la vivienda para cambiarle el nombre o la función, marcar el dormitorio principal, quitar un dormitorio o unir dos.</div>';
+ const fun=FUNCION_DE[r.kind], vec=r.kind==='bedroom'?vecinasEstancia(u,r):[];
+ return `<h2 style="margin:10px 0 4px">Estancia: ${esc(r.name)}</h2><div class="hint">${r.area} m²${r.principal?' · dormitorio principal (cama doble)':r.kind==='bedroom'?' · dormitorio secundario':''}</div>
+  <label>Nombre <input type="text" id="estNombre" value="${esc(r.name)}" maxlength="40" onchange="nombreEstancia(this.value)"></label>
+  ${fun?`<label>Función <select id="estFuncion" onchange="funcionEstancia(this.value)">${FUNCIONES.map(([k,t])=>`<option value="${k}"${k===fun?' selected':''}>${t}</option>`).join('')}</select></label>`:'<div class="hint">Solo dormitorios, estudios, depósitos, lavaderos y comedores cambian de función.</div>'}
+  ${r.kind==='bedroom'?`<label>Dormitorio <select id="estDorm" onchange="dormitorioEstancia(this.value)"><option value="principal"${r.principal?' selected':''}>Principal (cama doble)</option><option value="secundario"${r.principal?'':' selected'}>Secundario (camas individuales)</option></select></label>`:''}
+  ${vec.length?`<button class="s" onclick="quitarEstancia()" title="El dormitorio se une al contiguo, que se agranda con su cama; el más grande pasa a principal">Quitar</button>`+vec.map(s=>`<button class="s" onclick="unirEstancias('${s.id}')" title="Los dos dormitorios pasan a ser uno">Unir con ${esc(s.name)}</button>`).join(''):r.kind==='bedroom'?'<div class="hint">Sin otro dormitorio contiguo: no se puede quitar ni unir.</div>':''}
+  <button class="s" onclick="selRoom=null;draw();unitPanel()">Cerrar estancia</button>`; }
+function estanciaOp(op,txt){ const u=result&&result.units?result.units.find(x=>x.id===selUnit):null, r=estanciaSel(u); if(!r) return null; return editarInterior(Object.assign({p:centroEstancia(r)},op),txt+' '+r.name+' de '+u.id); }   // un cambio sobre la estancia elegida (registra para deshacer y recalcula)
+function nombreEstancia(v){ estanciaOp({op:'nombre',nombre:v},'renombrar'); }
+function funcionEstancia(v){ estanciaOp({op:'tipo',tipo:v},'cambiar a '+v); }
+function dormitorioEstancia(v){ estanciaOp({op:'tipo',tipo:v},'marcar como '+v); }
+function quitarEstancia(){ estanciaOp({op:'quitar'},'quitar'); }
+function unirEstancias(id){ const u=result&&result.units?result.units.find(x=>x.id===selUnit):null, s=u&&(u.rooms||[]).find(x=>x.id===id); if(!s) return; estanciaOp({op:'unir',a:centroEstancia(s)},'unir con '+s.name); }
 /* ---------- acceso a mano (R5.13): la puerta de entrada se arrastra por el pasillo común, o «Mover la entrada…» y un clic sobre ese borde; el motor rehace el plano con el hall en la más cercana de las tres posiciones que sabe armar ---------- */
 const accesosDe=u=>interiores.filter(e=>e.op==='acceso'&&enPoli(e.p,u.poly));   // los accesos pedidos para la vivienda (su punto está sobre su borde al pasillo común)
 function esEntrada(g){ const u=result&&result.units.find(x=>x.id===g.u), d=u&&u.doors[g.k]; return !!(d&&d.entry); }
@@ -1166,7 +1190,10 @@ svg.addEventListener('click',e=>{ if(!view||svg._skipClick) return;
   const tc=e.target.closest&&e.target.closest('[data-core]'); if(tc){ selCore=+tc.getAttribute('data-core'); selUnit=null; selPas=null; sinPatio(); draw(); unitPanel(); return; }
   const tp=e.target.closest&&e.target.closest('[data-pas]'); if(tp&&tp.getAttribute('data-pas')!==''){ selPas=+tp.getAttribute('data-pas'); selUnit=null; selCore=null; sinPatio(); draw(); unitPanel(); return; }   // R10.8: un tramo de pasillo
   const tq=e.target.closest&&e.target.closest('[data-patio]'); if(tq){ selPatio=+tq.getAttribute('data-patio'); selPatioC=null; selUnit=null; selCore=null; selPas=null; draw(); unitPanel(); return; }   // R4.12: un patio
-  const t=e.target.closest&&e.target.closest('[data-unit]'); selUnit=t?t.getAttribute('data-unit'):null; selCore=null; selPas=null; sinPatio(); draw(); unitPanel(); return; }
+  const t=e.target.closest&&e.target.closest('[data-unit]'), uid=t?t.getAttribute('data-unit'):null;
+  if(uid&&uid===selUnit&&result&&result.units){ const u=result.units.find(x=>x.id===uid), w=toWorld(e), r=u&&(u.rooms||[]).find(x=>enPoly(w,x.poly)); selRoom=r?{u:uid,id:r.id}:null; }   // R5.12: un segundo clic dentro de la vivienda elegida elige la estancia
+  else selRoom=null;
+  selUnit=uid; selCore=null; selPas=null; sinPatio(); draw(); unitPanel(); return; }
  const w=toWorld(e); ptr=w; ptrAlt=!!e.altKey;
  if(tool==='line'){ if(e.detail>1) return; if(medidaTexto('largo')||medidaTexto('angulo')) return medidaEnter(); curLine.push(ajustar(w,curLine[curLine.length-1],e)); drawOverlay(); }   // R4.13b: con medidas escritas, el clic es un Enter (el puntero da la dirección)
  else if(tool==='patio'){ if(curPatio.length&&(medidaTexto('ancho')||medidaTexto('fondo'))) return medidaEnter(); curPatio.push(ajustar(w,null,e)); if(curPatio.length===2) finishPatio(); else drawOverlay(); }
