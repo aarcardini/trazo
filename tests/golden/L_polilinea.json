@@ -1,7 +1,7 @@
 {
  "ejemplo": "samples/L_polilinea.json",
  "nombre": "L con polilínea",
- "version_motor": "2.69",
+ "version_motor": "2.71",
  "metricas": {
   "unidades": 15,
   "unidades_totales": 75,

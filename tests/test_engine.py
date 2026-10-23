@@ -7373,3 +7373,481 @@ def test_estancias_editables():
 
 if __name__ == "__main__":
     test_estancias_editables(); print("OK86")
+
+
+def test_abrir_padron():
+    """R1.6 (v2.71): «Abrir padrón de Montevideo». `engine/padron.py` pide al GeoServer público de la Intendencia de Montevideo
+    (WFS, GeoJSON en UTM 21 S) la parcela de un número de padrón y la deja como masa de Trazo (el mismo formato que
+    `dxf_lector.leer`): `footprint` antihorario, `medianeras` deducidas de las parcelas vecinas (un lado con vecino en el 70 % o
+    más de sus puntos es lindero; con menos del 30 %, frente a la calle; en el medio, dudoso y avisado), `padron` con las
+    áreas, las direcciones, los frentes, el lote y la normativa (categoría, retiro frontal, altura, FOS y uso, orientativos,
+    con su fuente y su fecha) y `warnings`. La ruta `GET /api/padron?numero=N[&retiro=X]` la guarda como la de Rhino o la de un
+    DXF; con `retiro` y el mismo padrón corre el retiro frontal sobre lo guardado, sin red. La web trae el botón «Abrir
+    padrón…», el panel de Normativa con los datos y los botones «Aplicar retiro frontal de X m» y «Usar altura de X m» (solo con
+    valores numéricos). Las pruebas no salen a internet: usan las respuestas reales del WFS del 23/10/2026 guardadas en
+    tests/padron/ (padrones 421264, 432478, 1531, 32512, 65411, 9108 y el inexistente 99999999) con una red falsa."""
+    import copy, math, shutil, subprocess, tempfile, threading, datetime, urllib.error, urllib.parse, urllib.request
+    import contextlib, io
+    import http.server
+    import server
+    from engine import padron as PD, geometry as G, layout as LY
+    base = os.path.join(os.path.dirname(__file__), "..")
+    carpeta = os.path.join(base, "tests", "padron")
+    CAPA = {"cb_v_mdg_parcelas_citim": "parcela", "ot_v_mdg_parcelas_cat_suelo": "cat_suelo", "cb_v_mdg_accesos_puerta": "puertas"}
+
+    class Red(object):
+        """La red falsa: responde con los JSON guardados (la capa por typeNames; padron=N o BBOX(...) AND padron<>N por el
+        filtro) y anota cada petición. `cae`: capas que fallan; `todo_cae`: ninguna responde; `parcela`: cambia la respuesta
+        de la parcela; `vecinas`: cambia la de las vecinas; `crudo`: respuesta fija."""
+
+        def __init__(self, cae=(), todo_cae=False, parcela=None, crudo=None, cae_vecinas=False, vecinas=None):
+            self.llamadas, self.cae, self.todo_cae, self.parcela, self.crudo, self.cae_vecinas, self.vecinas = \
+                [], set(cae), todo_cae, parcela, crudo, cae_vecinas, vecinas
+
+        def __call__(self, url, version=""):
+            self.llamadas.append(url)
+            if self.todo_cae:
+                raise OSError("sin conexión")
+            if self.crudo is not None:
+                return self.crudo
+            q = urllib.parse.parse_qs(urllib.parse.urlsplit(url).query)
+            assert url.startswith(PD.WFS + "?") and q["service"] == ["WFS"] and q["request"] == ["GetFeature"] and \
+                q["outputFormat"] == ["application/json"] and q["version"] == ["2.0.0"], url
+            capa, filtro = CAPA[q["typeNames"][0].split(":")[1]], q["cql_filter"][0]
+            if capa in self.cae:
+                raise OSError("capa caída")
+            if filtro.startswith("BBOX("):
+                if self.cae_vecinas:
+                    raise OSError("vecinas caídas")
+                numero, capa = filtro.rsplit("padron<>", 1)[1], "vecinas"
+            else:
+                assert filtro.startswith("padron="), filtro
+                numero = filtro.split("=", 1)[1]
+            with open(os.path.join(carpeta, "padron_%s_%s.json" % (numero, capa)), "rb") as f:
+                datos = f.read()
+            cambio = {"parcela": self.parcela, "vecinas": self.vecinas}.get(capa)
+            if cambio:
+                j = json.loads(datos.decode("utf-8"))
+                cambio(j)
+                datos = json.dumps(j).encode("utf-8")
+            return datos
+    largo = lambda m: math.hypot(m["b"][0] - m["a"][0], m["b"][1] - m["a"][1])
+    hoy = datetime.date.today().isoformat()
+    # ---- 1. el padrón 421264 (esquina, 4 lados, 2 frentes): polígono, medianeras, frentes, normativa
+    red = Red()
+    r = PD.consultar(421264, red=red)
+    assert r["source"] == "padron" and r["name"] == "Padrón 421264" and r["warnings"] == []
+    fp = r["footprint"]
+    assert len(fp) == 4 and G.area(fp) > 0 and abs(G.area(fp) - 177) < 2                      # antihorario, en metros UTM
+    assert all(abs(p[0] - 574600) < 30 and abs(p[1] - 6144560) < 30 for p in fp)
+    assert len(r["medianeras"]) == 2 and all(m["retiro"] == 0 for m in r["medianeras"])
+    assert sorted(round(largo(m), 1) for m in r["medianeras"]) == [7.9, 15.8]
+    assert all(m["a"] in fp and m["b"] in fp for m in r["medianeras"])                         # sobre lados del polígono
+    pad = r["padron"]
+    assert [f["calle"] for f in pad["frentes"]] == ["PEDRO FUENTES", "SARA OTERMIN"]
+    assert sorted(f["largo"] for f in pad["frentes"]) == [12.88, 18.85]
+    assert pad["direcciones"] == [{"calle": "PEDRO FUENTES", "numero": 1521}, {"calle": "SARA OTERMIN", "numero": 3953}]
+    assert (pad["numero"], pad["gid"], pad["areatot"], pad["areacat"], pad["ph"]) == (421264, 25858464, 177, 196, False)
+    assert pad["fuente"] == PD.FUENTE and "Intendencia de Montevideo" in PD.FUENTE and "res. 640/10" in PD.FUENTE
+    assert pad["fecha"] == hoy and pad["retiro_aplicado"] == 0 and pad["lote"] == fp and pad["medianeras_lote"] == r["medianeras"]
+    N = pad["normativa"]
+    assert list(N) == ["categoria", "sub_categoria", "area_diferenciada", "regimen", "retiro_frontal", "altura", "fos", "uso_preferente"]
+    assert (N["categoria"]["valor"], N["sub_categoria"]["valor"], N["regimen"]["valor"], N["uso_preferente"]["valor"]) == ("U", "SUCIn", "RGE", "MC")
+    assert N["categoria"]["significado"] == "urbano" and N["sub_categoria"]["significado"] == "urbano consolidado intermedio"
+    assert N["retiro_frontal"]["numero"] == 4 and N["retiro_frontal"]["valor"] == "4"
+    assert N["altura"]["valor"] == "9-12" and N["altura"]["numero"] is None and "rango" in N["altura"]["nota"]
+    assert N["fos"]["numero"] == 60 and N["fos"]["valor"] == "60" and N["area_diferenciada"]["valor"] == "Casavalle Piedras Blancas- Manga"
+    assert all(d["fuente"] == "IM, GeoServer, capa ot_v_mdg_parcelas_cat_suelo" and d["fecha"] == hoy and "orientativo; validar con el CITIM" in d["nota"]
+               and d["etiqueta"] == PD.ETIQUETAS[k] for k, d in N.items())
+    assert PD.ETIQUETAS["retiro_frontal"] == "Retiro frontal (m)" and PD.ETIQUETAS["fos"] == "FOS (%)" and "código sin leyenda pública" in N["uso_preferente"]["nota"]
+    assert len(red.llamadas) == 4 and "padron=421264" in urllib.parse.unquote(red.llamadas[0])
+    assert any("BBOX(" in urllib.parse.unquote(u) and "padron<>421264" in urllib.parse.unquote(u) for u in red.llamadas)
+    assert "cb_v_mdg_parcelas_citim" in red.llamadas[0] and any("ot_v_mdg_parcelas_cat_suelo" in u for u in red.llamadas) and \
+        any("cb_v_mdg_accesos_puerta" in u for u in red.llamadas)
+    assert json.loads(json.dumps(r)) == r                                                      # todo es JSON
+    g = LY.generate({"footprint": fp, "height": 12, "stage": "plans", "params": {"medianeras": r["medianeras"]}})
+    assert not g.get("error") and len(g["units"]) > 0                                          # el motor corre con la masa del padrón
+    assert PD.consultar("421264", red=Red())["footprint"] == fp                                # el número también como texto
+    # ---- 2. el padrón 432478 (el lote del proyecto «Barrios Amorín»): 6 linderos con vecino y un frente de 13 m con su puerta
+    r2 = PD.consultar(432478, red=Red())
+    assert r2["warnings"] == [] and abs(G.area(r2["footprint"]) - 232) < 1.5 and len(r2["footprint"]) == 7   # los dos tramos colineales del frente son un lado
+    assert len(r2["medianeras"]) == 6 and [round(largo(m), 1) for m in sorted(r2["medianeras"], key=largo)] == [1.9, 2.8, 4.2, 6.7, 17.9, 24.7]
+    f2 = r2["padron"]["frentes"]
+    assert len(f2) == 1 and f2[0]["calle"] == "DR JAVIER BARRIOS AMORIN" and abs(sum(f["largo"] for f in f2) - 13.0) < 0.2
+    assert r2["padron"]["direcciones"] == [{"calle": "DR JAVIER BARRIOS AMORIN", "numero": 1162}]
+    n2 = r2["padron"]["normativa"]
+    assert (n2["altura"]["numero"], n2["fos"]["numero"], n2["retiro_frontal"]["numero"], n2["regimen"]["valor"]) == (27, 100, 0, "RPU")
+    assert "código sin leyenda pública" in n2["regimen"]["nota"] and n2["regimen"]["significado"] is None
+    g2 = LY.generate({"footprint": r2["footprint"], "height": 27, "stage": "plans", "params": {"medianeras": r2["medianeras"]}})
+    assert not g2.get("error") and len(g2["units"]) > 0
+    # ---- 3. propiedad horizontal, un solo frente, retiro de 7 m, manzana entera sin vecinas ni retiro numérico
+    r3 = PD.consultar(32512, red=Red())
+    assert r3["padron"]["ph"] is True and any("es propiedad horizontal" in w and "padrón madre" in w for w in r3["warnings"])
+    assert any("111 m²" in w and "144 m²" in w and "difieren" in w for w in r3["warnings"])        # el área de la geometría y la catastral
+    assert len(r3["medianeras"]) == 2 and len(r3["padron"]["frentes"]) == 2
+    assert len(PD.consultar(1531, red=Red())["padron"]["frentes"]) == 1
+    r5 = PD.consultar(65411, red=Red())
+    assert r5["padron"]["normativa"]["retiro_frontal"]["numero"] == 7 and len(r5["padron"]["direcciones"]) == 7 and r5["warnings"] == []
+    r4 = PD.consultar(9108, red=Red())
+    assert "medianeras" not in r4 and any("No se encontraron parcelas vecinas" in w and "no se deducen medianeras" in w for w in r4["warnings"])
+    n4 = r4["padron"]["normativa"]
+    assert n4["retiro_frontal"]["valor"] == "RET.ESP." and n4["retiro_frontal"]["numero"] is None and n4["altura"]["valor"] == "ALT.ESP."
+    assert n4["altura"]["numero"] is None and "código sin leyenda pública" in n4["altura"]["nota"] and n4["fos"]["numero"] == 100
+    assert len(r4["padron"]["frentes"]) == 4 and {f["calle"] for f in r4["padron"]["frentes"]} == {"SORIANO", "SANTIAGO DE CHILE", "AV 18 DE JULIO", "SAN JOSE"}
+    # ---- 4. los datos de la capa de suelo: solo un número simple es un número (los códigos se muestran tal cual)
+    D = lambda k, v: PD.dato(k, v, hoy)
+    assert [D("fos", v)["numero"] for v in ("60", "13.50", "13,5", "4", "35R", "9-12", "PATRIMONIAL", None, "")] == [60, 13.5, 13.5, 4, None, None, None, None, None]
+    assert D("retiro_frontal", "5CA")["numero"] is None and "acordamiento" in D("retiro_frontal", "5CA")["nota"] and D("retiro_frontal", "5CA")["valor"] == "5CA"
+    assert D("altura", None)["valor"] is None and "sin dato" in D("altura", None)["nota"] and D("altura", " 27 ")["valor"] == "27"
+    assert D("categoria", "U")["numero"] is None and D("uso_preferente", "MC")["numero"] is None and D("sub_categoria", "ZZZ")["significado"] is None
+    assert D("regimen", "RGE")["significado"] == "Régimen General" and "sin leyenda" not in D("regimen", "RGE")["nota"]
+    # ---- 5. padrón inexistente, número inválido, servicio caído, respuestas raras
+    red = Red()
+    for mal in ("abc", "", "0", "-5", "12.5", None):
+        try:
+            PD.consultar(mal, red=red)
+            assert False, mal
+        except PD.ErrorPadron as e:
+            assert e.codigo == 400 and str(e).startswith("Trazo:") and "número de padrón" in str(e), mal
+    assert red.llamadas == []                                                                  # un número inválido no sale a la red
+    try:
+        PD.consultar(99999999, red=red)
+        assert False
+    except PD.ErrorPadron as e:
+        assert e.codigo == 404 and e.mensaje == str(e) and str(e).startswith("Trazo:") and "99999999 no figura en el parcelario de Montevideo" in str(e) and "padrón madre" in str(e)
+    assert len(red.llamadas) == 1
+    caida = Red(todo_cae=True)
+    try:
+        PD.consultar(421264, red=caida)
+        assert False
+    except PD.ErrorPadron as e:
+        assert e.codigo == 502 and str(e).startswith("Trazo: no se pudo consultar el padrón 421264") and "Abrir DXF" in str(e) and "terreno rectangular" in str(e) and "sin conexión" in str(e)
+    for crudo in (b"<ServiceExceptionReport/>", b"[]", b'{"features": 3}', b"\xff\xfe"):
+        try:
+            PD.consultar(421264, red=Red(crudo=crudo))
+            assert False, crudo
+        except PD.ErrorPadron as e:
+            assert e.codigo == 502 and "ilegible" in str(e) and "Abrir DXF" in str(e), crudo
+    try:                                                                                       # coordenadas en otro sistema: no son metros de Trazo
+        PD.consultar(421264, red=Red(parcela=lambda j: j.update(crs={"type": "name", "properties": {"name": "urn:ogc:def:crs:EPSG::4326"}})))
+        assert False
+    except PD.ErrorPadron as e:
+        assert e.codigo == 502 and "4326" in str(e)
+    try:                                                                                       # sin polígono
+        PD.consultar(421264, red=Red(parcela=lambda j: j["features"][0].update(geometry=None)))
+        assert False
+    except PD.ErrorPadron as e:
+        assert e.codigo == 502 and "polígono" in str(e)
+    # ---- 6. lo opcional falla y la parcela alcanza: sin normativa, sin vecinas, sin puertas
+    s1 = PD.consultar(421264, red=Red(cae=("cat_suelo",)))
+    assert s1["padron"]["normativa"] is None and s1["footprint"] == fp and len(s1["medianeras"]) == 2
+    assert any(w.startswith("No se pudo leer la normativa del padrón (capa ot_v_mdg_parcelas_cat_suelo)") and "capa caída" in w for w in s1["warnings"])
+    s2 = PD.consultar(421264, red=Red(cae_vecinas=True))
+    assert "medianeras" not in s2 and s2["padron"]["frentes"] == [] and s2["padron"]["normativa"] and s2["footprint"] == fp
+    assert any("No se pudieron leer las parcelas vecinas" in w and "no se deducen medianeras ni frentes" in w for w in s2["warnings"])
+    s3 = PD.consultar(421264, red=Red(cae=("puertas",)))
+    assert s3["padron"]["direcciones"] == [] and len(s3["medianeras"]) == 2 and [f["calle"] for f in s3["padron"]["frentes"]] == [None, None]
+    assert any("No se pudieron leer los números de puerta" in w for w in s3["warnings"])
+    # varias partes y huecos: la parte mayor y el aviso; los vértices repetidos y casi iguales se quitan
+    def partes(j):
+        anillo = j["features"][0]["geometry"]["coordinates"][0]
+        chico = [[x + 100.0, y] for x, y in anillo]
+        j["features"][0]["geometry"] = {"type": "MultiPolygon", "coordinates": [
+            [[[q[0] + (0.004 if i == 1 else 0.0), q[1]] for i, q in enumerate(anillo[:2] + anillo[1:2] + anillo[2:])]], [chico[:3] + [chico[0]]]]}
+    m1 = PD.consultar(421264, red=Red(parcela=partes))
+    assert len(m1["footprint"]) == 4 and abs(G.area(m1["footprint"]) - G.area(fp)) < 0.2
+    assert any("2 partes separadas" in w and "tomé la mayor" in w for w in m1["warnings"])
+
+    def hueco(j):
+        j["features"][0]["geometry"]["coordinates"].append([[574595.0, 6144562.0], [574597.0, 6144562.0], [574597.0, 6144564.0], [574595.0, 6144562.0]])
+    assert any("1 hueco (patios cerrados) que Trazo no dibuja" in w for w in PD.consultar(421264, red=Red(parcela=hueco))["warnings"])
+    # ---- 7. linderos y frentes sobre un lote sintético: con vecino, sin vecino, dudoso, y la calle de la puerta
+    lote = [(0.0, 0.0), (10.0, 0.0), (10.0, 20.0), (0.0, 20.0)]
+    izq, der = [(-10.0, 0.0), (0.0, 0.0), (0.0, 20.0), (-10.0, 20.0)], [(10.0, 0.0), (20.0, 0.0), (20.0, 20.0), (10.0, 20.0)]
+    fondo_medio = [(0.0, 20.0), (5.0, 20.0), (5.0, 30.0), (0.0, 30.0)]
+    meds_, frs_, dud_ = PD.lados(lote, [izq, der, fondo_medio], [((5.0, 0.2), "CALLE X"), ((5.0, 3.0), "LEJOS")])
+    assert [(m["a"], m["b"]) for m in meds_] == [([10.0, 0.0], [10.0, 20.0]), ([0.0, 20.0], [0.0, 0.0])]       # derecho e izquierdo
+    assert [(f["calle"], f["largo"]) for f in frs_] == [("CALLE X", 10.0)] and len(dud_) == 1 and abs(dud_[0][0] - 10.0) < 1e-9 and 0.4 < dud_[0][1] < 0.6
+    fondo_todo = [(0.0, 20.0), (10.0, 20.0), (10.0, 30.0), (0.0, 30.0)]
+    assert len(PD.lados(lote, [izq, der, fondo_todo], [])[0]) == 3 and PD.lados(lote, [izq, der, fondo_todo], [])[1][0]["calle"] is None
+    corrida = [[(x + 0.35, y) for x, y in izq]]                                                # a 0,35 m: cuenta como vecina
+    assert len(PD.lados(lote, corrida, [])[0]) == 1
+    lejos = [[(x + 0.6, y) for x, y in izq]]                                                   # a 0,6 m: no (un pasaje, una servidumbre)
+    assert len(PD.lados(lote, lejos, [])[0]) == 0
+    assert len(PD.lados(lote, [], [])[1]) == 4 and PD.lados(lote, [], [])[0] == []             # sin vecinas, todo es frente
+    # el catastro parte los lados con vértices que siguen derechos: se juntan si son de la misma clase y se conservan si cambia
+    partido = [(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (10.0, 20.0), (0.0, 20.0)]
+    der_arriba = [(10.0, 10.0), (20.0, 10.0), (20.0, 20.0), (10.0, 20.0)]                       # la vecina de la derecha solo cubre la mitad de arriba
+    p1, m1_, f1_, d1_ = PD._lados(partido, [izq, der_arriba], [])
+    assert len(p1) == 5 and sorted(m["a"] for m in m1_) == [[0.0, 20.0], [10.0, 10.0]] and d1_ == []              # el vértice del medio se conserva: abajo, frente; arriba, lindero
+    assert sorted(f["a"] for f in f1_) == [[0.0, 0.0], [10.0, 0.0], [10.0, 20.0]]
+    der_todo = [(10.0, 0.0), (20.0, 0.0), (20.0, 20.0), (10.0, 20.0)]
+    p2, m2_, f2_, d2_ = PD._lados(partido, [izq, der_todo], [])
+    assert p2 == [[0.0, 0.0], [10.0, 0.0], [10.0, 20.0], [0.0, 20.0]] and len(m2_) == 2 and [f["largo"] for f in f2_] == [10.0, 10.0]   # vecina en todo el lado: un solo lindero de 20 m
+    p3, m3_, f3_, d3_ = PD._lados(partido, [izq], [((0.2, 1.0), "A"), ((9.9, 1.0), "A")])      # sin vecina a la derecha: el lado partido es un frente de 20 m
+    assert len(p3) == 4 and sorted(round(f["largo"], 1) for f in f3_) == [10.0, 10.0, 20.0] and [f["calle"] for f in f3_ if f["largo"] == 20.0] == ["A"]
+    chanfle = [(0.0, 0.0), (10.0, 0.0), (10.0, 20.0), (9.9, 20.0), (0.0, 19.9)]                # un lado de 0,1 m (un quiebre mínimo) no se clasifica
+    assert sum(len(x) for x in PD.lados(chanfle, [izq], [])) == 4
+    # el lado dudoso sale en los avisos de la consulta: una sola vecina que cubre la mitad del lindero de 15,8 m
+    lind = r["medianeras"][0]
+    ux, uy = (lind["b"][0] - lind["a"][0]), (lind["b"][1] - lind["a"][1])
+    nx, ny = uy / math.hypot(ux, uy) * 5.0, -ux / math.hypot(ux, uy) * 5.0                    # 5 m hacia afuera del lote
+    medio = [lind["a"][0] + ux / 2.0, lind["a"][1] + uy / 2.0]
+    a_medias = [lind["a"], medio, [medio[0] + nx, medio[1] + ny], [lind["a"][0] + nx, lind["a"][1] + ny], lind["a"]]
+    d1 = PD.consultar(421264, red=Red(vecinas=lambda j: j.update(features=[{"type": "Feature", "properties": {"padron": 1},
+                                                                           "geometry": {"type": "Polygon", "coordinates": [a_medias]}}])))
+    assert round(largo(lind), 1) == 15.8 and "medianeras" not in d1 and len(d1["padron"]["frentes"]) == 3     # los 2 de siempre y el lindero de 7,9 m, ahora sin vecina
+    assert len([w for w in d1["warnings"] if "sin vecino claro" in w]) == 1 and \
+        re.search(r"Lado de 15,8 m sin vecino claro \((4\d|5\d) % con vecino\): márcalo a mano como medianera o frente\.", " ".join(d1["warnings"]))
+    # ---- 8. retiro frontal: función pura
+    antes = json.dumps(r, sort_keys=True)
+    o4 = PD.aplicar_retiro(r, 4)
+    assert json.dumps(r, sort_keys=True) == antes and o4 is not r                                 # no cambia la masa original
+    assert o4["padron"]["retiro_aplicado"] == 4 and 0 < G.area(o4["footprint"]) < G.area(fp) - 60 and G.area(o4["footprint"]) > 60
+    assert o4["padron"]["lote"] == fp and o4["padron"]["frentes"] == pad["frentes"] and o4["source"] == "padron"
+    perp = lambda p, a, b: abs((b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0])) / math.hypot(b[0] - a[0], b[1] - a[1])
+    dentro = lambda p: G.point_in_poly(p, fp) or min(PD._dist_seg(p, fp[i], fp[(i + 1) % len(fp)]) for i in range(len(fp))) < 0.01
+    for f in pad["frentes"]:                                                                      # los dos frentes, corridos 4 m hacia adentro
+        sobre = [p for p in o4["footprint"] if abs(perp(p, f["a"], f["b"]) - 4.0) < 0.01]
+        assert len(sobre) >= 2 and all(dentro(p) for p in sobre), f
+    assert not any(abs(perp(p, f["a"], f["b"])) < 0.01 for f in pad["frentes"] for p in o4["footprint"])
+    assert len(o4["medianeras"]) == 2 and all(m["retiro"] == 0 for m in o4["medianeras"])
+    assert all(largo(n) < largo(m) - 3 for n, m in zip(sorted(o4["medianeras"], key=largo), sorted(r["medianeras"], key=largo)))   # recortadas
+    assert all(any(PD._sobre(n["a"], n["b"], m) for m in r["medianeras"]) for n in o4["medianeras"])
+    assert o4["warnings"] == ["Retiro frontal de 4 m aplicado a los 2 frentes del lote (el edificio se calcula sobre el lote menos esa franja)."]
+    o0 = PD.aplicar_retiro(r, 0)
+    assert o0["footprint"] == fp and o0["medianeras"] == r["medianeras"] and o0["padron"]["retiro_aplicado"] == 0 and o0["warnings"] == r["warnings"]
+    o0b = PD.aplicar_retiro(o4, 0)                                                                 # desde un resultado con retiro, también
+    assert o0b["footprint"] == fp and o0b["medianeras"] == r["medianeras"] and o0b["warnings"] == r["warnings"]
+    assert PD.aplicar_retiro(o4, 2.5)["footprint"] == PD.aplicar_retiro(r, 2.5)["footprint"] and PD.aplicar_retiro(r, "3")["padron"]["retiro_aplicado"] == 3
+    for mal in (-1, "x", None, 101):
+        try:
+            PD.aplicar_retiro(r, mal)
+            assert False, mal
+        except ValueError:
+            pass
+    gigante = PD.aplicar_retiro(r, 30)                                                             # no cabe: queda el lote, con aviso
+    assert gigante["footprint"] == fp and gigante["padron"]["retiro_aplicado"] == 0 and any("no se aplicó" in w and "menos de 10 m²" in w for w in gigante["warnings"])
+    sin_f = PD.aplicar_retiro(PD.consultar(421264, red=Red(cae_vecinas=True)), 4)                  # sin frentes deducidos: no hay qué correr
+    assert sin_f["footprint"] == fp and any("no tiene frentes" in w for w in sin_f["warnings"])
+    uno = PD.aplicar_retiro(r2, 3)
+    assert uno["padron"]["retiro_aplicado"] == 3 and len(uno["medianeras"]) == 6 and abs(G.area(uno["footprint"]) - (G.area(r2["footprint"]) - 3 * 13.06)) < 1.0
+    assert "al frente del lote" in uno["warnings"][-1]
+    g4 = LY.generate({"footprint": o4["footprint"], "height": 12, "stage": "plans", "params": {"medianeras": o4["medianeras"]}})
+    assert not g4.get("error") and abs(G.area(g4["footprint"]) - G.area(o4["footprint"])) < 0.5
+    # ---- 9. la red por defecto: urllib con User-Agent, un reintento y sin reintento en un 4xx
+    assert PD.RED is PD.red_urllib and PD.url_wfs("puertas", "padron=1").startswith(PD.WFS + "?service=WFS") and PD.TIEMPO == 20.0
+    pedidos = []
+
+    class Fake(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_GET(self):
+            pedidos.append((self.path, self.headers.get("User-Agent")))
+            cod = {"/cae": 503, "/cae_una": 503 if len([p for p in pedidos if p[0] == "/cae_una"]) == 1 else 200, "/no": 404}.get(self.path, 200)
+            cuerpo = b'{"features": []}'
+            self.send_response(cod)
+            self.send_header("Content-Length", str(len(cuerpo)))
+            self.end_headers()
+            self.wfile.write(cuerpo)
+    fake = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Fake)
+    threading.Thread(target=fake.serve_forever, daemon=True).start()
+    pausa = PD.PAUSA
+    PD.PAUSA = 0.0
+    try:
+        raiz = "http://127.0.0.1:%d" % fake.server_address[1]
+        assert PD.red_urllib(raiz + "/ok", "2.71") == b'{"features": []}' and pedidos[-1] == ("/ok", "Trazo/2.71")
+        assert PD.red_urllib(raiz + "/cae_una", "2.71") == b'{"features": []}' and [p[0] for p in pedidos].count("/cae_una") == 2       # reintenta
+        for ruta, veces in (("/cae", 2), ("/no", 1)):
+            try:
+                PD.red_urllib(raiz + ruta, "2.71")
+                assert False, ruta
+            except urllib.error.HTTPError as e:
+                assert e.code in (503, 404) and [p[0] for p in pedidos].count(ruta) == veces, (ruta, veces)
+        assert PD._motivo(urllib.error.HTTPError("u", 503, "x", {}, None)) == "respuesta HTTP 503" and PD._motivo(TimeoutError()) == "tiempo de espera agotado"
+        assert "ConnectionResetError" in PD._motivo(urllib.error.URLError(ConnectionResetError("x")))
+    finally:
+        PD.PAUSA = pausa
+        fake.shutdown()
+        fake.server_close()
+    # ---- 10. el servidor: GET /api/padron guarda la masa (source «padron») y el retiro no sale a la red
+    original = PD.RED
+    server.STATE.update(mass=None, result=None, padron=None)
+    srv = server.ThreadingHTTPServer(("127.0.0.1", 0), server.H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    url = "http://127.0.0.1:%d" % srv.server_address[1]
+
+    def api(ruta, cuerpo=None):
+        req = urllib.request.Request(url + ruta, data=None if cuerpo is None else json.dumps(cuerpo).encode(),
+                                     method="GET" if cuerpo is None else "POST", headers={"Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=20) as rr:
+                return rr.status, json.loads(rr.read().decode())
+        except urllib.error.HTTPError as ex:
+            return ex.code, json.loads(ex.read().decode())
+    try:
+        red = Red()
+        PD.RED = red
+        assert api("/api/mass")[1]["mass"] is None
+        cod, j = api("/api/padron?numero=421264")
+        assert cod == 200 and j["ok"] and j["source"] == "padron" and j["name"] == "Padrón 421264" and j["footprint"] == fp and j["padron"]["numero"] == 421264
+        assert j["medianeras"] == r["medianeras"] and len(red.llamadas) == 4 and j["padron"]["normativa"]["fos"]["numero"] == 60
+        v0 = j["version"]
+        cod, m = api("/api/mass")
+        assert cod == 200 and m["version"] == v0 and m["mass"]["source"] == "padron" and m["mass"]["footprint"] == fp and m["mass"]["padron"]["frentes"] == pad["frentes"]
+        cod, g = api("/api/generate", {"footprint": m["mass"]["footprint"], "height": 12, "stage": "plans", "params": {"medianeras": m["mass"]["medianeras"]}})
+        assert cod == 200 and len(g["units"]) > 0
+        cod, j = api("/api/padron?numero=421264&retiro=4")                                      # el mismo padrón: sin red
+        assert cod == 200 and j["version"] == v0 + 1 and j["padron"]["retiro_aplicado"] == 4 and len(red.llamadas) == 4
+        assert G.area(j["footprint"]) < G.area(fp) - 60 and j["footprint"] == o4["footprint"] and j["medianeras"] == o4["medianeras"]
+        assert api("/api/mass")[1]["mass"]["padron"]["retiro_aplicado"] == 4
+        cod, j = api("/api/padron?numero=421264&retiro=0")
+        assert cod == 200 and j["footprint"] == fp and j["padron"]["retiro_aplicado"] == 0 and len(red.llamadas) == 4
+        cod, j = api("/api/padron?numero=421264&retiro=2,5")                                    # coma decimal
+        assert cod == 200 and j["padron"]["retiro_aplicado"] == 2.5 and len(red.llamadas) == 4
+        cod, j = api("/api/padron?numero=432478&retiro=3")                                      # otro padrón: consulta y aplica
+        assert cod == 200 and len(red.llamadas) == 8 and j["name"] == "Padrón 432478" and j["padron"]["retiro_aplicado"] == 3 and server.STATE["padron"]["numero"] == 432478
+        cod, j = api("/api/padron?numero=421264")                                               # sin retiro, vuelve a consultar
+        assert cod == 200 and len(red.llamadas) == 12 and j["padron"]["retiro_aplicado"] == 0
+        vers = api("/api/mass")[1]["version"]
+        for ruta, frase in (("?numero=abc", "entero positivo"), ("?numero=0", "entero positivo"), ("?numero=-5", "entero positivo"), ("", "entero positivo"),
+                            ("?numero=1234567890", "entero positivo"), ("?numero=421264&retiro=x", "entre 0 y 100"),
+                            ("?numero=421264&retiro=-1", "entre 0 y 100"), ("?numero=421264&retiro=101", "entre 0 y 100")):
+            cod, j2 = api("/api/padron" + ruta)
+            assert cod == 400 and j2["error"].startswith("Trazo:") and frase in j2["error"], (ruta, cod, j2)
+        assert len(red.llamadas) == 12 and api("/api/mass")[1]["version"] == vers              # un pedido que falla no cambia la masa
+        cod, j2 = api("/api/padron?numero=99999999")
+        assert cod == 404 and "no figura en el parcelario" in j2["error"] and j2["warnings"] == [] and api("/api/mass")[1]["version"] == vers
+        assert len(red.llamadas) == 13                                                          # (una sola petición: el padrón no existe)
+        PD.RED = Red(todo_cae=True)
+        cod, j2 = api("/api/padron?numero=421264")
+        assert cod == 502 and "Abrir DXF" in j2["error"] and api("/api/mass")[1]["version"] == vers
+        antes_consultar = PD.consultar
+        PD.consultar = lambda *a, **k: 1 / 0
+        try:
+            with contextlib.redirect_stderr(io.StringIO()):
+                cod, j2 = api("/api/padron?numero=421264")
+        finally:
+            PD.consultar = antes_consultar
+        assert cod == 500 and "ZeroDivisionError" in j2["error"] and "Abrir DXF" in j2["error"]
+        PD.RED = red
+        assert api("/api/padron?numero=421264&retiro=4")[0] == 200 and len(red.llamadas) == 13       # lo guardado sigue ahí (13: la del 99999999)
+        assert api("/api/reset", {})[0] == 200 and server.STATE["padron"] is None and api("/api/mass")[1]["mass"] is None
+        cod, j = api("/api/padron?numero=421264&retiro=4")                                      # tras «Nuevo» no queda nada guardado: consulta
+        assert cod == 200 and len(red.llamadas) == 17 and j["padron"]["retiro_aplicado"] == 4
+    finally:
+        PD.RED = original
+        srv.shutdown()
+        srv.server_close()
+        server.STATE.update(mass=None, result=None, padron=None)
+    assert PD.RED is PD.red_urllib and "engine.padron as _padron" in open(os.path.join(base, "server.py"), encoding="utf-8").read()
+    # ---- 11. la web: botón, funciones, panel de Normativa, avisos con su origen, proyecto
+    html = open(os.path.join(base, "web", "index.html"), encoding="utf-8").read()
+    js = html.split("<script>", 1)[1].split("</script>", 1)[0]
+    assert 'id="btnAbrirPadron"' in html and ">Abrir padrón…</button>" in html and 'onclick="abrirPadron()"' in html and "Solo el número de padrón sale de tu computadora" in html
+    assert html.index('id="btnAbrirDxf"') < html.index('id="btnAbrirPadron"') < html.index('onclick="guardarProyecto()"')
+    assert 'id="padronPanel"' in html and html.index('id="padronPanel"') < html.index('id="stdPanel"') and html.index('data-grupo="normativa" hidden') < html.index('id="padronPanel"')
+    for t in ("async function abrirPadron(", "async function cargarPadron(", "async function aplicarRetiroPadron(", "async function usarAlturaPadron(",
+              "function padronPanel(", "fetch(url)", "'/api/padron?numero='+n", "'/api/padron?numero='+padron.numero+'&retiro='+r",
+              "Número de padrón de Montevideo (se consulta por internet a la Intendencia; solo sale el número):", "let padron=null", "avisosOrigen='DXF'",
+              "avisosOrigen+': '+esc(w)", "(d.avisosOrigen||'DXF')+': '+x", "m.source==='padron'", "'__padron'", "Orientativo: no reemplaza al CITIM",
+              "informacionterritorial.montevideo.gub.uy/app/citim/", "Aplicar retiro frontal de ", "Quitar el retiro frontal", "Usar altura de ",
+              "FOS del edificio", "máximo orientativo", "padron:padron", "padron=m.padron&&typeof m.padron==='object'?m.padron:null"):
+        assert t in js or t in html, t
+    assert "if(padron) p.padron=padron" in js.split("function proyecto(){", 1)[1].split("\n", 1)[0]                     # el proyecto guarda el padrón…
+    assert "padron:p.padron||null" in js.split("function abrirProyecto(", 1)[1].split("\n", 1)[0] or "padron:p.padron||null" in js.split("function abrirProyecto(", 1)[1]
+    assert "padronPanel();" in js.split("function resumenPanel(){", 1)[1].split("\n", 1)[0]                           # se refresca con cada resultado y cada masa
+    assert "padron=null" in js.split("async function nuevo(){", 1)[1].split("\nfunction ", 1)[0].split("\n/*", 1)[0] and "'__padron'" in js.split("async function nuevo(){", 1)[1].split("\n/*", 1)[0]
+    assert "s.value==='__padron'" in js and "lote()" in js.split("function draw(){", 1)[1].split("\nfunction ", 1)[0] and "padron.retiro_aplicado>0" in js.split("function lote(){", 1)[1].split("\n", 1)[0]
+    assert "avisosDxf=(m.source==='dxf'||m.source==='padron')" in js
+    # y con node: el panel de Normativa, lote(), origenMasa y el informe con padrones reales
+    node = shutil.which("node")
+    if node:
+        def trozo(desde, hasta):
+            i = js.index(desde)
+            return js[i:js.index(hasta, i)]
+        previo = "\n".join([re.search(r"^const esc=.*$", js, re.M).group(0), re.search(r"^function areaPoly\(.*$", js, re.M).group(0),
+                            trozo("const fmtD=", "const H=s=>"), trozo("const INF_FUENTES=", "const INF_CSS="),
+                            trozo("function origenMasa(", "function setMass("), trozo("function origenInforme(", "function stdDiff("),
+                            trozo("function infAdvertencias(", "function infFuentes("), trozo("function infFuentes(", "function informeHtml("),
+                            trozo("function lote(){", "function fit("), trozo("const PADRON_CITIM", "function abrirProyecto(")])
+        arnes = """const fs = require('fs');
+const E = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+let padron = null, result = null, terreno = null, out = '';
+const $ = id => ({ set innerHTML(v) { out = v; }, get innerHTML() { return out; } });
+%s
+const paneles = E.casos.map(c => { padron = c.padron; result = c.result || null; padronPanel(); return out; });
+padron = E.casos[4].padron; const l4 = lote(); padron = E.casos[0].padron; const l0 = lote(); padron = null;
+const origen = origenMasa({ source: 'padron', name: 'Padrón 421264', padron: { numero: 421264 } });
+const inf = origenInforme({ origen: { v: '__padron' }, padron: { numero: 421264 } });
+const inf2 = origenInforme({ origen: { v: '__proyecto', nombre: 'Proyecto: x' }, padron: { numero: 421264 } });
+const inf3 = origenInforme({ origen: { v: '__proyecto', nombre: 'Proyecto: x' } });
+const adv = infAdvertencias({ avisosDxf: ['uno'], avisosOrigen: 'Padrón', result: { warnings: ['dos'] } }) + infAdvertencias({ avisosDxf: ['uno'], result: { warnings: [] } });
+const fuentes = infFuentes({ padron: E.casos[0].padron, avisoCostos: 'x' }) + '|' + infFuentes({ avisoCostos: 'x' });
+console.log(JSON.stringify({ paneles, l4, l0, origen, inf, inf2, inf3, adv, fuentes }));
+""" % previo
+        rr = lambda n, **k: PD.consultar(n, red=Red(**k))
+        cuadro = lambda a, b: {"footprint": [[0, 0], [a, 0], [a, b], [0, b]], "metrics": {"patio_area": 0}}
+        p421, p432, p9108 = r["padron"], r2["padron"], r4["padron"]
+        con_retiro = copy.deepcopy(o4["padron"])
+        malicioso = copy.deepcopy(p421)
+        malicioso["direcciones"][0]["calle"] = "<img src=x onerror=alert(1)>"
+        malicioso["normativa"]["categoria"]["valor"] = "<b>x</b>"
+        sin_norma = rr(421264, cae=("cat_suelo",))["padron"]
+        casos = [{"padron": p421},                                                        # 0) sin resultado: sin FOS del edificio
+                 {"padron": p421, "result": cuadro(10, 10)},                              # 1) 100 m² sobre 177: 56,5 % (verde)
+                 {"padron": p421, "result": cuadro(14, 10)},                              # 2) 140 m² sobre 177: 79,1 % (rojo)
+                 {"padron": p432, "result": cuadro(10, 10)},                              # 3) altura 27, sin retiro
+                 {"padron": con_retiro},                                                  # 4) con retiro aplicado
+                 {"padron": p9108},                                                       # 5) códigos: sin botones
+                 {"padron": sin_norma},                                                   # 6) sin normativa
+                 {"padron": malicioso},                                                   # 7) HTML en los datos
+                 {"padron": None}]                                                        # 8) sin padrón
+        with tempfile.TemporaryDirectory() as tmp:
+            open(os.path.join(tmp, "arnes.js"), "w", encoding="utf-8").write(arnes)
+            open(os.path.join(tmp, "entrada.json"), "w", encoding="utf-8").write(json.dumps({"casos": casos}))
+            p = subprocess.run([node, os.path.join(tmp, "arnes.js"), os.path.join(tmp, "entrada.json")], capture_output=True, text=True, encoding="utf-8")
+            assert p.returncode == 0, p.stderr
+        s = json.loads(p.stdout)
+        pa = s["paneles"]
+        texto = lambda h: re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", h.replace("&#39;", "'")))
+        for i, h in enumerate(pa):
+            assert "undefined" not in h and "NaN" not in h and "[object" not in h and "null" not in h, (i, re.findall(r".{30}(?:undefined|NaN|null).{20}", h)[:2])
+            assert h.count("<div") == h.count("</div>") and len(re.findall(r"<b[ >]", h)) == h.count("</b>") and h.count("<button") == h.count("</button>"), i
+        assert "Datos del padrón 421264" in pa[0] and "PEDRO FUENTES 1521 · SARA OTERMIN 3953" in pa[0]
+        assert "Superficie del lote (polígono)</span><b>176,6 m²" in pa[0] and "Superficie catastral</span><b>196 m²" in pa[0]
+        assert "Frentes: PEDRO FUENTES 12,9 m · SARA OTERMIN 18,9 m" in texto(pa[0]) and "Orientativo: no reemplaza al CITIM" in pa[0]
+        assert 'href="https://informacionterritorial.montevideo.gub.uy/app/citim/"' in pa[0] and 'target="_blank" rel="noopener"' in pa[0]
+        assert "Consulta del %s" % hoy in pa[0] and PD.FUENTE in pa[0]
+        for k, d in N.items():                                                            # una fila por dato, con etiqueta, valor, nota, fuente y fecha
+            assert "<span>%s</span>" % d["etiqueta"] in pa[0] and d["nota"] in pa[0] and ("<b style=\"text-align:right\">%s" % d["valor"]) in pa[0], k
+        assert pa[0].count("IM, GeoServer, capa ot_v_mdg_parcelas_cat_suelo · %s" % hoy) == 8 and "U <small" in pa[0] and "(urbano consolidado intermedio)" in pa[0]
+        assert 'onclick="aplicarRetiroPadron(4)"' in pa[0] and ">Aplicar retiro frontal de 4 m</button>" in pa[0] and "El lote tiene 2 frentes" in pa[0]
+        assert "Usar altura" not in pa[0] and "FOS del edificio" not in pa[0] and "Quitar el retiro" not in pa[0]            # 9-12: sin botón; sin resultado, sin FOS del edificio
+        assert "56,5 % de la parcela (máximo orientativo 60 %)" in pa[1] and "color:var(--ok)" in pa[1].split("FOS del edificio", 1)[1]
+        assert "79,1 % de la parcela (máximo orientativo 60 %)" in pa[2] and "color:var(--bad)" in pa[2].split("FOS del edificio", 1)[1]
+        assert "Datos del padrón 432478" in pa[3] and 'onclick="usarAlturaPadron(27)"' in pa[3] and ">Usar altura de 27 m</button>" in pa[3]
+        assert "Aplicar retiro" not in pa[3] and "El lote tiene" not in pa[3] and "43,1 % de la parcela (máximo orientativo 100 %)" in pa[3] and "Frente: DR JAVIER BARRIOS AMORIN 13,1 m" in texto(pa[3])
+        assert 'onclick="aplicarRetiroPadron(0)"' in pa[4] and ">Quitar el retiro frontal</button>" in pa[4] and "Retiro frontal aplicado: 4 m" in pa[4] and "Aplicar retiro frontal" not in pa[4]
+        assert "<button" not in pa[5] and "RET.ESP." in pa[5] and "ALT.ESP." in pa[5] and "código sin leyenda pública" in pa[5] and "AV 18 DE JULIO" in pa[5]
+        assert " · …" in pa[5] and "SAN JOSE" in pa[5] and len(r4["padron"]["direcciones"]) == 14                                # 14 puertas: se muestran 6
+        assert "No se pudo leer la normativa de este padrón" in pa[6] and "Datos del padrón 421264" in pa[6] and "<button" not in pa[6]
+        assert "<img" not in pa[7] and "<b>x</b>" not in pa[7] and "&#60;img src=x onerror=alert(1)&#62;" in pa[7] and "&#60;b&#62;x&#60;/b&#62;" in pa[7]
+        assert pa[8] == ""
+        assert s["l4"] == o4["padron"]["lote"] and s["l0"] is None                                                               # lote(): el lote entero solo con retiro
+        assert s["origen"] == {"v": "__padron", "t": "Padrón 421264", "b": "Lote del padrón 421264 (Intendencia de Montevideo)"}
+        assert s["inf"]["t"] == s["inf2"]["t"] == "Lote del padrón 421264 (Intendencia de Montevideo)" and "no reemplazan al CITIM" in s["inf"]["cert"]
+        assert s["inf3"]["t"] == "Proyecto: x"                                                                                    # un proyecto sin padrón sigue igual
+        assert "<li>Padrón: uno</li>" in s["adv"] and "<li>dos</li>" in s["adv"] and "<li>DXF: uno</li>" in s["adv"]
+        assert "del padrón 421264: " + PD.FUENTE in s["fuentes"] and "Orientativo: no reemplaza al CITIM" in s["fuentes"].split("|")[0] and "padrón" not in s["fuentes"].split("|")[1]
+        with tempfile.TemporaryDirectory() as tmp:
+            ruta = os.path.join(tmp, "programa.js")
+            open(ruta, "w", encoding="utf-8").write(js)
+            c = subprocess.run([node, "--check", ruta], capture_output=True, text=True, encoding="utf-8")
+            assert c.returncode == 0, c.stderr
+    else:
+        print("(sin node: se omite la ejecución del panel de Normativa del padrón)")
+
+if __name__ == "__main__":
+    test_abrir_padron(); print("OK87")
