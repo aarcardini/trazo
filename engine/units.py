@@ -940,9 +940,12 @@ def bedrooms_for(area):
     return P.bedrooms_for(area)
 
 
-def unit_rooms(u, params, pc=None, plate=None, ediciones=None):
-    """Distribuye una unidad (ver engine/plans.py) y devuelve el resultado en el marco local de la pieza. ediciones
-    (R5.7): [(k, cambio con puntos de mundo)]; se aplican los que caen en esta vivienda (en "ediciones", las k)."""
+ACCESO_CERCA = 0.5                                   # R5.13: hasta qué distancia del borde al pasillo común vale un acceso a mano
+
+
+def _marco_vivienda(u, params, pc=None):
+    """El marco de la vivienda de unit_rooms (x a lo largo de la fachada, v desde el pasillo común, v = 0 en su borde):
+    (ida, back, poly, entrada, punta, galeria, cw); ida y back pasan del marco de la pieza al de la vivienda y vuelta."""
     side = u["side"]
     cw = ancho_de(pc or u.get("_pc") or {}, params)    # R10.8: el ancho del pasillo de su tramo
     pw = params["party_wall"]
@@ -964,6 +967,41 @@ def unit_rooms(u, params, pc=None, plate=None, ediciones=None):
     poly = [ida(p) for p in u["poly_local"]]
     if refleja:
         poly = poly[::-1]
+    return ida, back, refleja, poly, entrada, punta, galeria, cw
+
+
+def _borde_pasillo(q, poly):
+    """R5.13: distancia del punto q (marco de la vivienda) a los bordes de poly sobre el pasillo común (v = 0); None si
+    la vivienda no tiene ninguno."""
+    out = None
+    for i, a in enumerate(poly):
+        b = poly[(i + 1) % len(poly)]
+        if abs(a[1]) > 0.05 or abs(b[1]) > 0.05 or abs(b[0] - a[0]) < 1e-6:
+            continue
+        t = max(0.0, min(1.0, (q[0] - a[0]) / (b[0] - a[0])))
+        d = math.hypot(q[0] - a[0] - t * (b[0] - a[0]), q[1])
+        out = d if out is None else min(out, d)
+    return out
+
+
+def acceso_cerca(u, params, pc, p):
+    """R5.13: (distancia, x) del punto de mundo p al borde de la vivienda u sobre el pasillo común, en el marco de la
+    vivienda (el de unit_rooms: x a lo largo de su fachada); None si no tiene ese borde. layout asigna cada acceso a mano
+    a la vivienda más cercana (hasta ACCESO_CERCA)."""
+    ida = _marco_vivienda(u, params, pc)
+    q = ida[0](G.to_local([p], pc["origin"], pc["angle"])[0])
+    d = _borde_pasillo(q, ida[3])
+    return None if d is None else (d, q[0])
+
+
+def unit_rooms(u, params, pc=None, plate=None, ediciones=None):
+    """Distribuye una unidad (ver engine/plans.py) y devuelve el resultado en el marco local de la pieza. ediciones
+    (R5.7): [(k, cambio con puntos de mundo)]; se aplican los que caen en esta vivienda (en "ediciones", las k). Un
+    cambio {"op": "acceso", "p"} (R5.13) vale si p cae a ACCESO_CERCA o menos del borde sobre el pasillo común (layout ya
+    lo asignó a la vivienda más cercana); el último manda y su x va a plans.layout_unit(..., acceso); el resultado trae
+    "acceso" (ver plans) y las k de todos los accesos que recibió."""
+    side = u["side"]
+    ida, back, refleja, poly, entrada, punta, galeria, cw = _marco_vivienda(u, params, pc)
     spec = next((m for m in params["unit_mix"] if m.get("name") == u["type"]), {})
     nb = int(spec["dorms"]) if spec.get("dorms") is not None else P.bedrooms_for(u.get("target") or u["area"])
     is_fac = None
@@ -1000,17 +1038,26 @@ def unit_rooms(u, params, pc=None, plate=None, ediciones=None):
                     return False
             return True
         is_fac.ventana = ventana
-    mias = []
+    mias, acceso, accesos = [], None, []
     if ediciones and pc is not None:                # R5.7: los cambios cuyo punto cae en esta vivienda, en su marco
         def marco(w):
             return ida(G.to_local([w], pc["origin"], pc["angle"])[0])
         for k, e in ediciones:
             q = marco(e["p"])
-            if G.point_in_poly(q, poly) or _dist_to_boundary(q, poly) < 0.05:
+            if e.get("op") == "acceso":            # R5.13: sobre el borde del pasillo común; el último pedido manda
+                d = _borde_pasillo(q, poly)
+                if d is not None and d <= ACCESO_CERCA:
+                    acceso = q[0]
+                    accesos.append(k)
+            elif G.point_in_poly(q, poly) or _dist_to_boundary(q, poly) < 0.05:
                 mias.append((k, dict(e, p=q, a=marco(e["a"]) if e.get("a") else None)))
     S = ST.merged(params.get("standards"))
     res = P.layout_unit(poly, nb, is_fac, S["vivienda"], S["equipamiento"], bool(spec.get("accesible")), mias,
-                        S["ventanas"], entrada, bool(spec.get("vestidor")), punta=punta)
+                        S["ventanas"], entrada, bool(spec.get("vestidor")), punta=punta, acceso=acceso)
+    if accesos:
+        res["ediciones"] = sorted(res["ediciones"] + accesos)
+        if res.get("acceso") and res["acceso"].get("x_medio") is not None:
+            res["acceso"]["medio_local"] = back((res["acceso"]["x_medio"], 0.0))   # la puerta de siempre, marco de la pieza
 
     def back_poly(pl):
         out = [back(p) for p in pl]

@@ -1,0 +1,39 @@
+# HANDOFF.md — estado entre sesiones
+
+Dice dónde estamos ahora. Cómo es el código está en `CLAUDE.md`; qué falta en general, en `ROADMAP.md`: no repetir ni uno ni otro.
+- Se lee al inicio de cada sesión, después de `CLAUDE.md`.
+- Se actualiza en el mismo commit que cierra cada tarea o abre cada PR, nunca después.
+- Al integrar un PR, si el handoff que trae ya no describe el estado real (por ejemplo, otro PR apilado sigue abierto), corregirlo en un commit chico directo a main antes de seguir.
+- Cada entrada lleva fecha. Lo cerrado se borra, no se tacha: el historial está en git.
+- Máximo unas 80 líneas; si crece, está repitiendo a `CLAUDE.md` o al `ROADMAP.md`.
+
+## 1. Estado del repositorio (23/10/2026)
+- `main` = v2.67 (545bde1): #82 (frentes calibrados, v2.65), #83 (informe de prefactibilidad, v2.66) y #84 (esquema en fila, v2.67) ya integrados.
+- PRs abiertos, en el orden en que se integran (los dos con base `main`, CI verde, esperan el «aceptá» del usuario):
+  1. **#86** `acceso-a-mano`: R5.13 primera etapa, v2.68, pruebas hasta OK84. Trae este archivo.
+  2. **#85** `circulacion-real`: «Circulación %» con la unión real + decisiones del 22/10 en el ROADMAP, v2.69, OK85. Al integrarlo después de #86 hay que mezclar `main` en la rama y resolver: `VERSION` 2.69, la cola de `tests/test_engine.py` con OK84 antes de OK85, el bloque «Novedades v2.69» arriba del v2.68 y los `version_motor` de `tests/golden/` con `python tests/regresion.py --actualizar` (solo cambian los sellos).
+
+## 2. Trabajo en curso (23/10/2026)
+- Ninguna tarea abierta fuera de los PRs de arriba.
+- **Base de tipologías:** el usuario busca más planos. Cuando mande un `.zip`: descomprimir en una carpeta nueva del scratchpad, pasar cada DXF por `python tools/ver_dxf.py`, organizar en `data/tipologias/` (DXF, nota por proyecto, filas en `indice.csv`; sin SVG ni PNG), regenerar con `python -m engine.tipologias` y `python tools/comparar_tipologias.py`, y abrir un PR como el #73.
+- Decisiones de R5.13 que no se vuelven a discutir: primera etapa = la entrada en una de las tres posiciones que el plano ya arma (punta x0, junto a la zona de noche, punta x1 al revés); la posición cualquiera es la segunda etapa y queda en el ROADMAP.
+
+## 3. Cola de tareas (23/10/2026), en el orden acordado
+1. **R5.12 Estancias editables en el plano** (`plans.py`, Fable): ficha por estancia, quitar y unir dormitorios como `room_edits`.
+2. **R1.6 Abrir padrón de Montevideo**: primero la investigación corta (qué servicio abierto publica la IM y si se consulta solo con stdlib); sin código hasta tener la respuesta.
+3. **R11.4 Entre medianeras con más de dos viviendas por piso** (`circulation.py` y `units.py`): pasillo contra una medianera y viviendas pasantes o con patio; aprovecha el esquema en fila de v2.67.
+4. **R5.8 Muros y tabiques con espesor** (L): tabiques interiores con espesor en los planos; antes de R7.1.
+5. **Reparto del mix con el frente de la segunda fachada** (`units.generate_unit_mix`; quedó fuera de v2.67): solo vale cuando se prioricen crujías simples y predios entre medianeras con franjas profundas.
+
+## 4. Decisiones pendientes del usuario (23/10/2026)
+- ¿La segunda etapa de R5.13 (la entrada en cualquier posición, corriendo la división día / noche) va antes de R5.12? Si sí, entra primera en la cola; si no, queda en el ROADMAP hasta que la pida.
+- Cerradas el 22/10/2026 y ya anotadas en el ROADMAP (no reabrir): costos por gama cerrados con estos datos; ingreso de oficinas, comercio y cocheras para más adelante, con los layouts de oficina; el tope del 25 % de monoambientes queda; sin ventanas hacia galerías ni corredores (solo a patios y frentes); GitHub Pages desestimado, se sigue en la red local; los avisos del motor siguen con punto decimal.
+
+## 5. Convenciones de sesión (23/10/2026), las que no están en `CLAUDE.md`
+- **Aceptación:** el usuario acepta con «aceptá» / «acepta» / «ya acepté», en general varios PRs juntos; se integran con `merge` (nunca squash ni rebase) en el orden de las versiones, con `expectedHeadSha`. Las ramas remotas ya integradas las borra el usuario en GitHub (desde la sesión da 403).
+- **Ramas apiladas:** una tarea por rama y PR; una rama que depende de otra abierta parte de ella y su PR lleva esa rama como base; al integrar la de abajo se retargetea la de arriba a `main` y se integra después. Cada rama toma la versión y el número de prueba (`print("OKnn")`) siguientes **en el orden previsto de integración**; la que se integra después mezcla `main` (o la rama de abajo) y resuelve: `VERSION` la mayor, la cola de pruebas en orden, «Novedades» del README con la más nueva arriba, `CLAUDE.md` y `ROADMAP.md` con las dos partes, `tests/golden/` con `--actualizar` solo si lo único que cambia es `version_motor`.
+- **Worktrees:** uno por tarea bajo `/tmp/claude-0/-home-user-trazo/<sesión>/scratchpad/<tarea>/repo` (`git worktree add -b <rama> ... origin/main`); se quitan al integrar. Nada se edita en `/home/user/trazo` fuera de `main`.
+- **Commits y PRs:** autor «Alejandro Arcardini <alejandro.arcardini@hotmail.com>»; cada commit termina con `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>` y `Claude-Session: https://claude.ai/code/session_01Xn3CHPSUh1Fmu67E7wjapc`; cada PR termina con «🤖 Generated with [Claude Code](https://claude.com/claude-code)», una línea en blanco y esa misma URL; un comentario en GitHub termina con `---` y `_Generated by [Claude Code](https://claude.ai/code)_`. Sin identificadores de modelo en commits, PRs ni código. El PR se escribe para un arquitecto: «Qué cambia», «Qué no incluye», «Cómo probarlo» (web y Rhino), «Pruebas» (las tres: `test_engine`, `test_rhino`, `regresion`) y la tabla antes / ahora cuando se mueven métricas.
+- **Agentes:** como máximo dos en paralelo, cada uno en su worktree, sin commit (el orquestador revisa, corre las pruebas, comete y abre el PR). Sonnet para lo aislado (web, servidor, herramientas, docs, métricas); Fable para `plans.py`, `units.py`, `equipamiento.py` y todo lo que toque el modelo de piezas. Dos agentes no tocan los mismos archivos; si uno cambia `web/index.html` o `layout.py`, el otro evita esos archivos salvo `VERSION`.
+- **Higiene:** servidores de prueba en un puerto libre (`TRAZO_PORT`), matados por PID, nunca `pkill -f`; archivos descargados o adjuntos en una carpeta nueva y vacía, leídos con `python -I`; capturas fuera del repo (`scratchpad/out/`).
+- **Costos de uso:** si la cuenta llega al límite mensual, el agente se corta y se retoma con `SendMessage` cuando el límite se reinicia (el trabajo en el worktree queda).
