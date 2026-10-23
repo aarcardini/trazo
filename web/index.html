@@ -308,7 +308,7 @@ let patiosGaleria=[];   // R3.8: por patio manual (mismo número que `patios`), 
 let terreno=null, terrenoUlt=null;   // terreno rectangular de la masa (frente, fondo, medianeras y retiros), si se creó con él; el último
 let result=null, samples={}, massVer=0, view=null, lastStage=null, drag=null, coresManual=[], externa=null;
 let avisosDxf=[];   // R1.5: lo que avisó el lector al abrir un DXF (se muestran con los avisos del resultado)
-let nombre='', abierto=null, VER='', ediciones=[], interiores=[];   // ediciones: cambios en las viviendas (R4.4), en orden; interiores: dentro de ellas (R5.7: tabiques interiores y puertas), en orden;   // nombre de la masa o del proyecto; proyecto o archivo abierto (vuelve desde el selector); versión del motor
+let nombre='', abierto=null, VER='', ediciones=[], interiores=[], modoAcceso=null;   // modoAcceso (R5.13): la vivienda cuya entrada se mueve con un clic («Mover la entrada…»)   // ediciones: cambios en las viviendas (R4.4), en orden; interiores: dentro de ellas (R5.7: tabiques interiores y puertas), en orden;   // nombre de la masa o del proyecto; proyecto o archivo abierto (vuelve desde el selector); versión del motor
 let mix=[{name:'Mono',area:33,percent:10,dorms:0},{name:'1 dorm',area:42,percent:55,dorms:1},{name:'2 dorm',area:62,percent:30,dorms:2},{name:'3 dorm',area:93,percent:5,dorms:3}];   // «Inversor» (R10.12): el mismo que DEFAULT_PARAMS['unit_mix'] del motor
 // Mixes predeterminados (REFERENCIAS.md, sección 4; superficies con muros de la base de tipologías). El primero es el inicial.
 const MIX_PRE={inversor:JSON.parse(JSON.stringify(mix)),
@@ -481,7 +481,7 @@ function draw(){ const gb=$('gb'); gb.innerHTML='';
   if(ue&&ue.paredes){ ue.paredes.forEach((t,k)=>{ const l=el('line',{x1:X(t.seg[0]),y1:Y(t.seg[0]),x2:X(t.seg[1]),y2:Y(t.seg[1]),stroke:'#0f9d76','stroke-width':5,'stroke-linecap':'round',opacity:.85,'data-pared':k,style:Math.abs(t.dir[0])>=Math.abs(t.dir[1])?'cursor:ew-resize':'cursor:ns-resize'});
     l.appendChild(el('title',{},'Tabique interior: arrástralo para agrandar o achicar las estancias')); gb.appendChild(l); });
    (ue.doors||[]).forEach((d,k)=>{ const l=el('line',{x1:X(d.p),y1:Y(d.p),x2:X(d.q),y2:Y(d.q),stroke:'#c2410c','stroke-width':7,'stroke-linecap':'round',opacity:.6,'data-puerta':k,style:'cursor:move'});
-    l.appendChild(el('title',{},'Puerta: arrástrala a lo largo de la pared; su ancho y hacia dónde abre, en la ficha')); gb.appendChild(l); }); }
+    l.appendChild(el('title',{},d.entry?'Puerta de entrada: arrástrala a lo largo del pasillo común para mover el acceso (la distribución se rehace con el hall ahí)':'Puerta: arrástrala a lo largo de la pared; su ancho y hacia dónde abre, en la ficha')); gb.appendChild(l); }); }
  }
  drawDims(gb); drawOverlay(); }
 /* ---------- cotas y escala gráfica ---------- */
@@ -583,7 +583,9 @@ function drawOverlay(){ const go=$('go'); go.innerHTML=''; if(!view) return; if(
  if(dragTab&&dragTab.moved&&result&&result.tabiques&&result.tabiques[dragTab.k]){ const t=result.tabiques[dragTab.k], q=t.seg.map(p=>[p[0]+t.dir[0]*dragTab.d,p[1]+t.dir[1]*dragTab.d]);   // tabique arrastrado
   go.appendChild(el('line',{x1:X(q[0]),y1:Y(q[0]),x2:X(q[1]),y2:Y(q[1]),stroke:'#2f6fed','stroke-width':3,'stroke-dasharray':'6 4','pointer-events':'none'}));
   et.push(...etqTab(t,dragTab)); }   // R4.13a: el frente de cada vecina, a cada lado
- if(dragIn&&dragIn.moved){ const sg=segIn(dragIn), r=dirIn(dragIn); if(sg&&r){ const q=sg.map(p=>[p[0]+r[0]*dragIn.d,p[1]+r[1]*dragIn.d]);   // tabique interior o puerta arrastrados
+ const ga=dragIn&&dragIn.moved&&dragIn.tipo==='acceso'?dragIn:modoAcceso&&!dragIn&&ptr?accesoVirtual(ptr):null, qa=ga&&puertaAcceso(ga);   // R5.13: la puerta de entrada corrida por el pasillo común (arrastrada, o donde la dejaría un clic) y a cuál de las tres posiciones va
+ if(qa){ go.appendChild(el('line',{x1:X(qa[0]),y1:Y(qa[0]),x2:X(qa[1]),y2:Y(qa[1]),stroke:'#c2410c','stroke-width':4,'stroke-dasharray':'6 4','pointer-events':'none'})); et.push(...etqAcceso(ga)); }
+ if(dragIn&&dragIn.moved&&dragIn.tipo!=='acceso'){ const sg=segIn(dragIn), r=dirIn(dragIn); if(sg&&r){ const q=sg.map(p=>[p[0]+r[0]*dragIn.d,p[1]+r[1]*dragIn.d]);   // tabique interior o puerta arrastrados
   go.appendChild(el('line',{x1:X(q[0]),y1:Y(q[0]),x2:X(q[1]),y2:Y(q[1]),stroke:dragIn.tipo==='pared'?'#0f9d76':'#c2410c','stroke-width':3,'stroke-dasharray':'6 4','pointer-events':'none'}));
   et.push(...(dragIn.tipo==='pared'?etqPared(dragIn):etqPuerta(dragIn))); } }   // R4.13a: el ancho de las estancias de cada lado, o la distancia de la puerta a las puntas de su tabique
  const pc=dragCore&&dragCore.moved?dragCore:flechas&&flechas.tipo==='nucleo'?flechas:null;   // núcleo arrastrado (o movido con las flechas): dónde va a quedar (el motor lo ajusta al pasillo)
@@ -701,8 +703,8 @@ function unitPanel(){ const c=$('ctx'); marcaExt=null; if(selCore!=null&&result&
   <div class="hint">${(u.graph?u.graph.edges:[]).map(e=>{const na=(u.rooms.find(r=>r.id===e.a)||{}).name||e.a, nb=(u.rooms.find(r=>r.id===e.b)||{}).name||e.b; return `${e.ok?'✓':'✗'} ${na} ${e.type==='abierto'?'↔':'⇢'} ${nb} <i>(${e.type})</i>`;}).join('<br>')}</div>
   <h2 style="margin:10px 0 4px">Comprobaciones (${ok}/${n})</h2>
   ${(u.checks||[]).map(x=>`<div class="${x.ok?'hint':'w'}">${x.info?'ℹ':x.ok?'✓':'⚠'} ${x.msg}</div>`).join('')}
-  <h2 style="margin:10px 0 4px">Editar vivienda${u.editada?' (editada)':''}${u.editada_dentro?' · cambiada por dentro':''}</h2><div class="hint">Arrastra sus tabiques con las vecinas (azules) para cambiar su ancho, o haz clic en uno y escribe el frente exacto de una de las dos; sus tabiques interiores (verdes) y sus puertas, para ajustarla por dentro.</div>
-  <button class="s" onclick="dividirVivienda()">Dividir en dos</button>${(result.tabiques||[]).map((t,k)=>t.a===u.id||t.b===u.id?`<button class="s" onclick="unirViviendas(${k})">Unir con ${t.a===u.id?t.b:t.a}</button>`:'').join('')}${extenderBotones(u)}${puertasPanel(u)}
+  <h2 style="margin:10px 0 4px">Editar vivienda${u.editada?' (editada)':''}${u.editada_dentro?' · cambiada por dentro':''}</h2><div class="hint">Arrastra sus tabiques con las vecinas (azules) para cambiar su ancho, o haz clic en uno y escribe el frente exacto de una de las dos; sus tabiques interiores (verdes) y sus puertas, para ajustarla por dentro. La puerta de entrada, por el pasillo común: la distribución se rehace con el hall ahí.</div>
+  <button class="s" onclick="dividirVivienda()">Dividir en dos</button>${(result.tabiques||[]).map((t,k)=>t.a===u.id||t.b===u.id?`<button class="s" onclick="unirViviendas(${k})">Unir con ${t.a===u.id?t.b:t.a}</button>`:'').join('')}${extenderBotones(u)}${accesoBotones(u)}${puertasPanel(u)}
   <button class="s" onclick="selUnit=null;draw();unitPanel()">Cerrar</button>`;
  c.style.display='block'; }
 
@@ -957,7 +959,7 @@ function descartarEdiciones(){ recordar('descartar los cambios de viviendas'); e
 /* ---------- extender una vivienda al espacio vacío (R4.13b) ---------- */
 let marcaExt=null;   // el punto del vacío que marca en la planta el botón «Extender…» mientras el mouse está sobre él
 const mTxt=v=>v.toFixed(2).replace('.',',')+' m';
-function ladoExtension(u,x){ const S=scpActual(), o=aLocal(centroidOf(u.poly),S), d=aLocal(x.p,S), dx=d[0]-o[0], dy=d[1]-o[1];   // hacia dónde queda el vacío en el SCP actual: izquierda/derecha o arriba/abajo; en diagonal (ambiguo), null
+function ladoExtension(u,x,desde){ const S=scpActual(), o=aLocal(desde||centroidOf(u.poly),S), d=aLocal(x.p,S), dx=d[0]-o[0], dy=d[1]-o[1];   // hacia dónde queda el vacío en el SCP actual: izquierda/derecha o arriba/abajo; en diagonal (ambiguo), null; desde (R5.13): otro punto de referencia en vez del centro de la vivienda
  if(Math.abs(dx)>=2*Math.abs(dy)) return dx<0?'la izquierda':'la derecha'; if(Math.abs(dy)>=2*Math.abs(dx)) return dy>0?'arriba':'abajo'; return null; }
 function extenderBotones(u){ return Object.entries(u.extensible||{}).map(([k,x])=>`<button class="s" onclick="extenderVivienda('${k}')" onmouseenter="marcarPunto(${JSON.stringify(x.p)})" onmouseleave="marcarPunto(null)" title="Estira la vivienda sobre la planta libre de ese lado (hasta la vecina, un pasillo o un núcleo)">Extender hacia ${ladoExtension(u,x)||k} (${mTxt(x.largo)})</button>`).join(''); }   // un botón por lado con planta libre (u.extensible: x0 o x1 de su franja); el punto se marca en la planta al pasar el mouse
 function extenderVivienda(k){ const u=result&&result.units?result.units.find(x=>x.id===selUnit):null, x=u&&u.extensible?u.extensible[k]:null; if(!x) return; marcarPunto(null); const c=centroidOf(u.poly);
@@ -980,10 +982,23 @@ function puertasPanel(u){ if(!(u.doors||[]).length) return ''; const nom=i=>i===
 function anchoPuerta(k,v){ const u=result.units.find(x=>x.id===selUnit), d=u&&u.doors[k]; if(d&&v>0) editarInterior({op:'puerta',p:mitad([d.p,d.q]),entre:[d.a,d.b],ancho:v},'cambiar el ancho de una puerta de '+u.id); }
 function invertirPuerta(k){ const u=result.units.find(x=>x.id===selUnit), d=u&&u.doors[k]; if(d) editarInterior({op:'puerta',p:mitad([d.p,d.q]),entre:[d.a,d.b],abre:true},'invertir una puerta de '+u.id); }
 function descartarInteriores(){ const u=result&&result.units.find(x=>x.id===selUnit); if(!u) return; recordar('descartar los cambios por dentro de '+u.id); interiores=interiores.filter(e=>!enPoli(e.p,u.poly)); run('plans',{keepView:true}); }
+/* ---------- acceso a mano (R5.13): la puerta de entrada se arrastra por el pasillo común, o «Mover la entrada…» y un clic sobre ese borde; el motor rehace el plano con el hall en la más cercana de las tres posiciones que sabe armar ---------- */
+const accesosDe=u=>interiores.filter(e=>e.op==='acceso'&&enPoli(e.p,u.poly));   // los accesos pedidos para la vivienda (su punto está sobre su borde al pasillo común)
+function esEntrada(g){ const u=result&&result.units.find(x=>x.id===g.u), d=u&&u.doors[g.k]; return !!(d&&d.entry); }
+function accesoBotones(u){ if(!(u.doors||[]).some(d=>d.entry)) return '';   // «Mover la entrada…» y, con un acceso pedido, «Quitar el acceso a mano»
+ return `<button class="s" onclick="moverEntrada()" title="Después, clic sobre el borde de la vivienda al pasillo común: la distribución se rehace con el hall en la más cercana de las tres posiciones que el plano sabe armar (una punta, junto a la zona de noche, la otra punta). La puerta de entrada también se arrastra">Mover la entrada…</button>`+(accesosDe(u).length?`<button class="s" onclick="quitarAcceso()" title="La entrada vuelve a donde la pone el motor">Quitar el acceso a mano</button>`:''); }
+function moverEntrada(){ const u=result&&result.units?result.units.find(x=>x.id===selUnit):null; if(!u) return; if(viewMode!=='plan') setView('plan'); modoAcceso=u.id; $('svg').style.cursor='crosshair'; $('tag').textContent='Mover la entrada de '+u.id+': clic sobre su borde al pasillo común (Esc cancela)'; drawOverlay(); }
+function salirAcceso(txt){ if(!modoAcceso) return; modoAcceso=null; $('svg').style.cursor=tool?'crosshair':'default'; $('tag').textContent=txt||'Listo'; drawOverlay(); }
+function quitarAcceso(){ const u=result&&result.units?result.units.find(x=>x.id===selUnit):null; if(!u||!accesosDe(u).length) return; recordar('quitar el acceso a mano de '+u.id); interiores=interiores.filter(e=>!(e.op==='acceso'&&enPoli(e.p,u.poly))); run('plans',{keepView:true}); }
+function puertaAcceso(g){ const sg=segIn(g), r=dirIn(g); return sg&&r?sg.map(p=>[p[0]+r[0]*g.d,p[1]+r[1]*g.d]):null; }   // la puerta de entrada corrida g.d por el borde
+function puntoAcceso(g){ const q=puertaAcceso(g); return q?mitad(q):null; }   // lo que se manda al motor: el medio de la puerta, sobre el borde al pasillo común
+function accesoVirtual(w){ const u=result&&result.units?result.units.find(x=>x.id===modoAcceso):null, k=u?(u.doors||[]).findIndex(d=>d.entry):-1; if(k<0) return null;   // el acceso que daría un clic en w: la puerta corrida hasta la proyección de w sobre su borde; lejos: a qué distancia del borde está w
+ const d=u.doors[k], L=Math.hypot(d.q[0]-d.p[0],d.q[1]-d.p[1])||1, r=[(d.q[0]-d.p[0])/L,(d.q[1]-d.p[1])/L], m=[(d.p[0]+d.q[0])/2,(d.p[1]+d.q[1])/2], g={u:u.id,tipo:'acceso',k,d:(w[0]-m[0])*r[0]+(w[1]-m[1])*r[1],moved:true,lejos:Math.abs((w[0]-m[0])*r[1]-(w[1]-m[1])*r[0])};
+ g.d=limitarAcceso(g); return g; }
 function edInfo(){ $('edInfo').innerHTML=ediciones.length?`${ediciones.length} cambio(s) en las viviendas (✎) · <button class="s" style="padding:0 6px" onclick="descartarEdiciones()">Descartar cambios</button>`:'Para editar una vivienda: clic en ella; arrastra sus tabiques (líneas azules) o haz clic en uno y escribe el frente exacto; «Dividir» y «Unir» están en su ficha.'; }
 
 /* ---------- herramientas ---------- */
-function setTool(t){ if(viewMode!=='plan') setView('plan'); if(tool==='line'&&t!=='line') finishLine(); curPatio=[]; tool=(tool===t)?null:t;
+function setTool(t){ modoAcceso=null; if(viewMode!=='plan') setView('plan'); if(tool==='line'&&t!=='line') finishLine(); curPatio=[]; tool=(tool===t)?null:t;
  document.querySelectorAll('[data-tool]').forEach(b=>b.classList.toggle('on',b.dataset.tool===tool||(b.dataset.tool==='addcore'&&tool==='delcore'))); medHover=null;   // R4.6: barra de dibujo
  $('svg').style.cursor=tool?'crosshair':'default'; $('svg').classList.toggle('conHerr',!!tool);
  $('tag').textContent=tool==='line'?'Polilínea: clic para cada vértice; doble clic o Enter para terminar':tool==='addcore'?'Haz clic cerca de un pasillo para añadir un núcleo':tool==='delcore'?'Haz clic sobre un núcleo para quitarlo':tool==='medianera'?'Haz clic sobre un borde de la planta para marcarlo o desmarcarlo como medianera':tool==='patio'?'Patio: clic en dos esquinas opuestas (se alinea con el edificio). Esc para terminar':tool==='scp'?scpTxt():'Listo'; curLine=[]; drawOverlay(); herramientaBar(); }
@@ -1129,9 +1144,24 @@ function bordeDePuerta(u,d){ const L=Math.hypot(d.q[0]-d.p[0],d.q[1]-d.p[1])||1,
 function etqPuerta(g){ const u=result&&result.units.find(x=>x.id===g.u), d=u&&u.doors[g.k], b=d&&bordeDePuerta(u,d); if(!b) return [];   // la distancia de cada borde de la puerta a las puntas de su tabique: «a | b»
  const L=Math.hypot(d.q[0]-d.p[0],d.q[1]-d.p[1])||1, r=[(d.q[0]-d.p[0])/L,(d.q[1]-d.p[1])/L], e=b[1]-b[0]<L+2*PUERTA_MARGEN?(b[0]+b[1]-L)/2:Math.max(b[0]+PUERTA_MARGEN,Math.min(b[1]-L-PUERTA_MARGEN,g.d));   // e: hasta donde la deja el motor (plans._editar_puerta)
  return [[[(d.p[0]+d.q[0])/2+r[0]*g.d,(d.p[1]+d.q[1])/2+r[1]*g.d],[med2(e-b[0])+' | '+med2(b[1]-L-e)+' m'],{lado:normalPantalla(d.p,d.q),mal:Math.abs(e-g.d)>=FRENO}]]; }
+function bordeVivienda(u,d){ const L=Math.hypot(d.q[0]-d.p[0],d.q[1]-d.p[1])||1, r=[(d.q[0]-d.p[0])/L,(d.q[1]-d.p[1])/L], nn=[-r[1],r[0]], t=P=>(P[0]-d.p[0])*r[0]+(P[1]-d.p[1])*r[1], h=P=>(P[0]-d.p[0])*nn[0]+(P[1]-d.p[1])*nn[1];   // R5.13: [t0, t1] (m desde d.p, a lo largo de la puerta de entrada): el borde de la vivienda al pasillo común, por donde se corre la entrada
+ const iv=[], m=[]; let c=null; u.poly.forEach((P,i)=>{ const Q=u.poly[(i+1)%u.poly.length]; if(Math.abs(h(P))<2e-3&&Math.abs(h(Q))<2e-3) iv.push([Math.min(t(P),t(Q)),Math.max(t(P),t(Q))]); });
+ iv.sort((a,b)=>a[0]-b[0]); iv.forEach(v=>{ if(c&&v[0]<=c[1]+0.05) c[1]=Math.max(c[1],v[1]); else { c=[v[0],v[1]]; m.push(c); } });   // los bordes sobre esa línea que se tocan son uno solo
+ return m.find(v=>v[0]<=0.05&&v[1]>=L-0.05)||null; }
+function limitarAcceso(g){ const u=result&&result.units.find(x=>x.id===g.u), d=u&&u.doors[g.k], b=d&&bordeVivienda(u,d); if(!b) return g.d;   // la puerta de entrada no sale del borde al pasillo común
+ const L=Math.hypot(d.q[0]-d.p[0],d.q[1]-d.p[1]); return Math.max(b[0],Math.min(b[1]-L,g.d)); }
+function posicionAcceso(u,d,b,x){ const L=Math.hypot(d.q[0]-d.p[0],d.q[1]-d.p[1])||1, r=[(d.q[0]-d.p[0])/L,(d.q[1]-d.p[1])/L], t=P=>(P[0]-d.p[0])*r[0]+(P[1]-d.p[1])*r[1];   // a cuál de las tres posiciones va la entrada pedida en x (m desde d.p), como plans.con_acceso: la más cercana entre la punta x0 (el hall en la punta: su puerta a medio hall del borde), la de siempre (u.acceso_medio, o la puerta actual) y la punta x1
+ const hh=(STD&&STD.vivienda&&STD.vivienda.hall?Math.max(STD.vivienda.hall.min_side,STD.vivienda.hall.typ[0]):1.4)/2, c={x0:b[0]+Math.min(hh,(b[1]-b[0])/2),medio:u.acceso_medio?t(u.acceso_medio):L/2,x1:b[1]-Math.min(hh,(b[1]-b[0])/2)};
+ let k='medio'; ['x0','x1'].forEach(q=>{ if(Math.abs(c[q]-x)<Math.abs(c[k]-x)) k=q; });   // a igual distancia, la de siempre
+ const fin=e=>[d.p[0]+r[0]*e,d.p[1]+r[1]*e], lado=k==='medio'?null:ladoExtension(u,{p:fin(k==='x0'?b[0]:b[1])},fin(k==='x0'?b[1]:b[0]));   // esa punta vista desde la otra: izquierda/derecha o arriba/abajo en el SCP actual
+ return {k,texto:'Entrada '+(k==='medio'?'junto a la zona de noche':'en la punta '+(lado?'de '+lado:k))}; }
+function etqAcceso(g){ const u=result&&result.units.find(x=>x.id===g.u), d=u&&u.doors[g.k], b=d&&bordeVivienda(u,d); if(!b) return [];   // R5.13: la etiqueta de la entrada arrastrada (o del clic): a cuál de las tres posiciones va a ir
+ const L=Math.hypot(d.q[0]-d.p[0],d.q[1]-d.p[1])||1, r=[(d.q[0]-d.p[0])/L,(d.q[1]-d.p[1])/L], pos=posicionAcceso(u,d,b,g.d+L/2);
+ return [[[(d.p[0]+d.q[0])/2+r[0]*g.d,(d.p[1]+d.q[1])/2+r[1]*g.d],[pos.texto],{lado:normalPantalla(d.p,d.q)}]]; }
 
 const svg=$('svg');
 svg.addEventListener('click',e=>{ if(!view||svg._skipClick) return;
+ if(modoAcceso){ const g=accesoVirtual(toWorld(e)); if(g&&g.lejos<=2){ const u=modoAcceso; salirAcceso(); return editarInterior({op:'acceso',p:puntoAcceso(g)},'mover la entrada de '+u); } salirAcceso('Mover la entrada: cancelado'); }   // R5.13: un clic a 2 m o menos del borde al pasillo común mueve la entrada; más lejos, cancela
  if(!tool){ if(!(e.target.closest&&e.target.closest('[data-tab]'))) selTab=null;   // R4.13b: el tabique elegido se suelta con un clic en otra cosa
   const tc=e.target.closest&&e.target.closest('[data-core]'); if(tc){ selCore=+tc.getAttribute('data-core'); selUnit=null; selPas=null; sinPatio(); draw(); unitPanel(); return; }
   const tp=e.target.closest&&e.target.closest('[data-pas]'); if(tp&&tp.getAttribute('data-pas')!==''){ selPas=+tp.getAttribute('data-pas'); selUnit=null; selCore=null; sinPatio(); draw(); unitPanel(); return; }   // R10.8: un tramo de pasillo
@@ -1156,7 +1186,7 @@ svg.addEventListener('wheel',e=>{ e.preventDefault(); const r=svg.getBoundingCli
 let panDrag=null, dragCore=null, dragTab=null, dragIn=null, dragPatio=null;
 svg.addEventListener('pointerdown',e=>{ if(tool||drag) return; if(e.target.closest&&e.target.closest('circle')) return;
  const ti=e.target.closest&&e.target.closest('[data-pared],[data-puerta]'); if(ti&&result&&selUnit){ const pa=ti.hasAttribute('data-pared');   // R5.7: un tabique interior o una puerta
-  dragIn={u:selUnit,tipo:pa?'pared':'puerta',k:+ti.getAttribute(pa?'data-pared':'data-puerta'),x:e.clientX,y:e.clientY,w:toWorld(e),d:0,moved:false}; return; }
+  dragIn={u:selUnit,tipo:pa?'pared':'puerta',k:+ti.getAttribute(pa?'data-pared':'data-puerta'),x:e.clientX,y:e.clientY,w:toWorld(e),d:0,moved:false}; if(!pa&&esEntrada(dragIn)) dragIn.tipo='acceso'; return; }   // R5.13: la puerta de entrada se arrastra por el pasillo común (el acceso a mano)
  const tt=e.target.closest&&e.target.closest('[data-tab]'); if(tt&&result&&result.tabiques){ dragTab={k:+tt.getAttribute('data-tab'),x:e.clientX,y:e.clientY,w:toWorld(e),d:0,moved:false}; const t0=result.tabiques[dragTab.k]; if(t0){ selTab={a:t0.a,b:t0.b,u:selUnit}; herramientaBar(true); drawOverlay(); } return; }   // R4.4: arrastrar un tabique (R4.13b: queda elegido; la barra trae el frente de sus dos viviendas)
  const tc=e.target.closest&&e.target.closest('[data-core]'); if(tc&&result&&result.cores){ dragCore={i:+tc.getAttribute('data-core'),x:e.clientX,y:e.clientY,w:toWorld(e),d:[0,0],moved:false}; return; }   // R4.3: arrastrar un núcleo
  const tpa=e.target.closest&&e.target.closest('[data-patio]'); if(tpa&&result&&result.patios&&e.button===0){ dragPatio={i:+tpa.getAttribute('data-patio'),x:e.clientX,y:e.clientY,w:toWorld(e),d:[0,0],moved:false,bloq:false}; return; }   // R4.12: arrastrar un patio
@@ -1164,6 +1194,7 @@ svg.addEventListener('pointerdown',e=>{ if(tool||drag) return; if(e.target.close
 window.addEventListener('pointermove',e=>{ if(!panDrag) return; const dx=e.clientX-panDrag.x, dy=e.clientY-panDrag.y; if(Math.abs(dx)+Math.abs(dy)>4) panDrag.moved=true; if(panDrag.moved){ pan=[panDrag.p[0]+dx,panDrag.p[1]+dy]; draw(); } });
 window.addEventListener('pointerup',e=>{ if(panDrag&&panDrag.moved){ svg._skipClick=true; setTimeout(()=>svg._skipClick=false,0); } panDrag=null; });
 svg.addEventListener('mousemove',e=>{ if(!view) return; const w=toWorld(e); ptr=w; ptrAlt=!!e.altKey;
+ if(modoAcceso){ drawOverlay(); return; }   // R5.13: dónde caería la entrada con un clic
  if(tool==='medianera'||tool==='scp'){ const h=edgeAt(e); if(h!==medHover){ medHover=h; drawOverlay(); } return; }
  if(tool==='patio'){ mouse=ajustar(w,null,e); drawOverlay(); return; }
  if(tool==='line'||tool==='addcore') { mouse=tool==='line'?ajustar(w,curLine[curLine.length-1],e):ajustar(w,null,e,{vertices:false}); drawOverlay(); } });
@@ -1194,7 +1225,7 @@ function datoEn(w){ if(!result||!footprint.length) return null; const m2=v=>(Mat
  return null; }
 function ocultarDato(){ $('dato').style.display='none'; }
 svg.addEventListener('mousemove',e=>{ const t=$('dato');
- if(!showTip||!view||tool||drag||dragCore||dragTab||dragIn||dragPatio||(panDrag&&panDrag.moved)||viewMode!=='plan') return ocultarDato();
+ if(!showTip||!view||tool||drag||dragCore||dragTab||dragIn||dragPatio||modoAcceso||(panDrag&&panDrag.moved)||viewMode!=='plan') return ocultarDato();
  const d=datoEn(toWorld(e)); if(!d) return ocultarDato();
  t.innerHTML='<b>'+esc(d[0])+'</b><br><span>'+esc(d[1])+'</span>'; t.style.display='block';
  const r=svg.parentNode.getBoundingClientRect(); let x=e.clientX-r.left+14, y=e.clientY-r.top+16;   // junto al cursor, sin salirse de la planta
@@ -1210,9 +1241,10 @@ svg.addEventListener('pointerup',e=>{ if(!dragTab) return; const g=dragTab; drag
  svg._skipClick=true; setTimeout(()=>svg._skipClick=false,0); const t=result.tabiques[g.k]; if(!t||Math.abs(g.d)<1e-3) return drawOverlay();
  const m=mitad(t.seg); editar({op:'tabique',p:m,a:[+(m[0]+t.dir[0]*g.d).toFixed(3),+(m[1]+t.dir[1]*g.d).toFixed(3)]},'mover el tabique entre '+t.a+' y '+t.b); });
 svg.addEventListener('pointermove',e=>{ if(!dragIn||!view) return; if(!dragIn.moved){ if(Math.abs(e.clientX-dragIn.x)+Math.abs(e.clientY-dragIn.y)<5) return; svg.setPointerCapture(e.pointerId); }
- const w=toWorld(e), r=dirIn(dragIn); if(!r) return; ptr=w; dragIn.moved=true; const sg=segIn(dragIn); dragIn.d=(w[0]-dragIn.w[0])*r[0]+(w[1]-dragIn.w[1])*r[1]; if(sg) dragIn.d=ajustarDesp(dragIn.tipo==='pared'?mitad(sg):sg[0],r,dragIn.d,e); drawOverlay(); });   // el tabique, perpendicular a sí mismo; la puerta, a lo largo de su pared
+ const w=toWorld(e), r=dirIn(dragIn); if(!r) return; ptr=w; dragIn.moved=true; const sg=segIn(dragIn); dragIn.d=(w[0]-dragIn.w[0])*r[0]+(w[1]-dragIn.w[1])*r[1]; if(sg) dragIn.d=ajustarDesp(dragIn.tipo==='pared'?mitad(sg):sg[0],r,dragIn.d,e); if(dragIn.tipo==='acceso') dragIn.d=limitarAcceso(dragIn); drawOverlay(); });   // el tabique, perpendicular a sí mismo; la puerta, a lo largo de su pared; la de entrada, sin salir del borde al pasillo común (R5.13)
 svg.addEventListener('pointerup',e=>{ if(!dragIn) return; const g=dragIn; dragIn=null; if(!g.moved) return;
  svg._skipClick=true; setTimeout(()=>svg._skipClick=false,0); const sg=segIn(g), r=dirIn(g); if(!sg||!r||Math.abs(g.d)<1e-3) return drawOverlay();
+ if(g.tipo==='acceso') return editarInterior({op:'acceso',p:puntoAcceso(g)},'mover la entrada de '+g.u);   // R5.13: la entrada, donde se soltó la puerta sobre el pasillo común
  const m=mitad(sg), op={op:g.tipo,p:m,a:[+(m[0]+r[0]*g.d).toFixed(3),+(m[1]+r[1]*g.d).toFixed(3)]};
  if(g.tipo==='puerta'){ const d=result.units.find(x=>x.id===g.u).doors[g.k]; op.entre=[d.a,d.b]; }   // la puerta, por sus estancias
  editarInterior(op,(g.tipo==='pared'?'mover un tabique de ':'mover una puerta de ')+g.u); });
@@ -1235,7 +1267,7 @@ window.addEventListener('keydown',e=>{ const t=e.target, texto=t.tagName==='TEXT
  if(atajoTecla(e,t,texto)){ e.preventDefault(); return; }   // R9.8: L N M P S (herramientas), D (cotas), Supr o Retroceso (quitan lo elegido) y Shift (Orto mientras se mantiene)
  if(FLECHAS[e.key]&&!texto&&t.tagName!=='SELECT'&&!(t.tagName==='INPUT'&&/^(radio|range)$/.test(t.type))&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&moverConFlechas(e)){ e.preventDefault(); return; }   // R4.12: las flechas mueven el patio o el núcleo elegido (Shift: diez pasos); en un campo de texto o una lista siguen siendo del campo
  if(!texto&&t.tagName!=='SELECT'&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&/^[0-9.,]$/.test(e.key)){ const f=document.querySelector('#herr [data-medida]'); if(f&&$('herr').style.display!=='none') f.focus(); }   // R4.13b: un número, con la barra con campos, va al primero (el carácter se escribe ahí)
- if(e.key==='Enter'&&tool==='line') finishLine(); if(e.key==='Escape'){ if(!tool&&selTab){ selTab=null; drawOverlay(); return; } if(!tool&&selPatio!=null){ if(texto) t.blur(); else { sinPatio(); draw(); unitPanel(); } return; } if(!tool&&!curLine.length&&!$('panel').hidden&&!texto) grupo(null); curLine=[]; curPatio=[]; if(tool) setTool(tool); drawOverlay(); }
+ if(e.key==='Enter'&&tool==='line') finishLine(); if(e.key==='Escape'){ if(modoAcceso){ salirAcceso('Mover la entrada: cancelado'); return; } if(!tool&&selTab){ selTab=null; drawOverlay(); return; } if(!tool&&selPatio!=null){ if(texto) t.blur(); else { sinPatio(); draw(); unitPanel(); } return; } if(!tool&&!curLine.length&&!$('panel').hidden&&!texto) grupo(null); curLine=[]; curPatio=[]; if(tool) setTool(tool); drawOverlay(); }
  if(e.key==='F7'||e.key==='F8'||e.key==='F9'){ e.preventDefault(); alternar({F7:'grilla',F8:'orto',F9:'snap'}[e.key]); } });   // F7 grilla, F8 Orto y F9 snap, como en AutoCAD (R4.6, R4.7)
 window.addEventListener('keyup',e=>{ if(e.key==='Shift') ortoShift(false); });   // R9.8: al soltar Shift, el Orto vuelve a como estaba
 window.addEventListener('blur',()=>ortoShift(false));   // y si la ventana pierde el foco con Shift apretado, el keyup no llega

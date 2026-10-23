@@ -21,11 +21,12 @@ from .circulation import (pick_frame, core_positions, side_for, _frame_for_poly,
                           _generate_circulation, nucleo_punto, medidas_nucleo, ancho_de)  # noqa: F401
 from .units import (_bisect_x, _chain_union, _is_rect, _segments, generate_unit_mix, metrics_mix, bedrooms_for,
                     unit_rooms, sin_solapes, editar_unidades, vecinas, formar_frentes, entradas, puntas_libres,
+                    acceso_cerca, ACCESO_CERCA,
                     extensibles, obstaculos,
                     superficie_con_muros)  # noqa: F401
 from .patios import (auto_patios, _anillo, split_blocks, make_patio_dark, _block_of, _block_of_line)  # noqa: F401
 
-VERSION = "2.67"
+VERSION = "2.68"
 
 DEFAULT_PARAMS = {
     # Masa
@@ -66,7 +67,8 @@ DEFAULT_PARAMS = {
     "patios": None,             # patios manuales: [[[x,y],...],...] en coordenadas de mundo
     "patios_galeria": None,     # R3.8: [bool] alineado con patios: el pasillo de borde del ala que da a ese patio va en el patio (galería)
     "unit_edits": None,         # R4.4: [{"op": "tabique"|"fusionar"|"dividir"|"extender", "p": [x,y], "a": [x,y]}] en orden (units.editar_unidades)
-    "room_edits": None,         # R5.7: [{"op": "pared", "p", "a"} | {"op": "puerta", "p", "entre"?, "a"?, "ancho"?, "abre"?}] en orden (plans)
+    "room_edits": None,         # R5.7: [{"op": "pared", "p", "a"} | {"op": "puerta", "p", "entre"?, "a"?, "ancho"?, "abre"?}
+                                #       | {"op": "acceso", "p"} (R5.13: la entrada donde está p, sobre el pasillo común)] en orden (plans)
     # R10.13: {"gama": baja|media|alta, "terreno": {"modo": total|m2, "valor"}, "superficie_terreno"?, "precio_venta": {"bajo",
     # "esperado", "alto"}, "margen_objetivo" (%), "balcones_m2"}; lo que falta sale de standards.costos (engine/factibilidad.py)
     "factibilidad": None,
@@ -629,11 +631,25 @@ def generate(data):
     res["units"] = []
     interiores = list(enumerate(params.get("room_edits") or []))     # R5.7: cambios dentro de las viviendas
     hechos_dentro = set()
+    acceso_de, sin_vivienda = {}, []      # R5.13: cada acceso a mano, a la vivienda cuyo borde al pasillo común está más cerca
+    if stage == "plans":                  # de su punto (hasta ACCESO_CERCA); el reparto de pared y puerta no cambia
+        for k, e in interiores:
+            if e.get("op") != "acceso" or not e.get("p"):
+                continue
+            cerca = [(c[0], i) for i, u in enumerate(units) for c in [acceso_cerca(u, u["_pb"], u["_pc"], e["p"])]
+                     if c is not None and c[0] <= ACCESO_CERCA]
+            if cerca:
+                acceso_de[k] = min(cerca)[1]
+            else:
+                sin_vivienda.append(k)
+        if sin_vivienda:
+            res["warnings"].append("Acceso a mano: %d punto(s) no caen junto al borde de ninguna vivienda sobre el pasillo "
+                                   "común; deshazlo (Ctrl+Z) o descarta los cambios por dentro" % len(sin_vivienda))
     # R10.8: superficie con muros (norma nacional, art. 3), con lo que cada vivienda tiene alrededor
     mundo = [W(u["_pc"], u["poly_local"]) for u in units]
     muros = superficie_con_muros(mundo, [[u["_plate"]] + list(u["_pb"].get("_huecos") or []) for u in units],
                                  res["corridors"], [c["poly"] for c in res["cores"]], params, S)
-    for u, um, am in zip(units, mundo, muros):
+    for i_u, (u, um, am) in enumerate(zip(units, mundo, muros)):
         pc = u["_pc"]
         eg, sc = u["egress"], u["saco"]
         status = "fail" if eg > params["egress_multi"] else ("saco" if sc > params["egress_single"] else "ok")
@@ -652,7 +668,8 @@ def generate(data):
         if any(m.get("vestidor") and m.get("name") == u["type"] for m in params["unit_mix"]):
             item["vestidor"] = True                         # R5.10: tipo del mix con vestidor
         if stage == "plans":
-            pl = unit_rooms(u, u["_pb"], pc, u["_plate"], [(k, e) for k, e in interiores if k not in hechos_dentro])
+            pl = unit_rooms(u, u["_pb"], pc, u["_plate"], [(k, e) for k, e in interiores if k not in hechos_dentro and
+                                                            (e.get("op") != "acceso" or acceso_de.get(k) == i_u)])
             P.superficie_vivienda(pl, am, S["vivienda"])     # R10.8: arts. 3 y 2, igual para todas las variantes
             hechos_dentro.update(pl["ediciones"])
             Wp = lambda pt, pc=pc: [round(v, 3) for v in G.to_world([pt], pc["origin"], pc["angle"])[0]]
@@ -681,9 +698,18 @@ def generate(data):
                 item["paredes"].append({"seg": [a, b], "dir": [round(-(b[1] - a[1]) / L, 6), round((b[0] - a[0]) / L, 6)]})
             if pl["ediciones"]:
                 item["editada_dentro"] = True
+            if pl.get("acceso"):                            # R5.13: el acceso a mano: la puerta de entrada que quedó
+                ent = next((d for d in pl["doors"] if d.get("entry")), None)
+                item["acceso"] = Wp(((ent["p"][0] + ent["q"][0]) / 2, (ent["p"][1] + ent["q"][1]) / 2)) if ent else None
+                item["acceso_posicion"] = pl["acceso"]["posicion"]
+                if pl["acceso"].get("medio_local"):          # la puerta de la posición de siempre (la web la usa al arrastrar)
+                    item["acceso_medio"] = Wp(pl["acceso"]["medio_local"])
+                if not pl["acceso"]["aplicado"]:
+                    res["warnings"].append("Acceso a mano de %s: %s; el plano queda como estaba (quita el acceso en su "
+                                           "ficha o deshazlo)" % (u["id"], pl["acceso"]["motivo"]))
             item["facade"], item["facade_min"] = pl["facade"], pl["facade_min"]
         res["units"].append(item)
-    faltan = len(interiores) - len(hechos_dentro) if stage == "plans" else 0
+    faltan = len(interiores) - len(hechos_dentro) - len(sin_vivienda) if stage == "plans" else 0
     if faltan > 0:
         res["warnings"].append("%d cambio(s) dentro de las viviendas no se pudieron aplicar: la planta cambió desde que los "
                                "hiciste. Descártalos (en la ficha de la vivienda) o deshazlos (Ctrl+Z)" % faltan)

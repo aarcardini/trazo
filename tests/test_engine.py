@@ -1,4 +1,4 @@
-import sys, os, json
+import sys, os, json, re
 sys.dont_write_bytecode = True   # sin __pycache__: tras revertir un cambio, nunca se prueba bytecode viejo
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from engine.layout import generate
@@ -6903,3 +6903,211 @@ console.log(JSON.stringify(salida));
 if __name__ == "__main__":
     test_promovida(); test_informe(); print("OK82")
     test_esquema_fila(); print("OK83")
+
+
+def test_acceso_a_mano():
+    """R5.13 (v2.68), primera etapa: el acceso de la vivienda a mano. Un cambio {"op": "acceso", "p"} en params.room_edits
+    (p: un punto de mundo sobre el borde de la vivienda al pasillo común) rehace el plano con la puerta de entrada en la
+    más cercana a p de las tres posiciones que el plano sabe armar: la punta x0 (el hall en x0), la de siempre (junto a la
+    zona de noche) y la punta x1 (el plano al revés). layout asigna cada acceso a la vivienda cuyo borde al pasillo común
+    está más cerca (hasta 0,5 m); un punto lejos de todas avisa y no cambia nada. Con «entrada» (R3.7: el pasillo común
+    solo sigue sobre una parte del borde) el acceso tiene que caer en ese tramo, si no se avisa y se ignora; también se
+    ignora, con aviso, si el plano con la entrada en la punta pierde cocina, dormitorios, estar o baño. La vivienda del
+    resultado trae «acceso» (el medio de la puerta de entrada, en mundo), «acceso_posicion» y «editada_dentro»; las
+    paredes y puertas editadas de la misma vivienda siguen valiendo. La web arrastra la puerta de entrada por el pasillo
+    común (o «Mover la entrada…» y un clic) y manda ese punto; «Quitar el acceso a mano» lo saca."""
+    import math, re, shutil, subprocess, tempfile
+    from engine import plans as P
+    base_dir = os.path.join(os.path.dirname(__file__), "..")
+    mitad = lambda a, b: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]
+    dist = lambda a, b: math.hypot(a[0] - b[0], a[1] - b[1])
+    entrada = lambda u: next(d for d in u["doors"] if d["entry"])
+    puerta = lambda u: mitad(entrada(u)["p"], entrada(u)["q"])
+    caja = lambda pl: tuple(round(v, 3) for v in (min(p[0] for p in pl), min(p[1] for p in pl), max(p[0] for p in pl), max(p[1] for p in pl)))
+
+    def borde(u):
+        """El borde de la vivienda al pasillo común (el que contiene su puerta de entrada): (a, b) en mundo."""
+        m = puerta(u)
+        for i, a in enumerate(u["poly"]):
+            b = u["poly"][(i + 1) % len(u["poly"])]
+            dx, dy, L = b[0] - a[0], b[1] - a[1], dist(a, b)
+            t = ((m[0] - a[0]) * dx + (m[1] - a[1]) * dy) / (L * L)
+            if 0 <= t <= 1 and abs((m[0] - a[0]) * dy - (m[1] - a[1]) * dx) / L < 0.02:
+                return a, b
+        raise AssertionError("la puerta de entrada no está sobre un borde de la vivienda")
+    # ---- plans: la x pedida elige entre las tres posiciones; en el medio, el mismo plano (idéntico)
+    rect = [(0, 0), (9.5, 0), (9.5, 8.0), (0, 8.0)]
+    fac = lambda p, q: abs(p[1] - 8.0) < 1e-6 and abs(q[1] - 8.0) < 1e-6
+    base = P.layout_unit(rect, 2, fac)
+    assert base.get("acceso") is None and P._x_entrada(base) is not None
+    r0, r1 = P.layout_unit(rect, 2, fac, acceso=0.3), P.layout_unit(rect, 2, fac, acceso=9.2)
+    assert r0["acceso"]["posicion"] == "x0" and r0["acceso"]["aplicado"] and P._x_entrada(r0) < 9.5 / 3, r0["acceso"]
+    assert r1["acceso"]["posicion"] == "x1" and r1["acceso"]["aplicado"] and P._x_entrada(r1) > 2 * 9.5 / 3, r1["acceso"]
+    assert abs(r0["acceso"]["x_medio"] - P._x_entrada(base)) < 1e-9 and abs(r0["acceso"]["x"] - P._x_entrada(r0)) < 1e-9
+    assert any(c.get("info") and c["msg"] == "Acceso a mano: la puerta de entrada en la punta x0 (plano derecho)" for c in r0["checks"])
+    assert any(c.get("info") and c["msg"] == "Acceso a mano: la puerta de entrada en la punta x1 (plano al revés)" for c in r1["checks"])
+    espejo = {r["id"]: caja([(9.5 - p[0], p[1]) for p in r["poly"]]) for r in r0["rooms"]}      # x1: el plano de x0 al revés
+    assert {r["id"]: caja(r["poly"]) for r in r1["rooms"]} == espejo
+    rm = P.layout_unit(rect, 2, fac, acceso=4.75)
+    assert rm["acceso"] == {"x": P._x_entrada(base), "x_medio": P._x_entrada(base), "posicion": "medio", "aplicado": True}
+    assert all(rm[k] == base[k] for k in base), [k for k in base if rm[k] != base[k]]
+    # con entrada (R3.7): fuera del tramo se avisa y queda el plano de siempre; dentro, vale
+    rect2 = [(0, 0), (12, 0), (12, 6.5), (0, 6.5)]
+    fac2 = lambda p, q: abs(p[1] - 6.5) < 1e-6 and abs(q[1] - 6.5) < 1e-6
+    con = P.layout_unit(rect2, 2, fac2, entrada=(10.0, 12.0))
+    fuera = P.layout_unit(rect2, 2, fac2, entrada=(10.0, 12.0), acceso=1.0)
+    assert not fuera["acceso"]["aplicado"] and fuera["acceso"]["motivo"] == "la entrada pedida no da al pasillo común"
+    assert fuera["rooms"] == con["rooms"] and fuera["doors"] == con["doors"] and fuera["score"] == con["score"]
+    assert any(c.get("info") and c["msg"] == "Acceso a mano: la entrada pedida no da al pasillo común; el plano queda como estaba"
+               for c in fuera["checks"])
+    dentro = P.layout_unit(rect2, 2, fac2, entrada=(10.0, 12.0), acceso=11.5)
+    assert dentro["acceso"]["aplicado"] and dentro["rooms"] == con["rooms"]
+    # ---- el edificio («Barra 60x16»): cerca de cada punta, la puerta en el tercio de esa punta; en el medio, idéntico
+    barra = [[0, 0], [60, 0], [60, 16], [0, 16]]
+    base = run(barra)
+    u = next(x for x in base["units"] if x["type"] == "2 dorm")
+    a, b = borde(u)
+    L = dist(a, b)
+    al = lambda t: [round(a[0] + (b[0] - a[0]) * t, 3), round(a[1] + (b[1] - a[1]) * t, 3)]
+    otras = lambda r: all(x["rooms"] == y["rooms"] and x["doors"] == y["doors"] and not y.get("editada_dentro") and "acceso" not in y
+                          for x, y in zip(base["units"], r["units"]) if x["id"] != u["id"])
+    sin_avisos = lambda r: not any("cceso" in w or "dentro de las viviendas" in w for w in r["warnings"])
+    posiciones = {}
+    for punta, otra in ((a, b), (b, a)):
+        p = al(0.3 / L) if punta is a else al(1 - 0.3 / L)
+        r = run(barra, room_edits=[{"op": "acceso", "p": p}])
+        v = next(x for x in r["units"] if x["id"] == u["id"])
+        assert v.get("editada_dentro") and v["acceso_posicion"] in ("x0", "x1") and otras(r) and sin_avisos(r), (v.get("acceso_posicion"), r["warnings"])
+        d = puerta(v)
+        assert dist(d, punta) < L / 3 and dist(d, otra) > 2 * L / 3 and dist(v["acceso"], d) < 2e-3, (d, punta, v["acceso"])
+        assert dist(v["acceso_medio"], puerta(u)) < 2e-3                      # la puerta de siempre, para la web
+        posiciones[v["acceso_posicion"]] = v
+    assert set(posiciones) == {"x0", "x1"}
+    assert any("plano al revés" in c["msg"] for c in posiciones["x1"]["checks"]) and \
+        any("plano derecho" in c["msg"] for c in posiciones["x0"]["checks"])
+    r = run(barra, room_edits=[{"op": "acceso", "p": al(0.5)}])
+    v = next(x for x in r["units"] if x["id"] == u["id"])
+    assert v["acceso_posicion"] == "medio" and v.get("editada_dentro") and dist(v["acceso"], puerta(u)) < 2e-3 and otras(r) and sin_avisos(r)
+    assert all(v[k] == u[k] for k in u if k not in ("editada_dentro",)), [k for k in u if v[k] != u[k]]
+    # un punto lejos de toda vivienda: aviso propio (no el de «la planta cambió») y nada cambia
+    r = run(barra, room_edits=[{"op": "acceso", "p": [500, 500]}])
+    assert any(w.startswith("Acceso a mano: 1 punto(s) no caen junto al borde de ninguna vivienda") for w in r["warnings"]), r["warnings"]
+    assert not any("no se pudieron aplicar" in w for w in r["warnings"])
+    assert all(x["rooms"] == y["rooms"] and x["doors"] == y["doors"] and "acceso" not in y for x, y in zip(base["units"], r["units"]))
+    # las paredes editadas de la misma vivienda siguen valiendo después del acceso (en cualquier orden)
+    pa = al(0.3 / L)
+    r1 = run(barra, room_edits=[{"op": "acceso", "p": pa}])
+    v1 = next(x for x in r1["units"] if x["id"] == u["id"])
+    w = v1["paredes"][0]
+    mw = mitad(*w["seg"])
+    pared = {"op": "pared", "p": mw, "a": [mw[0] + 0.3 * w["dir"][0], mw[1] + 0.3 * w["dir"][1]]}
+    for orden in ([{"op": "acceso", "p": pa}, pared], [pared, {"op": "acceso", "p": pa}]):
+        r2 = run(barra, room_edits=orden)
+        v2 = next(x for x in r2["units"] if x["id"] == u["id"])
+        a1, a2 = {x["id"]: x["area"] for x in v1["rooms"]}, {x["id"]: x["area"] for x in v2["rooms"]}
+        assert v2["acceso_posicion"] == v1["acceso_posicion"] and dist(puerta(v2), puerta(v1)) < 0.3 and sin_avisos(r2), r2["warnings"]
+        assert max(abs(a2[i] - a1[i]) for i in a1) > 0.3 * 0.9 and abs(sum(a2.values()) - sum(a1.values())) < 0.3
+    # dos accesos en la misma vivienda: manda el último
+    r3 = run(barra, room_edits=[{"op": "acceso", "p": al(0.3 / L)}, {"op": "acceso", "p": al(1 - 0.3 / L)}])
+    v3 = next(x for x in r3["units"] if x["id"] == u["id"])
+    assert v3["acceso_posicion"] == posiciones["x1"]["acceso_posicion"] if dist(puerta(posiciones["x1"]), b) < L / 3 else "x0"
+    assert sin_avisos(r3)
+    # ---- la L: la vivienda de la esquina (U05, la franja del ala oeste baja hasta su tabique) entra por el pasillo que
+    # queda (R3.7, «entrada»: la punta este de su borde): el acceso fuera de ese tramo avisa y no cambia nada; dentro, vale
+    s = json.load(open(os.path.join(base_dir, "samples", "L.json"), encoding="utf-8"))
+    r = run(s["footprint"], h=s["height"])
+    xs_ = lambda u: [p[0] for p in u["poly"]]
+    ys_ = lambda u: [p[1] for p in u["poly"]]
+    u05 = next(x for x in r["units"] if abs(min(xs_(x)) - 0.35) < 0.01 and abs(min(ys_(x)) - 0.35) < 0.01 and max(ys_(x)) < 6.5)
+    e5 = entrada(u05)
+    assert abs(e5["p"][1] - max(ys_(u05))) < 0.01 and min(e5["p"][0], e5["q"][0]) > max(xs_(u05)) - 2.2    # ya en la punta del tramo
+    p_fuera, p_dentro = [min(xs_(u05)) + 0.5, max(ys_(u05))], [max(xs_(u05)) - 0.5, max(ys_(u05))]
+    rf = run(s["footprint"], h=s["height"], room_edits=[{"op": "acceso", "p": p_fuera}])
+    vf = next(x for x in rf["units"] if x["id"] == u05["id"])
+    assert vf["acceso_posicion"] is None and vf.get("editada_dentro") and vf["rooms"] == u05["rooms"] and vf["doors"] == u05["doors"]
+    assert dist(vf["acceso"], puerta(u05)) < 2e-3 and [x["id"] for x in rf["units"] if x.get("editada_dentro")] == [u05["id"]]
+    assert any(w == "Acceso a mano de %s: la entrada pedida no da al pasillo común; el plano queda como estaba (quita el acceso "
+               "en su ficha o deshazlo)" % u05["id"] for w in rf["warnings"]), rf["warnings"]
+    assert not any("no se pudieron aplicar" in w for w in rf["warnings"])
+    rd = run(s["footprint"], h=s["height"], room_edits=[{"op": "acceso", "p": p_dentro}])
+    vd = next(x for x in rd["units"] if x["id"] == u05["id"])
+    assert vd["acceso_posicion"] is not None and sin_avisos(rd) and dist(puerta(vd), p_dentro) < 1.0
+    # ---- web: la puerta de entrada se arrastra por el pasillo común y pasa por editarInterior con op 'acceso'; los botones;
+    # el modo de un clic; la etiqueta en vivo; Esc y las herramientas lo cierran; proyecto y deshacer, como los demás cambios
+    html = open(os.path.join(base_dir, "web", "index.html"), encoding="utf-8").read()
+    js = html.split("<script>", 1)[1].split("</script>", 1)[0]
+
+    def cuerpo(nombre):
+        ini = js.index("function %s(" % nombre)
+        fin = min(k for k in (js.find("\nfunction ", ini + 1), js.find("\nasync function ", ini + 1), js.find("\n/*", ini + 1),
+                              js.find("\nconst ", ini + 1), len(js)) if k >= 0)
+        return js[ini:fin]
+    for t in ("function accesoBotones(", "function moverEntrada(", "function salirAcceso(", "function quitarAcceso(",
+              "function etqAcceso(", "function posicionAcceso(", "function bordeVivienda(", "function limitarAcceso(",
+              "function accesoVirtual(", "function puntoAcceso(", "const accesosDe=", "Mover la entrada…", "Quitar el acceso a mano",
+              "if(!pa&&esEntrada(dragIn)) dragIn.tipo='acceso';", "if(dragIn.tipo==='acceso') dragIn.d=limitarAcceso(dragIn);",
+              "if(g.tipo==='acceso') return editarInterior({op:'acceso',p:puntoAcceso(g)},'mover la entrada de '+g.u);",
+              "${extenderBotones(u)}${accesoBotones(u)}${puertasPanel(u)}", "'Entrada '+(k==='medio'?'junto a la zona de noche':'en la punta '+(lado?'de '+lado:k))"):
+        assert t in js, t
+    assert "et.push(...etqAcceso(ga))" in cuerpo("drawOverlay") and "accesoVirtual(ptr)" in cuerpo("drawOverlay")
+    assert "modoAcceso=null;" in cuerpo("setTool") and "salirAcceso('Mover la entrada: cancelado')" in js.split("if(e.key==='Escape'){", 1)[1].split("\n", 1)[0]
+    clic = js.split("svg.addEventListener('click',e=>{", 1)[1].split("\n if(!tool){", 1)[0]
+    assert "if(modoAcceso){" in clic and "editarInterior({op:'acceso',p:puntoAcceso(g)},'mover la entrada de '+u)" in clic and "g.lejos<=2" in clic
+    assert "recordar('quitar el acceso a mano of" not in js and "recordar('quitar el acceso a mano de '+u.id)" in cuerpo("quitarAcceso")
+    assert "interiores=interiores.filter(e=>!(e.op==='acceso'&&enPoli(e.p,u.poly)))" in cuerpo("quitarAcceso")
+    assert "||dragPatio||modoAcceso||(panDrag&&panDrag.moved)" in js                        # el dato al pasar no aparece en ese modo
+    assert "modoAcceso" in js.split("let nombre=", 1)[1].split("\n", 1)[0]                   # declarado con el estado (antes de drawOverlay)
+    node = shutil.which("node")
+    if not node:
+        print("(sin node: se omiten «node --check» del programa de la página y la etiqueta contra el motor)")
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        ruta = os.path.join(tmp, "programa.js")
+        open(ruta, "w", encoding="utf-8").write(js)
+        c = subprocess.run([node, "--check", ruta], capture_output=True, text=True, encoding="utf-8")
+        assert c.returncode == 0, c.stderr
+        # la etiqueta en vivo dice la posición que después elige el motor (en «Barra 60x16», cerca de cada punta y en el medio)
+        previas = "\n".join([cuerpo(n) for n in ("bordeVivienda", "posicionAcceso", "ladoExtension", "centroidOf")] +
+                            [re.search(r"^const %s=.*$" % n, js, re.M).group(0) for n in ("aLocal",)])
+        arnes = """const fs = require('fs');
+const E = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+let result = E.result, STD = null, scp = { o: [0, 0], a: 0 };
+const scpActual = () => scp;
+%s
+console.log(JSON.stringify(E.casos.map(c => { const u = result.units.find(x => x.id === c.u), d = u.doors.find(x => x.entry), b = bordeVivienda(u, d);
+  const L = Math.hypot(d.q[0] - d.p[0], d.q[1] - d.p[1]), r = [(d.q[0] - d.p[0]) / L, (d.q[1] - d.p[1]) / L];
+  return posicionAcceso(u, d, b, (c.p[0] - d.p[0]) * r[0] + (c.p[1] - d.p[1]) * r[1]); })));
+""" % previas
+        open(os.path.join(tmp, "arnes.js"), "w", encoding="utf-8").write(arnes)
+        casos = [{"u": u["id"], "p": p} for p in (al(0.3 / L), al(0.5), al(1 - 0.3 / L))]
+        open(os.path.join(tmp, "entrada.json"), "w", encoding="utf-8").write(json.dumps({"result": base, "casos": casos}))
+        p = subprocess.run([node, os.path.join(tmp, "arnes.js"), os.path.join(tmp, "entrada.json")], capture_output=True, text=True, encoding="utf-8")
+        assert p.returncode == 0, p.stderr
+        etiquetas = json.loads(p.stdout)
+        motor = [next(x for x in run(barra, room_edits=[{"op": "acceso", "p": c["p"]}])["units"] if x["id"] == u["id"])["acceso_posicion"] for c in casos]
+        assert [e["k"] for e in etiquetas] == motor, (etiquetas, motor)
+        assert etiquetas[1]["texto"] == "Entrada junto a la zona de noche" and all(e["texto"].startswith("Entrada en la punta de la ") for e in (etiquetas[0], etiquetas[2]))
+        assert {e["texto"] for e in (etiquetas[0], etiquetas[2])} == {"Entrada en la punta de la izquierda", "Entrada en la punta de la derecha"}
+
+def test_handoff():
+    """HANDOFF.md (23/10/2026): el estado entre sesiones vive en la raíz del repositorio, empieza con sus reglas de uso,
+    tiene sus cinco secciones en orden y CLAUDE.md manda leerlo al empezar y actualizarlo al cerrar cada tarea."""
+    raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    ruta = os.path.join(raiz, "HANDOFF.md")
+    assert os.path.isfile(ruta), "falta HANDOFF.md en la raíz del repositorio"
+    h = open(ruta, encoding="utf-8").read()
+    assert h.startswith("# HANDOFF.md")
+    assert "Se lee al inicio de cada sesión" in h and "mismo commit" in h
+    secciones = ["## 1. Estado del repositorio", "## 2. Trabajo en curso", "## 3. Cola de tareas",
+                 "## 4. Decisiones pendientes del usuario", "## 5. Convenciones de sesión"]
+    pos = [h.find(sec) for sec in secciones]
+    assert all(p >= 0 for p in pos) and pos == sorted(pos), pos
+    for sec in secciones:            # cada entrada lleva fecha
+        assert re.search(re.escape(sec) + r"[^\n]*\(\d{2}/\d{2}/\d{4}\)", h), sec
+    assert len(h.splitlines()) <= 100, "HANDOFF.md creció demasiado: está repitiendo a CLAUDE.md o al ROADMAP.md"
+    c = open(os.path.join(raiz, "CLAUDE.md"), encoding="utf-8").read()
+    assert "`HANDOFF.md`" in c and "al cerrar cada tarea" in c
+
+
+if __name__ == "__main__":
+    test_acceso_a_mano(); test_handoff(); print("OK84")
