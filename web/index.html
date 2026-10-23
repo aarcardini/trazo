@@ -94,7 +94,7 @@ table.fz th,table.fz td{font-size:12px}table.fz th:not(:first-child),table.fz td
   <header><b>Proyecto</b><small>Nuevo, abrir y guardar; la masa abierta, variantes y exportar.</small><button class="x" onclick="grupo(null)" title="Cerrar (Esc)">×</button></header>
   <div class="cuerpo">
    <h2>Archivo</h2>
-   <button class="s" onclick="nuevo()" title="Borra la masa, las polilíneas, los núcleos, las medianeras, las variantes y el resultado; conserva medidas, mix y colores">Nuevo (en blanco)</button><button class="s" onclick="$('archivoProyecto').click()" title="Abre un proyecto guardado (.trazo.json) o una masa suelta (.json)">Abrir proyecto…</button><button class="s" id="btnAbrirDxf" onclick="$('archivoDxf').click()" title="Abre un DXF de AutoCAD o Revit: toma la polilínea cerrada de la capa Trazo_Terreno (o la más grande del dibujo) como masa, y las capas Trazo_Centerline, Trazo_Cores, Trazo_Medianeras y Trazo_Patios como las de Rhino">Abrir DXF…</button><button class="s" onclick="guardarProyecto()" title="Guarda en un archivo la masa, las polilíneas, los núcleos, las medianeras, los patios, el mix, los parámetros y las medidas que cambiaste">Guardar proyecto</button><input type="file" id="archivoProyecto" accept=".json,application/json" style="display:none" onchange="leerProyecto(this)"><input type="file" id="archivoDxf" accept=".dxf" style="display:none" onchange="leerDxf(this)">
+   <button class="s" onclick="nuevo()" title="Borra la masa, las polilíneas, los núcleos, las medianeras, las variantes y el resultado; conserva medidas, mix y colores">Nuevo (en blanco)</button><button class="s" onclick="$('archivoProyecto').click()" title="Abre un proyecto guardado (.trazo.json) o una masa suelta (.json)">Abrir proyecto…</button><button class="s" id="btnAbrirDxf" onclick="$('archivoDxf').click()" title="Abre un DXF de AutoCAD o Revit: toma la polilínea cerrada de la capa Trazo_Terreno (o la más grande del dibujo) como masa, y las capas Trazo_Centerline, Trazo_Cores, Trazo_Medianeras y Trazo_Patios como las de Rhino">Abrir DXF…</button><button class="s" id="btnAbrirPadron" onclick="abrirPadron()" title="Consulta por internet el parcelario de la Intendencia de Montevideo: escribes el número de padrón y trae el polígono del lote, propone las medianeras (los lados con vecino) y muestra los parámetros urbanísticos de la Intendencia (retiro, altura, FOS), que son orientativos. Solo el número de padrón sale de tu computadora">Abrir padrón…</button><button class="s" onclick="guardarProyecto()" title="Guarda en un archivo la masa, las polilíneas, los núcleos, las medianeras, los patios, el mix, los parámetros y las medidas que cambiaste">Guardar proyecto</button><input type="file" id="archivoProyecto" accept=".json,application/json" style="display:none" onchange="leerProyecto(this)"><input type="file" id="archivoDxf" accept=".dxf" style="display:none" onchange="leerDxf(this)">
    <h2>Masa abierta</h2>
    <label>Ejemplo <select id="sample"></select></label>
    <div id="rhinoBadge" class="hint">Esperando masa de Rhino… (o abre un DXF, o usa un ejemplo)</div>
@@ -213,6 +213,7 @@ table.fz th,table.fz td{font-size:12px}table.fz th:not(:first-child),table.fz td
  <div class="grupo" data-grupo="normativa" hidden>
   <header><b>Normativa</b><small>Medidas mínimas y típicas de la vivienda, el núcleo y el predio.</small><button class="x" onclick="grupo(null)" title="Cerrar (Esc)">×</button></header>
   <div class="cuerpo">
+   <div id="padronPanel"></div>
    <div class="hint">Mínimos: Normativa Nacional de Edificación, Higiene de la Vivienda (2016), Bomberos IT 19, IM ductos de ascensor, Dec. 406/988; equipamiento: módulos habituales (Neufert). Detalle y fuentes en STANDARDS.md.</div>
    <div id="stdPanel"></div>
   </div>
@@ -307,7 +308,8 @@ let footprint=[[0,0],[60,0],[60,16],[0,16]], centerlines=[], curLine=[], tool=nu
 let patiosGaleria=[];   // R3.8: por patio manual (mismo número que `patios`), si lleva el pasillo del ala en el patio (galería)
 let terreno=null, terrenoUlt=null;   // terreno rectangular de la masa (frente, fondo, medianeras y retiros), si se creó con él; el último
 let result=null, samples={}, massVer=0, view=null, lastStage=null, drag=null, coresManual=[], externa=null;
-let avisosDxf=[];   // R1.5: lo que avisó el lector al abrir un DXF (se muestran con los avisos del resultado)
+let avisosDxf=[], avisosOrigen='DXF';   // R1.5: lo que avisó el lector al abrir un DXF (se muestran con los avisos del resultado); R1.6: o el padrón (avisosOrigen, el prefijo)
+let padron=null;   // R1.6: los datos del padrón de Montevideo abierto (m.padron: fuente, fecha, áreas, frentes, el lote y la normativa), o null
 let nombre='', abierto=null, VER='', ediciones=[], interiores=[], modoAcceso=null;   // modoAcceso (R5.13): la vivienda cuya entrada se mueve con un clic («Mover la entrada…»)   // ediciones: cambios en las viviendas (R4.4), en orden; interiores: dentro de ellas (R5.7: tabiques interiores y puertas), en orden;   // nombre de la masa o del proyecto; proyecto o archivo abierto (vuelve desde el selector); versión del motor
 let mix=[{name:'Mono',area:33,percent:10,dorms:0},{name:'1 dorm',area:42,percent:55,dorms:1},{name:'2 dorm',area:62,percent:30,dorms:2},{name:'3 dorm',area:93,percent:5,dorms:3}];   // «Inversor» (R10.12): el mismo que DEFAULT_PARAMS['unit_mix'] del motor
 // Mixes predeterminados (REFERENCIAS.md, sección 4; superficies con muros de la base de tipologías). El primero es el inicial.
@@ -374,7 +376,8 @@ function runCirc(){ return run(lastStage&&lastStage!=='massing'?lastStage:'corri
 
 /* ---------- geometría de la vista ---------- */
 let zoom=1, pan=[0,0];
-function lote(){ return terreno?[[0,0],[terreno.frente,0],[terreno.frente,terreno.fondo],[0,terreno.fondo]]:null; }   // el terreno, si la masa salió de él
+function lote(){ if(padron&&padron.retiro_aplicado>0&&Array.isArray(padron.lote)&&padron.lote.length>2) return padron.lote;   // R1.6: el lote del padrón entero, mientras haya un retiro frontal aplicado
+ return terreno?[[0,0],[terreno.frente,0],[terreno.frente,terreno.fondo],[0,terreno.fondo]]:null; }   // el terreno, si la masa salió de él
 function fit(){ const todo=footprint.concat(lote()||[]), xs=todo.map(p=>p[0]),ys=todo.map(p=>p[1]); const x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys); const W=$('svg').clientWidth||800,H=$('svg').clientHeight||600,m=50,mt=62,mb=82;   // arriba, la vista y las capas; abajo, la barra de dibujo
  const s=Math.min((W-2*m)/(x1-x0||1),(H-mt-mb)/(y1-y0||1)); view={s,ox:m-x0*s+((W-2*m)-(x1-x0)*s)/2,oy:H-mb+y0*s-((H-mt-mb)-(y1-y0)*s)/2};
  const cxs=W/2, cys=H/2; view.s*=zoom; view.ox=cxs+(view.ox-cxs)*zoom+pan[0]; view.oy=cys+(view.oy-cys)*zoom+pan[1]; }
@@ -1381,7 +1384,7 @@ function herramientaBar(auto){ const h=$('herr'); $('tag').style.visibility=tool
 function quitarMedianeras(){ if(medianeras.length) recordar('quitar las medianeras'); medianeras=[]; renderMeds(); draw(); if(lastStage) run(lastStage,{keepView:true}); }
 function capas(){ const ks=['showGraph','showEquip','showDims','showEvac','showTip']; $('nCapas').textContent=ks.filter(k=>$(k).checked).length+' de '+ks.length; }
 function verTodo(v){ const t=$('todo'); t.hidden=v!=null?!v:!t.hidden; $('btnTodo').textContent=t.hidden?'Ver todo ›':'Ver menos ‹'; }
-function resumenPanel(){ fzResultado(); const e=$('resumen'), m=result&&result.metrics, mx=m&&m.mix; if(!m||!mx){ e.innerHTML='<div class="hint">Genera el mix o los planos para ver el resumen.</div>'+(m&&m.gfa?`<div class="k"><span>GFA</span><b>${m.gfa} m²</b></div><div class="k"><span>Plantas</span><b>${m.stories}</b></div>`:''); return; }
+function resumenPanel(){ fzResultado(); padronPanel(); const e=$('resumen'), m=result&&result.metrics, mx=m&&m.mix; if(!m||!mx){ e.innerHTML='<div class="hint">Genera el mix o los planos para ver el resumen.</div>'+(m&&m.gfa?`<div class="k"><span>GFA</span><b>${m.gfa} m²</b></div><div class="k"><span>Plantas</span><b>${m.stories}</b></div>`:''); return; }
  const c=(t,v,u)=>`<div><span>${t}</span><b>${v??'-'}</b>${u?' <small>'+u+'</small>':''}</div>`, q=m.plan_score;
  e.innerHTML='<div class="res">'+c('Unidades/planta',mx.count)+c('Unidades totales',m.units_total)+c('NSA total',m.nsa_total,'m²')+c('Eficiencia',m.efficiency_total,'%')+'</div>'+
   (q!=null?`<div class="k"><span>Calidad de planos</span><i><i style="width:${q}%;background:${q>=90?'var(--ok)':q>=70?'#d39a1f':'var(--bad)'}"></i></i><b>${q} %</b></div>`:'')+
@@ -1516,19 +1519,19 @@ function panels(){ const m=result.metrics||{}, mx=m.mix; drawDonut(m.programs||{
  $('metrics').innerHTML=h; avisosPanel(); resumenPanel(); estadoTop();
  $('units').innerHTML=(result.units?'<table><tr><th>ID</th><th>Tipo</th><th>m²</th><th>Dorm</th><th>Evac.</th><th>Plano</th></tr>'+result.units.map(u=>`<tr style="cursor:pointer" onclick="selUnit='${u.id}';selPas=null;selCore=null;sinPatio();if(viewMode!=='plan')setView('plan');else{draw();unitPanel();}"><td>${u.id}</td><td>${u.type}</td><td>${u.area}${u.area_muros!=null?'<br><small>'+u.area_muros+' con muros</small>':''}</td><td>${u.bedrooms??'-'}</td><td style="color:${u.egress_status&&u.egress_status!=='ok'?EVAC[u.egress_status]:'inherit'}">${u.egress} m${u.egress_status==='saco'?' ⚠':''}</td><td>${u.plan_score!=null?u.plan_score+'%':'-'}</td></tr>`).join('')+'</table>':''); }
 function panels2(){ $('donut').innerHTML='';$('progList').innerHTML=''; $('metrics').innerHTML='';$('units').innerHTML=''; avisosPanel(); resumenPanel(); estadoTop(); }
-function avisosPanel(){ const ws=avisosDxf.map(w=>'DXF: '+esc(w)).concat(result?(result.warnings||[]):[]);
+function avisosPanel(){ const ws=avisosDxf.map(w=>avisosOrigen+': '+esc(w)).concat(result?(result.warnings||[]):[]);
  $('warns').innerHTML=ws.slice(0,12).map(w=>`<div class="w">⚠ ${w}</div>`).join('')||(result?'<div style="color:var(--mut)">Sin avisos</div>':''); }
 function selLabel(v,txt,off){ const s=$('sample'); let o=s.querySelector('option[value="'+v+'"]'); if(!o){ o=document.createElement('option'); o.value=v; s.prepend(o); } o.textContent=txt; o.disabled=!!off; s.value=v; estadoTop(); }
 function origenMasa(m){ const n=m.name||'sin nombre';
- return m.source==='masterplan'?{v:'__mp',t:'Lote del Masterplan: '+n,b:'Lote recibido del Masterplan: '+n}:m.source==='dxf'?{v:'__dxf',t:'Masa del DXF: '+n,b:'Masa abierta de un DXF: '+n}:{v:'__rhino',t:'Masa de Rhino: '+n,b:'Masa recibida de Rhino: '+n}; }
+ return m.source==='masterplan'?{v:'__mp',t:'Lote del Masterplan: '+n,b:'Lote recibido del Masterplan: '+n}:m.source==='dxf'?{v:'__dxf',t:'Masa del DXF: '+n,b:'Masa abierta de un DXF: '+n}:m.source==='padron'?{v:'__padron',t:'Padrón '+((m.padron||{}).numero||n),b:'Lote del padrón '+((m.padron||{}).numero||n)+' (Intendencia de Montevideo)'}:{v:'__rhino',t:'Masa de Rhino: '+n,b:'Masa recibida de Rhino: '+n}; }
 function setMass(m,fromRhino,opt){ opt=opt||{}; olvidarHistoria(); medHover=null; const o=$('sample').querySelector('option[value="__nuevo"]'); if(o) o.remove();
  if(fromRhino){ externa=m; const og=origenMasa(m); selLabel(og.v,og.t); }
  if(opt.label) selLabel('__proyecto',opt.label);   // proyecto o masa abiertos desde un archivo
- nombre=m.name||''; footprint=m.footprint; terreno=m.terreno||null; scp=m.scp&&Array.isArray(m.scp.o)&&[m.scp.o[0],m.scp.o[1],m.scp.a].every(Number.isFinite)?{o:[m.scp.o[0],m.scp.o[1]],a:m.scp.a,modo:m.scp.modo}:null; if(terreno){ terrenoUlt=terreno; terrenoForm(terreno); } selCore=null; sinPatio(); olvidarFlechas(); if(m.height) $('height').value=m.height; centerlines=(m.centerlines||(m.centerline?[m.centerline]:[])).map(pl=>pl.map(p=>[p[0],p[1]])); curLine=[]; lineInfo();
+ nombre=m.name||''; footprint=m.footprint; terreno=m.terreno||null; padron=m.padron&&typeof m.padron==='object'?m.padron:null; scp=m.scp&&Array.isArray(m.scp.o)&&[m.scp.o[0],m.scp.o[1],m.scp.a].every(Number.isFinite)?{o:[m.scp.o[0],m.scp.o[1]],a:m.scp.a,modo:m.scp.modo}:null; if(terreno){ terrenoUlt=terreno; terrenoForm(terreno); } selCore=null; sinPatio(); olvidarFlechas(); if(m.height) $('height').value=m.height; centerlines=(m.centerlines||(m.centerline?[m.centerline]:[])).map(pl=>pl.map(p=>[p[0],p[1]])); curLine=[]; lineInfo();
  coresManual=(m.cores||[]).map(p=>Array.isArray(p)?[p[0],p[1]]:Object.assign({},p,{p:[p.p[0],p.p[1]]})); $('cores_mode').value=m.cores_mode||(coresManual.length?'manual':'auto'); coreInfo();
  anchosPasillo=(m.anchos_pasillo||[]).map(a=>JSON.parse(JSON.stringify(a))); selPas=null; anchosInfo();   // R10.8 (también desde Rhino: «ancho=1.4» en la polilínea)
  stories=m.stories?m.stories.map(x=>({program:x.program,height:x.height})):null; medianeras=(m.medianeras||[]).map(x=>({a:x.a,b:x.b,retiro:x.retiro||0})); renderMeds();
- patios=(m.patios||[]).map(p=>p.map(q=>[q[0],q[1]])); patiosGaleria=patios.map((p,i)=>!!(m.patios_galeria||[])[i]); curPatio=[]; ediciones=(m.unit_edits||[]).map(e=>JSON.parse(JSON.stringify(e))); interiores=(m.room_edits||[]).map(e=>JSON.parse(JSON.stringify(e))); edInfo(); $('patios_mode').value=m.patios_mode||(patios.length?'manual':'auto'); renderStories(); result=null; lastStage=null; sel.clear(); planStory=null; zoom=1; pan=[0,0]; draw(); avisosDxf=m.source==='dxf'&&Array.isArray(m.warnings)?m.warnings.map(String):[]; panels2(); if(fromRhino) $('rhinoBadge').textContent=origenMasa(m).b; return run(opt.etapa||'massing'); }
+ patios=(m.patios||[]).map(p=>p.map(q=>[q[0],q[1]])); patiosGaleria=patios.map((p,i)=>!!(m.patios_galeria||[])[i]); curPatio=[]; ediciones=(m.unit_edits||[]).map(e=>JSON.parse(JSON.stringify(e))); interiores=(m.room_edits||[]).map(e=>JSON.parse(JSON.stringify(e))); edInfo(); $('patios_mode').value=m.patios_mode||(patios.length?'manual':'auto'); renderStories(); result=null; lastStage=null; sel.clear(); planStory=null; zoom=1; pan=[0,0]; draw(); avisosDxf=(m.source==='dxf'||m.source==='padron')&&Array.isArray(m.warnings)?m.warnings.map(String):[]; avisosOrigen=m.source==='padron'?'Padrón':'DXF'; panels2(); if(fromRhino) $('rhinoBadge').textContent=origenMasa(m).b; return run(opt.etapa||'massing'); }
 /* ---------- terreno rectangular: la masa sin Rhino, con sus medianeras y retiros ---------- */
 function terrenoForm(t){ $('ter_frente').value=t.frente; $('ter_fondo').value=t.fondo; ['i','d','b'].forEach(k=>{ $('ter_m_'+k).checked=!!t.medianeras[k]; });
  ['i','d','b','f'].forEach(k=>{ $('ter_r_'+k).value=t.retiros[k]||0; }); }
@@ -1550,7 +1553,7 @@ function terrenoRectangular(t){ const n=k=>Math.max(0,+$(k).value||0), num=v=>St
 async function nuevo(){ if((footprint.length||result)&&!confirm('¿Empezar en blanco? Se borran la masa, las polilíneas, los núcleos, las medianeras, las variantes y el resultado, también los guardados en el servidor. Las medidas, el mix y los colores se conservan.')) return;
  try{ await fetch('/api/reset',{method:'POST'}); }catch(e){} olvidarHistoria();
  if(tool) setTool(tool); footprint=[]; terreno=null; scp=null; centerlines=[]; curLine=[]; coresManual=[]; $('cores_mode').value='auto'; stories=null; medianeras=[]; result=null; lastStage=null; selUnit=null; selCore=null; sinPatio(); olvidarFlechas(); sel.clear(); planStory=null; zoom=1; pan=[0,0];
- externa=null; avisosDxf=[]; nombre=''; abierto=null; variantes=[]; verVariantes(false); ediciones=[]; interiores=[]; edInfo(); anchosPasillo=[]; selPas=null; anchosInfo(); ['__rhino','__mp','__dxf','__proyecto','__terreno'].forEach(v=>{ const o=$('sample').querySelector('option[value="'+v+'"]'); if(o) o.remove(); }); selLabel('__nuevo','— En blanco —',true);
+ externa=null; avisosDxf=[]; avisosOrigen='DXF'; padron=null; nombre=''; abierto=null; variantes=[]; verVariantes(false); ediciones=[]; interiores=[]; edInfo(); anchosPasillo=[]; selPas=null; anchosInfo(); ['__rhino','__mp','__dxf','__padron','__proyecto','__terreno'].forEach(v=>{ const o=$('sample').querySelector('option[value="'+v+'"]'); if(o) o.remove(); }); selLabel('__nuevo','— En blanco —',true);
  patios=[]; patiosGaleria=[]; curPatio=[]; $('patios_mode').value='auto'; $('height').value=$('height').defaultValue; $('lvl').innerHTML=''; lineInfo(); coreInfo(); renderMeds(); renderStories(); fzOlvidar(); panels2(); unitPanel();
  $('rhinoBadge').textContent='Esperando masa de Rhino… (o abre un DXF, o usa un ejemplo)'; setView('plan'); $('tag').textContent='En blanco'; }
 /* ---------- proyectos (R4.1): el archivo es el pedido al motor (/api/generate) más nombre, versión y fecha ---------- */
@@ -1559,7 +1562,7 @@ function medidasCambiadas(){ if(!STD||!STD_DEF) return null; const d={};   // so
  for(const g in STD) for(const k in STD[g]) if(STD_DEF[g]&&JSON.stringify(STD[g][k])!==JSON.stringify(STD_DEF[g][k])) (d[g]=d[g]||{})[k]=STD[g][k];
  return Object.keys(d).length?d:null; }
 function archivoProyecto(){ const p=proyecto(); if(variantes.length) p.variantes=variantes; return p; }   // el archivo lleva también las variantes (R4.5)
-function proyecto(){ const p={trazo:'proyecto',formato:1,version_motor:VER,guardado:new Date().toISOString(),name:nombre||'Proyecto',footprint,height:+$('height').value,stage:lastStage||'massing',params:Object.assign(params(),{standards:medidasCambiadas()})}; if(terreno) p.terreno=terreno; if(scp) p.scp=scp; return p; }   // el SCP va aparte: el motor no lo lee
+function proyecto(){ const p={trazo:'proyecto',formato:1,version_motor:VER,guardado:new Date().toISOString(),name:nombre||'Proyecto',footprint,height:+$('height').value,stage:lastStage||'massing',params:Object.assign(params(),{standards:medidasCambiadas()})}; if(terreno) p.terreno=terreno; if(scp) p.scp=scp; if(padron) p.padron=padron; return p; }   // el SCP y el padrón (R1.6: así se reabre sin red) van aparte: el motor no los lee
 async function guardarProyecto(){ if(!footprint.length){ alert('Trazo está en blanco: no hay nada que guardar. Elige un ejemplo o envía una masa desde Rhino.'); return; }
  const archivo=n=>n.replace(/[\\/:*?"<>|]+/g,'-').trim()+'.trazo.json', listo=(p,n)=>{ abierto={p:JSON.parse(JSON.stringify(p)),archivo:n}; selLabel('__proyecto','Proyecto: '+p.name); $('tag').textContent='Proyecto guardado: '+n; };
  if(window.showSaveFilePicker){ try{   // Chrome y Edge: se elige carpeta y nombre (por ejemplo, junto al archivo de Rhino)
@@ -1581,6 +1584,54 @@ async function leerDxf(inp){ const f=inp.files[0]; inp.value=''; if(!f) return;
  if(tool) setTool(tool); await setMass(m,true);
  const xs=m.footprint.map(p=>p[0]), ys=m.footprint.map(p=>p[1]), nw=(m.warnings||[]).length;
  $('tag').textContent='DXF abierto: masa de '+(Math.max(...xs)-Math.min(...xs)).toFixed(1)+' × '+(Math.max(...ys)-Math.min(...ys)).toFixed(1)+' m (dibujada en '+m.unidades+')'+(nw?' · '+nw+(nw===1?' aviso':' avisos')+' a la derecha':''); }
+/* ---------- Abrir padrón (R1.6): el lote de un padrón de Montevideo desde el parcelario público de la Intendencia ---------- */
+const PADRON_CITIM='https://informacionterritorial.montevideo.gub.uy/app/citim/';
+async function cargarPadron(url,etapa){   // pide la masa al servidor (que consulta a la Intendencia, o aplica el retiro a lo que ya guardó) y la carga; null si no se pudo
+ let r,j;
+ try{ r=await fetch(url); j=await r.json(); }
+ catch(e){ alert('Trazo: no hay conexión con el servidor de Trazo: arráncalo (py server.py en Windows, python3 server.py en Mac) y vuelve a abrir el padrón.'); return null; }
+ if(!r.ok){ alert((j.error||'Trazo: no pude abrir el padrón.')+((j.warnings||[]).length?'\n\n'+j.warnings.join('\n'):'')); return null; }
+ const m=Object.assign({},j); delete m.ok; delete m.version; massVer=j.version;   // el servidor ya la guardó: el poll no la vuelve a cargar
+ if(tool) setTool(tool); await setMass(m,true,{etapa:etapa}); return m; }
+async function abrirPadron(){ const t=prompt('Número de padrón de Montevideo (se consulta por internet a la Intendencia; solo sale el número):'); if(t===null) return;
+ const n=t.trim(); if(!/^\d{1,9}$/.test(n)||+n<=0){ alert('Trazo: «'+n+'» no es un número de padrón. Escribe solo el número (por ejemplo 421264).'); return; }
+ $('tag').textContent='Consultando el padrón '+n+'…';
+ const m=await cargarPadron('/api/padron?numero='+n); if(!m){ $('tag').textContent='No se abrió el padrón '+n; return; }
+ const nw=(m.warnings||[]).length, p=m.padron||{};
+ $('tag').textContent='Padrón '+n+' abierto: lote de '+fmtD(areaPoly(m.footprint),0)+' m² (catastro '+(p.areacat!=null?fmtD(+p.areacat,0)+' m²':'sin dato')+')'+(nw?' · '+nw+(nw===1?' aviso':' avisos')+' a la derecha':'')+(p.normativa?' · parámetros en Normativa':''); }
+async function aplicarRetiroPadron(r){ if(!padron) return;   // el servidor corre el retiro sobre el lote que guardó (sin volver a la Intendencia); 0 lo quita
+ if((centerlines.length||coresManual.length||patios.length||ediciones.length||interiores.length||anchosPasillo.length)&&!confirm('Cambiar el retiro vuelve a cargar el lote del padrón: se borran las polilíneas, los núcleos, los patios y los cambios en las viviendas que hayas dibujado. ¿Continuar?')) return;
+ const et=lastStage; $('tag').textContent=r>0?'Aplicando el retiro frontal de '+fmtG(r)+' m…':'Quitando el retiro frontal…';
+ const m=await cargarPadron('/api/padron?numero='+padron.numero+'&retiro='+r,et); if(!m){ $('tag').textContent='No se cambió el retiro frontal'; return; }
+ const ra=(m.padron||{}).retiro_aplicado||0;
+ $('tag').textContent=ra>0?'Retiro frontal de '+fmtG(ra)+' m aplicado: la huella queda de '+fmtD(areaPoly(m.footprint),0)+' m² (el lote entero se ve punteado)':r>0?'No se pudo aplicar el retiro de '+fmtG(r)+' m: mira los avisos a la derecha':'Retiro frontal quitado: vuelve el lote entero'; }
+async function usarAlturaPadron(x){   // la altura del padrón como altura del edificio: tantas plantas de vivienda como entran sin pasarla
+ const fh=+$('floor_height').value||3, n=Math.max(1,Math.floor(x/fh+1e-6));
+ if(stories&&stories.some(s=>s.program!=='Residential')&&!confirm('Usar la altura del padrón vuelve todas las plantas a vivienda: se pierde el programa por planta que armaste. ¿Continuar?')) return;
+ $('height').value=x; stories=Array.from({length:n},()=>({program:'Residential',height:fh})); renderStories();
+ await run(lastStage||'massing',{keepView:true});
+ $('tag').textContent='Altura de '+fmtG(x)+' m: '+n+(n===1?' planta':' plantas')+' de '+fmtG(fh)+' m ('+fmtG(n*fh)+' m en total; altura del padrón, orientativa)'; }
+function padronPanel(){ const e=$('padronPanel'); if(!e) return; if(!padron){ e.innerHTML=''; return; }   // Normativa: lo que trajo el padrón, con su fuente y su fecha
+ const p=padron, N=p.normativa, num=k=>N&&N[k]&&typeof N[k].numero==='number'&&isFinite(N[k].numero)?N[k].numero:null;
+ const lote=p.lote&&p.lote.length>2?areaPoly(p.lote):null, dirs=p.direcciones||[], fr=p.frentes||[], ra=p.retiro_aplicado||0;
+ let h=`<h2>Datos del padrón ${esc(p.numero)}</h2>`;
+ if(dirs.length) h+=`<div class="hint">${dirs.slice(0,6).map(d=>esc(d.calle+' '+d.numero+(d.letra||''))).join(' · ')}${dirs.length>6?' · …':''}</div>`;
+ h+=`<div class="k"><span>Superficie del lote (polígono)</span><b>${lote==null?'–':fmtD(lote,1)+' m²'}</b></div>`+(p.areacat!=null?`<div class="k"><span>Superficie catastral</span><b>${fmtD(+p.areacat,0)} m²</b></div>`:'');
+ if(fr.length) h+=`<div class="hint">Frente${fr.length===1?'':'s'}: ${fr.map(f=>esc((f.calle||'sin calle')+' '+fmtD(f.largo,1)+' m')).join(' · ')}. Las medianeras (los lados con vecino) están en Masa.</div>`;
+ h+=`<div class="hint" style="color:var(--bad)">Orientativo: no reemplaza al CITIM. Certificado oficial: <a href="${PADRON_CITIM}" target="_blank" rel="noopener">CITIM de la Intendencia de Montevideo</a>.</div><div class="hint">Fuente: ${esc(p.fuente||'')}. Consulta del ${esc(p.fecha||'')}.</div>`;
+ if(!N) h+=`<div class="hint">No se pudo leer la normativa de este padrón (mira los avisos): carga los retiros, la altura y el FOS a mano.</div>`;
+ else Object.keys(N).forEach(k=>{ const d=N[k]; if(!d) return;
+  h+=`<div class="k" style="gap:12px;margin-top:8px"><span>${esc(d.etiqueta||k)}</span><b style="text-align:right">${esc(d.valor==null?'–':d.valor)}${d.significado?` <small style="font-weight:400;color:var(--mut)">(${esc(d.significado)})</small>`:''}</b></div>`+
+   `<div class="hint" style="margin-top:0">${esc([d.nota,d.fuente,d.fecha].filter(Boolean).join(' · '))}</div>`;
+  const x=num(k);
+  if(k==='retiro_frontal'){
+   if(x>0&&fr.length&&ra!==x) h+=`<button class="s" onclick="aplicarRetiroPadron(${x})" title="Corre ${fmtG(x)} m hacia adentro los lados del lote que dan a la calle; el edificio se calcula sobre el resto. Vuelve a cargar el lote: se pierden las polilíneas, los núcleos y los patios dibujados">Aplicar retiro frontal de ${fmtG(x)} m</button>`;
+   if(ra>0) h+=`<button class="s" onclick="aplicarRetiroPadron(0)" title="Vuelve al lote entero">Quitar el retiro frontal</button><div class="hint">Retiro frontal aplicado: ${fmtG(ra)} m. El lote entero se ve punteado.</div>`;
+   if(x>0&&fr.length>1&&ra!==x) h+=`<div class="hint">El lote tiene ${fr.length} frentes: el retiro se aplica a todos. Si la norma lo pide solo en uno, ajusta la masa a mano.</div>`; }
+  else if(k==='altura'&&x>0) h+=`<button class="s" onclick="usarAlturaPadron(${x})" title="Pone la altura total y rehace las plantas de vivienda que entran sin pasarla">Usar altura de ${fmtG(x)} m</button>`;
+  else if(k==='fos'&&x>0&&result&&result.footprint){ const base=+p.areatot>0?+p.areatot:lote, huella=areaPoly(result.footprint)-((result.metrics&&result.metrics.patio_area)||0);
+   if(base>0){ const pct=huella/base*100; h+=`<div class="k" style="gap:12px"><span>FOS del edificio</span><b style="text-align:right;color:${pct<=x+0.05?'var(--ok)':'var(--bad)'}">${fmtD(pct,1)} % de la parcela (máximo orientativo ${fmtG(x)} %)</b></div>`; } } });
+ e.innerHTML=h; }
 function abrirProyecto(p,archivo,opt){ opt=opt||{}; const no=t=>{ alert('Trazo: «'+archivo+'» '+t); };
  if(!p||typeof p!=='object') return no('no se puede leer: no es un archivo de Trazo. Elige un proyecto guardado con «Guardar proyecto» (.trazo.json).');
  if(p.trazo!=='proyecto'&&(p.units||p.metrics)) return no('es un resultado exportado con «Resultado (JSON)», no un proyecto, y no se puede volver a abrir. Para retomar un trabajo, guárdalo con «Guardar proyecto».');
@@ -1595,7 +1646,7 @@ function abrirProyecto(p,archivo,opt){ opt=opt||{}; const no=t=>{ alert('Trazo: 
   if(Array.isArray(P.unit_mix)&&P.unit_mix.length){ mix=P.unit_mix.map(m=>Object.assign({},m)); renderMix(); legend(); }
   if(STD_DEF){ STD=JSON.parse(JSON.stringify(STD_DEF)); mezclarStd(STD,P.standards||{},verMenor(p.version_motor,'2.65')?STD_ANTES:null); saveStd(); renderStd(); }   // las medidas del proyecto (guarda solo las cambiadas)
   const otra=p.version_motor&&VER&&p.version_motor!==VER;
-  return setMass({name:p.name,footprint:p.footprint,height:p.height,centerlines:P.centerlines,cores:P.cores,cores_mode:P.cores_mode,stories:P.stories,medianeras:P.medianeras,patios:P.patios,patios_galeria:P.patios_galeria,patios_mode:P.patios_mode,unit_edits:P.unit_edits,room_edits:P.room_edits,anchos_pasillo:P.anchos_pasillo,terreno:p.terreno,scp:p.scp},false,{label:(opt.variante?'Variante: '+archivo:'Proyecto: '+(p.name||archivo)),etapa:ETAPAS.includes(p.stage)?p.stage:'massing'})
+  return setMass({name:p.name,footprint:p.footprint,height:p.height,centerlines:P.centerlines,cores:P.cores,cores_mode:P.cores_mode,stories:P.stories,medianeras:P.medianeras,patios:P.patios,patios_galeria:P.patios_galeria,patios_mode:P.patios_mode,unit_edits:P.unit_edits,room_edits:P.room_edits,anchos_pasillo:P.anchos_pasillo,terreno:p.terreno,padron:p.padron||null,scp:p.scp},false,{label:(opt.variante?'Variante: '+archivo:'Proyecto: '+(p.name||archivo)),etapa:ETAPAS.includes(p.stage)?p.stage:'massing'})
    .then(()=>{ if(otra) $('tag').textContent+=' · guardado con Trazo v'+p.version_motor+' (ahora v'+VER+'): el resultado puede variar'; }); }
  catch(e){ no('está incompleto o dañado ('+e.message+'). Prueba con otra copia del proyecto.'); } }
 /* ---------- variantes (R4.5): soluciones guardadas para compararlas ---------- */
@@ -1690,6 +1741,7 @@ const iM2=(n,d=1)=>n==null?'–':fmtD(n,d)+' m²';
 function origenInforme(d){ const o=d.origen||{}, v=o.v||'';   // de dónde salió la masa y con qué certeza: un dato cargado, leído o de ejemplo
  if(o.ejemplo) return {t:'Ejemplo de Trazo: '+o.ejemplo, cert:'Ejemplo: una forma de prueba, no un predio real'};
  if(v==='__rhino') return {t:'Masa enviada desde Rhino', cert:'Dibujada por el usuario en Rhino (Trazo no la verifica con el padrón ni con el plano catastral)'};
+ if(v==='__padron'||(d.padron&&v==='__proyecto')) return {t:'Lote del padrón '+(d.padron?d.padron.numero:'')+' (Intendencia de Montevideo)', cert:'Polígono del parcelario público de la IM (uso libre, res. 640/10); los parámetros son orientativos y no reemplazan al CITIM'};
  if(v==='__dxf') return {t:'Masa leída de un DXF', cert:'Leída del DXF del usuario (Trazo no la verifica con el padrón ni con el plano catastral)'};
  if(v==='__mp') return {t:'Lote del modo Masterplan', cert:'Lote calculado por Trazo en el modo Masterplan, a partir del predio y de las calles que se cargaron allí'};
  if(v==='__terreno') return {t:'Terreno rectangular', cert:'Cargado a mano: el frente, el fondo, las medianeras y los retiros los ingresó el usuario'};
@@ -1815,10 +1867,10 @@ function infEscenarios(d){ const E=d.escenarios||[]; if(!E.length) return '<p>No
  const filas=VCOL.map(c=>[c[1]].concat(E.map(e=>{ const v=e.m[c[0]]; return v==null?'–':H(v===mejor[c[0]]?'<b>'+fmtD(v,INF_DEC[c[0]]==null?1:INF_DEC[c[0]])+'</b>':esc(fmtD(v,INF_DEC[c[0]]==null?1:INF_DEC[c[0]]))); })));
  return iTabla(cab,filas,{num:E.map((e,i)=>i+1),col})+`<p class="nota">${E.length>1?'En negrita, lo mejor de cada fila. ':'No hay variantes guardadas: «Guardar como variante» (Proyecto → Variantes) conserva una solución para compararla con otras. '}«Evac. ✗»: viviendas que no cumplen la evacuación. «–»: la solución no llegó a esa etapa.</p>`; }
 
-function infAdvertencias(d){ const w=(d.avisosDxf||[]).map(x=>'DXF: '+x).concat(d.result.warnings||[]);
+function infAdvertencias(d){ const w=(d.avisosDxf||[]).map(x=>(d.avisosOrigen||'DXF')+': '+x).concat(d.result.warnings||[]);
  return w.length?'<ul>'+w.map(x=>`<li>${esc(x)}</li>`).join('')+'</ul>':'<p>Sin advertencias pendientes.</p>'; }
 
-function infFuentes(d){ return '<ul>'+INF_FUENTES.map(x=>`<li>${esc(x)}</li>`).join('')+'</ul>'+`<p class="w">${esc(d.avisoCostos||'')}</p>`; }
+function infFuentes(d){ return '<ul>'+INF_FUENTES.map(x=>`<li>${esc(x)}</li>`).join('')+'</ul>'+(d.padron?`<p>Lote${d.padron.normativa?' y parámetros urbanísticos':''} del padrón ${esc(d.padron.numero)}: ${esc(d.padron.fuente)}; consulta del ${esc(d.padron.fecha)}. Orientativo: no reemplaza al CITIM de la Intendencia.</p>`:'')+`<p class="w">${esc(d.avisoCostos||'')}</p>`; }
 
 function informeHtml(d){ const nom=d.nombre||'Sin nombre';
  return '<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light">'+
@@ -1860,7 +1912,7 @@ function datosInforme(){ const o=$('sample'), op=o&&o.selectedOptions&&o.selecte
  return {nombre:($('masaNombre').textContent||nombre||'').trim(),fecha:new Date().toISOString(),ver:VER,etapa:lastStage,origen:{v:o?o.value:'',nombre:op?op.textContent:'',ejemplo:o&&samples[o.value]?samples[o.value].name:null},
   footprint,terreno,result,std:STD,stdDef:STD_DEF,mix:mix.map(t=>({name:t.name,area:t.area,percent:t.percent,dorms:t.dorms})),
   params:{corridor_width:n('corridor_width'),egress_single:n('egress_single'),egress_multi:n('egress_multi'),outer_wall:n('outer_wall'),cambio:{corridor_width:ch('corridor_width'),egress_single:ch('egress_single'),egress_multi:ch('egress_multi')}},
-  nivel:rs?rs.index:null,plano:informePlano(),leyenda:informeLeyenda(),avisoCostos:($('fzAyuda')||{}).textContent||'',avisosDxf:avisosDxf.slice(),
+  nivel:rs?rs.index:null,plano:informePlano(),leyenda:informeLeyenda(),avisoCostos:($('fzAyuda')||{}).textContent||'',avisosDxf:avisosDxf.slice(),avisosOrigen:avisosOrigen,padron:padron,
   escenarios:variantes.map(v=>({nombre:v.nombre,m:v.metricas})).concat(actual)}; }
 function informe(){ if(!result||!result.units||!result.units.length){ alert('Trazo: genera primero la planta con viviendas («Generar mix» o «Generar planos») y vuelve a pedir el informe'); return; }
  let html; try{ html=informeHtml(datosInforme()); }catch(e){ console.error('Trazo: no se pudo armar el informe',e); alert('Trazo: no pude armar el informe ('+e.message+'). Si se repite, copia este mensaje y pégalo en la sesión de Claude Code.'); return; }
@@ -1869,5 +1921,5 @@ function informe(){ if(!result||!result.units||!result.units.length){ alert('Tra
  else $('tag').textContent='Informe abierto en otra pestaña: «Imprimir» arriba del documento'; }
 async function dl(kind){ if(!result){alert('Genera primero un resultado');return;} let blob,name; if(kind=='json'){blob=new Blob([JSON.stringify(result,null,1)],{type:'application/json'});name='trazo.json';} else {const t=await (await fetch('/api/dxf')).text(); blob=new Blob([t],{type:'text/plain'});name='trazo.dxf';} const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); }
 async function poll(){ try{ const j=await (await fetch('/api/mass')).json(); if(j.version!==massVer&&j.mass){ massVer=j.version; setMass(j.mass,true); } }catch(e){} setTimeout(poll,1500); }
-(async()=>{ fetch('/api/version').then(r=>r.json()).then(j=>{ VER=j.version; $('ver').textContent='v'+j.version; }); renderMix(); legend(); await loadStd(); fzAbrir(null); renderStories(); samples=await (await fetch('/api/samples')).json(); const s=$('sample'); s.innerHTML=Object.entries(samples).map(([k,v])=>`<option value="${k}">${v.name}</option>`).join(''); s.onchange=()=>{ if(samples[s.value]) setMass(samples[s.value]); else if(externa&&(s.value==='__rhino'||s.value==='__mp'||s.value==='__dxf')) setMass(externa,true); else if(s.value==='__proyecto'&&abierto) abrirProyecto(abierto.p,abierto.archivo,abierto.opt); else if(s.value==='__terreno'&&terrenoUlt) terrenoRectangular(terrenoUlt); }; let fromMp=null; if(new URLSearchParams(location.search).has('desde')){ try{ const j=await (await fetch('/api/mass')).json(); if(j.mass){ massVer=j.version; fromMp=j.mass; } }catch(e){} } if(fromMp){ s.insertAdjacentHTML('afterbegin','<option value="__mp">Lote del Masterplan</option>'); s.value='__mp'; setMass(fromMp,true); } else setMass(samples[s.value]||{footprint}); window.addEventListener('resize',render); poll(); capas(); let g=null; try{ g=localStorage.getItem('trazo.grupo'); ['grilla','orto','snap'].forEach(id=>{ const v=localStorage.getItem('trazo.'+id); if(v==='0'||v==='1'){ const c=$(id); c.checked=v==='1'; c.parentNode.classList.toggle('on',c.checked); } }); }catch(e){} if(g&&document.querySelector('.grupo[data-grupo="'+g+'"]')) grupo(g); })();
+(async()=>{ fetch('/api/version').then(r=>r.json()).then(j=>{ VER=j.version; $('ver').textContent='v'+j.version; }); renderMix(); legend(); await loadStd(); fzAbrir(null); renderStories(); samples=await (await fetch('/api/samples')).json(); const s=$('sample'); s.innerHTML=Object.entries(samples).map(([k,v])=>`<option value="${k}">${v.name}</option>`).join(''); s.onchange=()=>{ if(samples[s.value]) setMass(samples[s.value]); else if(externa&&(s.value==='__rhino'||s.value==='__mp'||s.value==='__dxf'||s.value==='__padron')) setMass(externa,true); else if(s.value==='__proyecto'&&abierto) abrirProyecto(abierto.p,abierto.archivo,abierto.opt); else if(s.value==='__terreno'&&terrenoUlt) terrenoRectangular(terrenoUlt); }; let fromMp=null; if(new URLSearchParams(location.search).has('desde')){ try{ const j=await (await fetch('/api/mass')).json(); if(j.mass){ massVer=j.version; fromMp=j.mass; } }catch(e){} } if(fromMp){ s.insertAdjacentHTML('afterbegin','<option value="__mp">Lote del Masterplan</option>'); s.value='__mp'; setMass(fromMp,true); } else setMass(samples[s.value]||{footprint}); window.addEventListener('resize',render); poll(); capas(); let g=null; try{ g=localStorage.getItem('trazo.grupo'); ['grilla','orto','snap'].forEach(id=>{ const v=localStorage.getItem('trazo.'+id); if(v==='0'||v==='1'){ const c=$(id); c.checked=v==='1'; c.parentNode.classList.toggle('on',c.checked); } }); }catch(e){} if(g&&document.querySelector('.grupo[data-grupo="'+g+'"]')) grupo(g); })();
 </script></body></html>

@@ -26,6 +26,7 @@ import engine.patios as _patios
 import engine.factibilidad as _factibilidad
 import engine.dxf as _dxf
 import engine.dxf_lector as _dxf_lector
+import engine.padron as _padron
 import engine.tabla_viviendas as _tabla_viviendas
 
 
@@ -51,6 +52,7 @@ def engine():
             importlib.reload(m)
         importlib.reload(_dxf)
         importlib.reload(_dxf_lector)
+        importlib.reload(_padron)
         importlib.reload(_tabla_viviendas)
         _loaded[0] = st
     return _layout, _dxf
@@ -93,7 +95,8 @@ def mp_samples():
             out[fn[:-5]] = s
     return out
 
-STATE = {"mass": None, "mass_version": 0, "result": None, "result_version": 0}
+STATE = {"mass": None, "mass_version": 0, "result": None, "result_version": 0,
+         "padron": None}      # R1.6: la última consulta de padrón {numero, res}, para aplicar el retiro frontal sin volver a la red
 LOCK = threading.Lock()
 DATA = os.path.join(ROOT, "data")
 os.makedirs(DATA, exist_ok=True)
@@ -177,7 +180,49 @@ class H(BaseHTTPRequestHandler):
                     with open(os.path.join(d, fn), encoding="utf-8") as f:
                         out[fn[:-5]] = json.load(f)
             return self._send(200, out)
+        if p == "/api/padron":    # web «Abrir padrón…» (R1.6): el lote de un padrón de Montevideo como masa, igual que la de Rhino o un DXF
+            return self._ruta_padron()
         self._send(404, {"error": "no encontrado"})
+
+    def _ruta_padron(self):
+        """GET /api/padron?numero=N[&retiro=X]. Sin retiro (o con otro padrón que el guardado) consulta a la Intendencia de
+        Montevideo; con retiro y el mismo padrón que la última consulta, corre el retiro frontal sobre lo guardado, sin red."""
+        engine()
+        q = parse_qs(urlsplit(self.path).query)
+        numero = (q.get("numero") or [""])[0].strip()
+        if not re.fullmatch(r"[0-9]{1,9}", numero) or int(numero) <= 0:
+            return self._send(400, {"error": "Trazo: el número de padrón tiene que ser un entero positivo (por ejemplo 421264)."})
+        numero = int(numero)
+        retiro = (q.get("retiro") or [None])[0]
+        if retiro is not None:
+            try:
+                retiro = float(retiro.replace(",", "."))
+                if not 0.0 <= retiro <= 100.0:
+                    raise ValueError
+            except ValueError:
+                return self._send(400, {"error": "Trazo: el retiro frontal tiene que ser un número de metros entre 0 y 100."})
+        with LOCK:
+            guardado = STATE.get("padron")
+        try:
+            if retiro is not None and guardado and guardado["numero"] == numero:
+                res = guardado["res"]
+            else:
+                res = _padron.consultar(numero, version=_layout.VERSION)
+                with LOCK:
+                    STATE["padron"] = {"numero": numero, "res": res}
+            masa = _padron.aplicar_retiro(res, retiro or 0)
+        except _padron.ErrorPadron as e:
+            return self._send(e.codigo, {"error": str(e), "warnings": e.warnings})
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return self._send(500, {"error": "Trazo: no pude abrir el padrón %d (%s: %s). Carga el terreno a mano o con «Abrir DXF…»." %
+                                             (numero, type(e).__name__, e)})
+        with LOCK:
+            STATE["mass"] = masa
+            STATE["mass_version"] += 1
+            version = STATE["mass_version"]
+        return self._send(200, dict(masa, ok=True, version=version))
 
     def do_POST(self):
         p = self.path.split("?")[0]
@@ -187,7 +232,7 @@ class H(BaseHTTPRequestHandler):
             return self._send(400, {"error": str(e)})
         if p == "/api/reset":     # web «Nuevo»: olvida la masa y el resultado (al recargar no vuelven; Rhino no recibe uno viejo)
             with LOCK:
-                STATE["mass"], STATE["result"] = None, None
+                STATE["mass"], STATE["result"], STATE["padron"] = None, None, None
                 STATE["mass_version"] += 1
                 STATE["result_version"] += 1
             return self._send(200, {"ok": True})
