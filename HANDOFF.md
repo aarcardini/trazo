@@ -9,21 +9,20 @@ Dice dónde estamos ahora. Cómo es el código está en `CLAUDE.md`; qué falta 
 
 ## 1. Estado del repositorio (23/10/2026)
 - `main` = v2.69 (80c705f): hasta #86 integrado.
-- PRs abiertos (base `main`, esperan el «aceptá» del usuario):
-  1. **#87** `padron-investigacion`: solo documentación (`PADRON.md`, R1.6 del ROADMAP y este archivo), sin VERSION ni prueba nueva. Se integra en cualquier orden.
-  2. El de R5.12 (`estancias-editables`, v2.70 / OK86) cuando el agente termine; al integrarlo después de #87, mezclar `main` (solo chocan `ROADMAP.md` y este archivo: conservar las dos partes).
+- PRs abiertos, en el orden en que se integran (esperan el «aceptá» del usuario):
+  1. **#87** `padron-investigacion` (base `main`): solo documentación (`PADRON.md`, R1.6 del ROADMAP, este archivo). Sin VERSION.
+  2. **#88** `estancias-editables` (base `padron-investigacion`, apilado): R5.12, v2.70 / OK86. Al integrar #87, retargetear #88 a `main` e integrarlo; después `git fetch` y `git merge --ff-only origin/main` en el clon local, y quitar los dos worktrees del scratchpad.
 
 ## 2. Trabajo en curso (23/10/2026)
-- **R5.12 Estancias editables en el plano** — rama `estancias-editables` (sobre 80c705f; un agente Fable nuevo la retomó el 23/10 con el diseño de abajo), v2.70 / OK86. Encargo: ficha por estancia (nombre, función, principal / secundario, «Quitar», «Unir con…») como `room_edits` `nombre` / `tipo` / `quitar` / `unir` aplicados después de `_plan_rects`; `test_estancias_editables`; navegador; docs. Diseño ya decidido (no aplicado): en `plans._plano`, el `hechas = [... op == "pared" ...]` pasa a un bucle en orden con `pared` y las cuatro ops nuevas (`_estancia_en`, `_renombrar`, `_cambiar_tipo`, `_quitar_dormitorio`, `_unir_dormitorios`, `_union_rect`, junto a `_mover_pared`); sin intercambiar ids: una variable `principal` (por defecto `bed1`) que va a `_std_for` y a `EQ.equipar`/`resolver` (la cama doble sigue a `principal`), `principal: True` en la estancia del resultado, `res["bedrooms"]` = dormitorios reales solo si una op los cambió (sin `room_edits` el plano queda idéntico), `fijado` desactiva la promoción automática del más grande, rechazos en `res["avisos_estancias"]` que layout copia a `warnings` con el id; el `type` del mix no cambia. Web: `data-room` en cada polígono, segundo clic dentro de la vivienda elige la estancia (`selRoom`), bloque «Estancia» (`estanciaPanel(u)`) después de `puertasPanel`, línea `cambiosDentro(u)` con el botón «Descartar». Si se corta, retomar con otro agente Fable y este diseño.
+- Ninguna tarea abierta fuera de los PRs de arriba (la sesión del 23/10 terminó aquí; la siguiente arranca leyendo este archivo).
 - **Base de tipologías:** el usuario busca más planos. Cuando mande un `.zip`: descomprimir en una carpeta nueva del scratchpad, pasar cada DXF por `python tools/ver_dxf.py`, organizar en `data/tipologias/` (DXF, nota por proyecto, filas en `indice.csv`; sin SVG ni PNG), regenerar con `python -m engine.tipologias` y `python tools/comparar_tipologias.py`, y abrir un PR como el #73.
 - Decisiones de R5.13 que no se vuelven a discutir: primera etapa = la entrada en una de las tres posiciones que el plano ya arma (punta x0, junto a la zona de noche, punta x1 al revés); la posición cualquiera es la segunda etapa y queda en el ROADMAP.
 
-## 3. Cola de tareas (23/10/2026), en el orden acordado (R5.12 ya está en curso, arriba)
-1. **R5.12 Estancias editables en el plano** (`plans.py`, Fable): ficha por estancia, quitar y unir dormitorios como `room_edits`.
-2. **R1.6 Abrir padrón de Montevideo, programar** (M; `PADRON.md` §8, decidido el 23/10): `engine/padron.py` con la red inyectable (`urllib`, WFS de la IM, GeoJSON EPSG:32721), `GET /api/padron?numero=`, botón «Abrir padrón…»; devuelve `footprint` UTM, `medianeras` y frentes deducidos de las parcelas vecinas y las puertas, y `normativa` con fuente y fecha por dato, marcada «orientativo, no reemplaza al CITIM»; el shapefile de la DNC como respaldo queda aparte.
-3. **R11.4 Entre medianeras con más de dos viviendas por piso** (`circulation.py` y `units.py`): pasillo contra una medianera y viviendas pasantes o con patio; aprovecha el esquema en fila de v2.67.
-4. **R5.8 Muros y tabiques con espesor** (L): tabiques interiores con espesor en los planos; antes de R7.1.
-5. **Reparto del mix con el frente de la segunda fachada** (`units.generate_unit_mix`; quedó fuera de v2.67): solo vale cuando se prioricen crujías simples y predios entre medianeras con franjas profundas.
+## 3. Cola de tareas (23/10/2026), en el orden acordado; la próxima rama toma v2.71 y OK87
+1. **R1.6 Abrir padrón de Montevideo, programar** (M; `PADRON.md` §8, decidido el 23/10): `engine/padron.py` con la red inyectable (`urllib`, WFS de la IM, GeoJSON EPSG:32721), `GET /api/padron?numero=`, botón «Abrir padrón…»; devuelve `footprint` UTM, `medianeras` y frentes deducidos de las parcelas vecinas y las puertas, y `normativa` con fuente y fecha por dato, marcada «orientativo, no reemplaza al CITIM»; el shapefile de la DNC como respaldo queda aparte.
+2. **R11.4 Entre medianeras con más de dos viviendas por piso** (`circulation.py` y `units.py`): pasillo contra una medianera y viviendas pasantes o con patio; aprovecha el esquema en fila de v2.67.
+3. **R5.8 Muros y tabiques con espesor** (L): tabiques interiores con espesor en los planos; antes de R7.1.
+4. **Reparto del mix con el frente de la segunda fachada** (`units.generate_unit_mix`; quedó fuera de v2.67): solo vale cuando se prioricen crujías simples y predios entre medianeras con franjas profundas.
 
 ## 4. Decisiones pendientes del usuario (23/10/2026)
 - R1.6, antes de programar los parámetros: (a) ¿mostrar altura, FOS y uso preferente aunque sean orientativos (la capa parece heredada y 1 de 7 retiros difiere del CITIM), o solo categoría y retiro frontal? (b) ¿escribir antes a la IM (uit@imm.gub.uy, sig@imm.gub.uy) para confirmar la capa y su vigencia? (c) ¿las medianeras deducidas van como propuesta editable o solo se señalan los lados con vecino? El polígono y la ruta se programan igual con cualquier respuesta.
