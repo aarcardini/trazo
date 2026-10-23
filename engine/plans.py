@@ -10,6 +10,7 @@ Modelo:
 Cada conexión se comprueba geométricamente (borde compartido suficiente) y se verifica
 que todas las estancias se alcanzan desde la entrada y que las habitables tienen fachada.
 """
+import re
 from . import geometry as G
 from . import standards as ST
 from . import equipamiento as EQ
@@ -278,6 +279,273 @@ def _editar_puerta(doors, rect, e, v0):
     if e.get("abre") and not d.get("entry"):           # la hoja abre hacia la otra estancia
         d["a"], d["b"], d["into"] = d["b"], d["a"], -d["into"]
     return True
+
+
+# ---------------------------------------------------------------- R5.12 (v2.70): estancias editables
+TIPOS_ESTANCIA = {"dormitorio": "bedroom", "estudio": "study", "deposito": "storage", "depósito": "storage",
+                  "lavadero": "laundry", "comedor": "dining"}          # la función que se pide → el kind
+EDITABLES = ("bedroom", "study", "storage", "laundry", "dining")      # las estancias que cambian de función
+_NOMBRE_DORM = re.compile(r"^Dormitorio( principal| \d+)?$")
+
+
+def _estancia_en(R, p):
+    """R5.12: la estancia cuyo rectángulo contiene p (marco de la vivienda); si varios lo contienen (la caja de un anexo
+    puede pisar otra), el más chico. None si ninguno."""
+    if not p:
+        return None
+    dentro = [(abs((r[2] - r[0]) * (r[3] - r[1])), i) for i, (_, r, _) in R.items()
+              if r[0] - 1e-6 <= p[0] <= r[2] + 1e-6 and r[1] - 1e-6 <= p[1] <= r[3] + 1e-6]
+    return min(dentro)[1] if dentro else None
+
+
+def _union_rect(a, b, tol=0.05):
+    """R5.12: la unión de dos rectángulos contiguos si es un rectángulo (comparten un lado entero); si no, None."""
+    if (abs(a[0] - b[0]) < tol and abs(a[2] - b[2]) < tol and (abs(a[3] - b[1]) < tol or abs(b[3] - a[1]) < tol)) or \
+            (abs(a[1] - b[1]) < tol and abs(a[3] - b[3]) < tol and (abs(a[2] - b[0]) < tol or abs(b[2] - a[0]) < tol)):
+        return (min(a[0], b[0]), min(a[1], b[1]), max(a[2], b[2]), max(a[3], b[3]))
+    return None
+
+
+def _largo(seg):
+    return ((seg[1][0] - seg[0][0]) ** 2 + (seg[1][1] - seg[0][1]) ** 2) ** 0.5 if seg else 0.0
+
+
+def _union_con_pasillo(R, E, i, j):
+    """R5.12: la unión de los dormitorios i y j cuando no es un rectángulo porque entre los dos queda un tramo del pasillo
+    interno que ya no sirve a nadie (en la vivienda poco profunda el último dormitorio toma la punta, v0..v1, y el anterior
+    queda detrás del pasillo): el pasillo se recorta como cuando sobra pasillo, si el tramo está en una de sus puntas y las
+    demás estancias que abren a él (con puerta o en abierto) siguen tocándolo. Devuelve (rectángulo unido, id del pasillo,
+    rectángulo que le queda) o None."""
+    a, b = R[i][1], R[j][1]
+    bb = (min(a[0], b[0]), min(a[1], b[1]), max(a[2], b[2]), max(a[3], b[3]))
+    ar = lambda r: max(0.0, r[2] - r[0]) * max(0.0, r[3] - r[1])
+    falta = ar(bb) - ar(a) - ar(b)
+    if falta < 0.01:
+        return None
+    for h, (hk, hr, _) in R.items():
+        if hk != "hallway":
+            continue
+        pz = (max(hr[0], bb[0]), max(hr[1], bb[1]), min(hr[2], bb[2]), min(hr[3], bb[3]))
+        if pz[2] - pz[0] < 0.01 or pz[3] - pz[1] < 0.01 or abs(ar(pz) - falta) > 0.01:
+            continue
+        resto = None                                   # el tramo que se va, en una punta y de todo el ancho del pasillo
+        if abs(pz[1] - hr[1]) < 1e-6 and abs(pz[3] - hr[3]) < 1e-6:
+            if abs(pz[0] - hr[0]) < 1e-6 and pz[2] < hr[2] - 0.3:
+                resto = (pz[2], hr[1], hr[2], hr[3])
+            elif abs(pz[2] - hr[2]) < 1e-6 and pz[0] > hr[0] + 0.3:
+                resto = (hr[0], hr[1], pz[0], hr[3])
+        elif abs(pz[0] - hr[0]) < 1e-6 and abs(pz[2] - hr[2]) < 1e-6:
+            if abs(pz[1] - hr[1]) < 1e-6 and pz[3] < hr[3] - 0.3:
+                resto = (hr[0], pz[3], hr[2], hr[3])
+            elif abs(pz[3] - hr[3]) < 1e-6 and pz[1] > hr[1] + 0.3:
+                resto = (hr[0], hr[1], hr[2], pz[1])
+        if resto is None:
+            continue
+        ok = _largo(_shared(bb, resto)) >= MIN_SHARE["puerta"] - 1e-6     # la unida, con lugar para su puerta
+        for o, (ok_, orr, _) in R.items():
+            if not ok or o in (i, j, h):
+                continue
+            tipos = [t_ for a_, b_, t_ in E if {a_, b_} == {h, o}]
+            if not tipos and ok_ in DAY and _largo(_shared(orr, hr)) >= MIN_SHARE["abierto"] - 1e-6:
+                tipos = ["abierto"]                    # se abría al pasillo (zona de día): tiene que seguir abierta
+            for t_ in tipos:
+                if _largo(_shared(orr, resto)) < MIN_SHARE.get(t_, MIN_SHARE["puerta"]) - 1e-6:
+                    ok = False
+        if ok:
+            return bb, h, resto
+    return None
+
+
+def _dormitorios(R):
+    return [i for i, (k, _, _) in R.items() if k == "bedroom"]
+
+
+def _promover(R, est):
+    """R5.12: el dormitorio principal tras quitar o unir: si el usuario no fijó cuál es (est["fijado"]) o el principal ya
+    no existe, el más grande (a igual superficie, el que ya era principal; después, bed1)."""
+    beds = _dormitorios(R)
+    if not beds:
+        est["principal"] = None
+    elif not est["fijado"] or est["principal"] not in beds:
+        ar = lambda i: round((R[i][1][2] - R[i][1][0]) * (R[i][1][3] - R[i][1][1]), 3)
+        est["principal"] = max(beds, key=lambda i: (ar(i), i == est["principal"], i == "bed1"))
+
+
+def _nombres_dormitorios(R, est):
+    """R5.12: los nombres por defecto de los dormitorios («Dormitorio principal», «Dormitorio 2»…, o «Dormitorio» si hay uno
+    solo) siguen al principal y a la cantidad; los que puso el usuario (est["nombres"]) no se tocan."""
+    beds = _dormitorios(R)
+    n, k = len(beds), 2
+    for i in beds:
+        kind, rect, name = R[i]
+        if i in est["nombres"] or not _NOMBRE_DORM.match(name):
+            if i != est["principal"]:
+                k += 1
+            continue
+        if n == 1:
+            nuevo = "Dormitorio"
+        elif i == est["principal"]:
+            nuevo = "Dormitorio principal"
+        else:
+            nuevo, k = "Dormitorio %d" % k, k + 1
+        R[i] = (kind, rect, nuevo)
+
+
+def _renombrar(R, E, e, est):
+    """R5.12: el nombre de la estancia que contiene e["p"] pasa a e["nombre"] (vacío: el de su función). Un «Hall / Cocina»
+    conserva «Cocina» en el nombre (es lo que dice que la cocina está en el hall). Devuelve (encontrada, aviso)."""
+    i = _estancia_en(R, e.get("p"))
+    if i is None:
+        return False, None
+    kind, rect, name = R[i]
+    nuevo = str(e.get("nombre") or "").strip()[:40]
+    if not nuevo:
+        nuevo = NAMES.get(kind, name)
+        est["nombres"].discard(i)
+    else:
+        est["nombres"].add(i)
+    if kind == "hall" and "Cocina" in name and "Cocina" not in nuevo:
+        nuevo += " / Cocina"
+    R[i] = (kind, rect, nuevo)
+    return True, None
+
+
+def _conectar(R, E, i):
+    """R5.12: una estancia que cambió de función y no tiene conexión: puerta desde la mejor vecina (el pasillo interno o el
+    hall si le dan lugar a la puerta; si no, la de borde compartido más largo, salvo baños y lavaderos)."""
+    if any(i in (a, b) for a, b, _ in E):
+        return True
+    cands = []
+    for o, (k, r, _) in R.items():
+        if o == i or k in ("bath", "laundry", "storage"):
+            continue
+        L = _largo(_shared(r, R[i][1]))
+        if L >= MIN_SHARE["puerta"] - 1e-6:
+            cands.append((k not in ("hallway", "hall"), -L, o))
+    if not cands:
+        return False
+    E.append((min(cands)[2], i, "puerta"))
+    return True
+
+
+def _cambiar_tipo(R, E, e, est):
+    """R5.12: la estancia que contiene e["p"] cambia de función (e["tipo"]: dormitorio, estudio, depósito, lavadero o
+    comedor; solo entre esas) o, si es un dormitorio, pasa a principal o secundario (la cama doble y el placard siguen al
+    principal: est["principal"]; est["fijado"] apaga la promoción automática del más grande). Un depósito o un lavadero
+    conservan la puerta desde donde estaba (una abertura pasa a puerta); un comedor se abre al estar si es contiguo y, si
+    no, conserva su puerta y se avisa. Devuelve (encontrada, aviso)."""
+    i = _estancia_en(R, e.get("p"))
+    if i is None:
+        return False, None
+    kind, rect, name = R[i]
+    t = str(e.get("tipo") or "").strip().lower()
+    if t in ("principal", "secundario"):
+        if kind != "bedroom":
+            return True, "«%s» no es un dormitorio: solo un dormitorio pasa a principal o secundario; el plano queda " \
+                         "como estaba" % name
+        est["fijado"] = True
+        if t == "principal":
+            est["principal"] = i
+        elif est["principal"] == i:
+            otros = [j for j in _dormitorios(R) if j != i]
+            ar = lambda j: (R[j][1][2] - R[j][1][0]) * (R[j][1][3] - R[j][1][1])
+            est["principal"] = max(otros, key=ar) if otros else None
+        _nombres_dormitorios(R, est)
+        return True, None
+    nuevo = TIPOS_ESTANCIA.get(t)
+    if nuevo is None:
+        return True, "«%s»: función «%s» desconocida (dormitorio, estudio, depósito, lavadero o comedor); el plano queda " \
+                     "como estaba" % (name, t)
+    if kind not in EDITABLES:
+        return True, "«%s» no cambia de función: solo dormitorios, estudios, depósitos, lavaderos y comedores; el plano " \
+                     "queda como estaba" % name
+    if nuevo == kind:
+        return True, None
+    aviso, abierto = None, False
+    if nuevo == "dining":
+        est_ = next((o for o, (k, _, _) in R.items() if k == "living"), None)
+        if est_ is not None and _largo(_shared(R[est_][1], rect)) >= MIN_SHARE["abierto"] - 1e-6:
+            E[:] = [x for x in E if i not in x[:2]]    # abierto al estar (la zona de día se conecta sola, sin puerta)
+            abierto = True
+        else:
+            aviso = "«%s» pasa a comedor, pero no es contiguo al estar: queda cerrado, con su puerta" % name
+    else:
+        E[:] = [(a, b, "puerta" if i in (a, b) and t_ == "abierto" else t_) for a, b, t_ in E]
+    R[i] = (nuevo, rect, name if i in est["nombres"] else NAMES[nuevo])
+    if not abierto and not _conectar(R, E, i):
+        aviso = "«%s» cambia de función, pero no hay desde dónde ponerle la puerta" % R[i][2]
+    if "bedroom" in (kind, nuevo):
+        est["cambiado"] = True
+        if est["principal"] not in _dormitorios(R):
+            _promover(R, est)
+        _nombres_dormitorios(R, est)
+    return True, aviso
+
+
+def _unir(R, E, i, j, est):
+    """R5.12: el dormitorio i se une al j (que se queda con el id y el nombre): la unión tiene que ser un rectángulo
+    (_union_rect) o cerrarse con el tramo de pasillo interno que sobra (_union_con_pasillo); si no, aviso y nada cambia.
+    Las conexiones de i pasan a j; el principal, si era i, pasa a j, y después (si el usuario no lo fijó) el más grande."""
+    ni, nj = R[i][2], R[j][2]
+    if _largo(_shared(R[i][1], R[j][1])) < 0.3:
+        return "«%s» y «%s» no se unen: no son contiguos; el plano queda como estaba" % (ni, nj)
+    u = _union_rect(R[i][1], R[j][1])
+    if u is None:
+        con = _union_con_pasillo(R, E, i, j)
+        if con is None:
+            return "«%s» y «%s» no se unen: la unión no da un rectángulo; el plano queda como estaba" % (ni, nj)
+        u, h, resto = con
+        R[h] = (R[h][0], resto, R[h][2])
+    R[j] = (R[j][0], u, nj)
+    del R[i]
+    nuevos = []
+    for a, b, t_ in E:
+        a, b = (j if a == i else a), (j if b == i else b)
+        if a != b and (a, b, t_) not in nuevos:
+            nuevos.append((a, b, t_))
+    E[:] = nuevos
+    est["cambiado"] = True
+    est["nombres"].discard(i)
+    if est["principal"] == i:
+        est["principal"] = j
+    _promover(R, est)
+    _nombres_dormitorios(R, est)
+    return None
+
+
+def _quitar_dormitorio(R, E, e, est):
+    """R5.12: el dormitorio que contiene e["p"] se quita: se une al dormitorio contiguo (el que se agranda con su cama):
+    primero el que da un rectángulo sin tocar el pasillo, después el principal, después el de borde compartido más largo.
+    Devuelve (encontrada, aviso)."""
+    i = _estancia_en(R, e.get("p"))
+    if i is None:
+        return False, None
+    kind, rect, name = R[i]
+    if kind != "bedroom":
+        return True, "«%s» no se quita: solo se quita un dormitorio (se une al contiguo); el plano queda como estaba" % name
+    vecinos = [j for j in _dormitorios(R) if j != i and _largo(_shared(R[j][1], rect)) >= 0.3]
+    if not vecinos:
+        return True, "«%s» no se quita: no tiene un dormitorio contiguo con el que unirse; el plano queda como estaba" % name
+    clave = lambda j: (_union_rect(rect, R[j][1]) is None, j != est["principal"], -_largo(_shared(R[j][1], rect)), j)
+    return True, _unir(R, E, i, min(vecinos, key=clave), est)
+
+
+def _unir_dormitorios(R, E, e, est):
+    """R5.12: el dormitorio que contiene e["p"] se une con el que contiene e["a"]; se queda el principal, si uno lo es, y
+    si no el de e["p"]. Devuelve (encontrada, aviso)."""
+    i, j = _estancia_en(R, e.get("p")), _estancia_en(R, e.get("a"))
+    if i is None:
+        return False, None
+    if j is None or j == i:
+        return True, "«%s» no se une: no hay otra estancia en el punto pedido; el plano queda como estaba" % R[i][2]
+    if R[i][0] != "bedroom" or R[j][0] != "bedroom":
+        return True, "«%s» y «%s» no se unen: solo se unen dos dormitorios; el plano queda como estaba" % (R[i][2], R[j][2])
+    if j == est["principal"]:
+        i, j = j, i
+    return True, _unir(R, E, j, i, est)
+
+
+OPS_ESTANCIA = {"nombre": _renombrar, "tipo": _cambiar_tipo, "quitar": _quitar_dormitorio, "unir": _unir_dormitorios}
 
 
 def _dist_seg(p, a, b):
@@ -1643,12 +1911,13 @@ def _faltan(rooms):
     return out
 
 
-def _std_for(r, nb, integradas=()):
+def _std_for(r, nb, integradas=(), principal="bed1"):
     """Medidas mínimas de la estancia r. integradas (R10.8): las cocinas integradas al estar sin ventana propia, que
-    toman las de la norma nacional para ellas (art. 27: de 3 a 5 m², lado 1,40) en lugar de las de una cocina (art. 21)."""
+    toman las de la norma nacional para ellas (art. 27: de 3 a 5 m², lado 1,40) en lugar de las de una cocina (art. 21).
+    principal (R5.12): el id del dormitorio principal."""
     k, i = r["kind"], r["id"]
     if k == "bedroom":
-        return V["dorm_principal"] if (i == "bed1") else V["dorm_secundario"]
+        return V["dorm_principal"] if (i == principal) else V["dorm_secundario"]
     if k == "kitchen" and i in integradas:
         return _ci()
     return {"living": V["estar_comedor"], "kitchen": V["cocina"], "laundry": V["lavadero"], "study": V["estudio"],
@@ -1663,6 +1932,13 @@ def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None, accesible=F
     accesible: puertas de dormitorios y baño de DOOR_ACC, el baño abre hacia afuera y se equipa para silla de ruedas.
     ediciones (R5.7): [(k, {"op": "pared", "p", "a"} | {"op": "puerta", "p", "entre"?, "a"?, "ancho"?, "abre"?})] en el
     marco de la unidad, en orden; el resultado trae en "ediciones" las k aplicadas y en "paredes" los tabiques interiores.
+    R5.12 (v2.70), estancias editables, también en ediciones y en orden con las paredes: {"op": "nombre", "p", "nombre"},
+    {"op": "tipo", "p", "tipo": dormitorio | estudio | depósito | lavadero | comedor | principal | secundario},
+    {"op": "quitar", "p"} (el dormitorio se une al contiguo) y {"op": "unir", "p", "a"} (dos dormitorios contiguos), con
+    p (y a) dentro de la estancia; se aplican después de _plan_rects y antes de puertas, ventanas y equipamiento. La cama
+    doble y el placard siguen al dormitorio principal ("principal": true en su estancia; tras quitar o unir, el más
+    grande, salvo que el usuario lo haya fijado con tipo); "bedrooms" cuenta los dormitorios reales si cambiaron; lo que
+    no se puede aplicar va en "avisos_estancias" (y como línea informativa) y el plano queda como estaba.
     ventanas (R5.5): medidas de standards["ventanas"]; el resultado trae "ventanas" [{room, p, q, n, ancho, alto, area,
     minimo}] (p-q sobre la fachada, n hacia afuera).
     R5.3: una vivienda con fachada al fondo y en un costado (de esquina o de extremo) la usa: el estar va a la esquina o,
@@ -2008,7 +2284,61 @@ def _plano(poly, nb, is_facade, equip, accesible, ediciones, ventanas, lateral=F
     usa_banda = any(b == "laundry" and a in ("kitchen", "hall") for a, b, _ in E) and \
         G.strip_area(poly, x0, x1, v0, v1) < (x1 - x0) * (v1 - v0) - 0.01     # (el de la banda: desde la cocina o el hall)
     vacios = [(G.clip_rect(poly, r[0], r[2], r[1], r[3]), msg) for r, msg in vacios]
-    hechas = [k for k, e in (ediciones or []) if e.get("op") == "pared" and e.get("a") and _mover_pared(R, e)]
+    anexados = []
+
+    def anexar():
+        """Anexos (bolsillos de la unidad): estudio si tiene fachada (también oblicua, como una ochava); sin ella, depósito
+        si no pasa de su máximo y, si pasa, C: queda sin uso, con aviso (v2.33). Una sola vez: después de los tabiques
+        movidos o, desde R5.12, antes de la primera estancia editada (un estudio puede pasar a dormitorio)."""
+        if anexados:
+            return
+        anexados.append(True)
+        dep = V["deposito"]
+        for n_, ap in enumerate(annexes):
+            r = G.bbox(ap)
+            if is_facade is None:
+                fac = abs(r[3] - v1) < 0.05 and (r[3] - r[1]) >= 3.0
+            else:
+                fac = min(r[2] - r[0], r[3] - r[1]) >= V["estudio"]["min_side"] - 1e-6 and any(
+                    ((q[0] - p[0]) ** 2 + (q[1] - p[1]) ** 2) ** 0.5 >= 1.5
+                    for p, q, _ in _tramos_fachada(G.ensure_ccw(ap), poly, is_facade, v1))
+            if not fac and abs(G.area(ap)) > dep["max_area"] + 0.5:
+                vacios.append((ap, "Sin uso: %.1f m² sin luz natural en un rincón de la vivienda (más que un depósito de "
+                                   "%.0f m²)" % (abs(G.area(ap)), dep["max_area"])))
+                continue
+            aid = "annex%d" % (n_ + 1)
+            R[aid] = ("study" if fac else "storage", r, "Estudio" if fac else "Depósito")
+            best, bl = None, 0.0
+            for i, (k, rr, nm) in R.items():
+                if i == aid or k in ("bath", "laundry"):
+                    continue
+                seg = _shared(rr, r)
+                if seg:
+                    L = ((seg[1][0] - seg[0][0]) ** 2 + (seg[1][1] - seg[0][1]) ** 2) ** 0.5
+                    if L > bl:
+                        best, bl = i, L
+            if best:
+                E.append((best, aid, "puerta"))
+    # R5.7 y R5.12: los cambios a mano, en orden: tabiques movidos (pared) y estancias editadas (nombre, tipo, quitar,
+    # unir); est: el dormitorio principal (la cama doble y el placard lo siguen; sin cambios, bed1), si el usuario lo fijó,
+    # si cambió la cantidad de dormitorios y las estancias con nombre propio. Un cambio que no se puede aplicar se avisa
+    hechas, avisos_est = [], []
+    est = {"principal": "bed1", "fijado": False, "cambiado": False, "nombres": set()}
+    for k, e in (ediciones or []):
+        op = e.get("op")
+        if op == "pared":
+            if e.get("a"):
+                Rs = {i: v for i, v in R.items() if not i.startswith("annex")}   # el borde de un anexo no se mueve
+                if _mover_pared(Rs, e):
+                    R.update(Rs)
+                    hechas.append(k)
+        elif op in OPS_ESTANCIA:
+            anexar()
+            hecha, aviso = OPS_ESTANCIA[op](R, E, e, est)
+            if hecha:
+                hechas.append(k)
+            if aviso:
+                avisos_est.append(aviso)
     # conexiones abiertas de la zona de día: entre estancias de día que comparten borde
     day = [i for i, (k, r, n) in R.items() if k in DAY]
     have = {(a, b) for a, b, t in E} | {(b, a) for a, b, t in E}
@@ -2020,34 +2350,7 @@ def _plano(poly, nb, is_facade, equip, accesible, ediciones, ventanas, lateral=F
             seg = _shared(R[a][1], R[b][1])
             if seg and ((seg[1][0] - seg[0][0]) ** 2 + (seg[1][1] - seg[0][1]) ** 2) ** 0.5 >= MIN_SHARE["abierto"]:
                 E.append((a, b, "abierto"))
-    # anexos (bolsillos de la unidad): estudio si tiene fachada (también oblicua, como una ochava); sin ella, depósito si
-    # no pasa de su máximo y, si pasa, C: queda sin uso, con aviso (v2.33)
-    dep = V["deposito"]
-    for n_, ap in enumerate(annexes):
-        r = G.bbox(ap)
-        if is_facade is None:
-            fac = abs(r[3] - v1) < 0.05 and (r[3] - r[1]) >= 3.0
-        else:
-            fac = min(r[2] - r[0], r[3] - r[1]) >= V["estudio"]["min_side"] - 1e-6 and any(
-                ((q[0] - p[0]) ** 2 + (q[1] - p[1]) ** 2) ** 0.5 >= 1.5
-                for p, q, _ in _tramos_fachada(G.ensure_ccw(ap), poly, is_facade, v1))
-        if not fac and abs(G.area(ap)) > dep["max_area"] + 0.5:
-            vacios.append((ap, "Sin uso: %.1f m² sin luz natural en un rincón de la vivienda (más que un depósito de "
-                               "%.0f m²)" % (abs(G.area(ap)), dep["max_area"])))
-            continue
-        aid = "annex%d" % (n_ + 1)
-        R[aid] = ("study" if fac else "storage", r, "Estudio" if fac else "Depósito")
-        best, bl = None, 0.0
-        for i, (k, rr, nm) in R.items():
-            if i == aid or k in ("bath", "laundry"):
-                continue
-            seg = _shared(rr, r)
-            if seg:
-                L = ((seg[1][0] - seg[0][0]) ** 2 + (seg[1][1] - seg[0][1]) ** 2) ** 0.5
-                if L > bl:
-                    best, bl = i, L
-        if best:
-            E.append((best, aid, "puerta"))
+    anexar()                                           # (sin estancias editadas, después de las conexiones: como antes)
     rooms, ids = [], {}
     for i, (kind, rect, name) in R.items():
         p = G.clip_rect(poly, rect[0], rect[2], rect[1], rect[3]) if not i.startswith("annex") else \
@@ -2055,6 +2358,11 @@ def _plano(poly, nb, is_facade, equip, accesible, ediciones, ventanas, lateral=F
         if p and abs(G.area(p)) > 1.0:
             ids[i] = len(rooms)
             rooms.append({"id": i, "name": name, "kind": kind, "poly": p, "area": abs(G.area(p)), "rect": rect})
+    principal = est["principal"]
+    if principal in ids:
+        rooms[ids[principal]]["principal"] = True        # R5.12: la cama doble y el placard van en él
+    nb_real = sum(1 for r in rooms if r["kind"] == "bedroom")      # R5.12: con dormitorios quitados, unidos o nuevos, la
+    nb_eff = nb_real if est["cambiado"] else nb                    # vivienda cuenta los reales (sin cambios, los del mix)
 
     def en_fachada(rect):
         """Tramos de las paredes de la estancia sobre la fachada (con ventana): ahí no van el placard ni el rack de TV."""
@@ -2211,7 +2519,7 @@ def _plano(poly, nb, is_facade, equip, accesible, ediciones, ventanas, lateral=F
                 checks.append({"ok": False, "msg": "%s sin fachada (sin luz natural)" % r["name"]})
                 oscuras.add(r["id"])
         w = min(r["rect"][2] - r["rect"][0], r["rect"][3] - r["rect"][1])
-        sd = _std_for(r, nb, integradas)
+        sd = _std_for(r, nb, integradas, principal)
         if r["id"] in integradas and integradas[r["id"]] > _ci()["max_area"] + 1e-6:     # R10.8: art. 27
             checks.append({"ok": False, "msg": "Cocina integrada sin ventana de %.1f m²%s: la norma nacional admite de %g a "
                                                "%g m² (art. 27); más grande, con ventana propia (art. 24)" % (
@@ -2228,7 +2536,7 @@ def _plano(poly, nb, is_facade, equip, accesible, ediciones, ventanas, lateral=F
                 chicas.add(r["id"])
             ta = sd.get("typ_area")
             if r["kind"] == "living":
-                ta = V["estar_por_dorms"][min(nb, len(V["estar_por_dorms"]) - 1)]
+                ta = V["estar_por_dorms"][min(nb_eff, len(V["estar_por_dorms"]) - 1)]
             if ta and r["area"] < 0.9 * ta and not (ma and r["area"] < ma):
                 below.append("%s %.1f de %.0f m²" % (r["name"], r["area"], ta))
         elif w + 1e-6 < MIN_W.get(r["kind"], 0):
@@ -2258,9 +2566,11 @@ def _plano(poly, nb, is_facade, equip, accesible, ediciones, ventanas, lateral=F
                 aberturas.setdefault(i, []).append((seg[0], seg[1], otra))
     checks += [{"ok": False, "msg": c["msg"]} for c in sin_luz           # R5.5: vano mínimo (no en una estancia ya
                if c["room"] not in oscuras and c["room"] not in chicas]       # avisada por su fachada o su medida)
-    equipo, faltan = EQ.equipar(rooms, doors, aberturas, equip, nb, fachadas, chicas, accesible,   # F5: artefactos y muebles
-                                ("bed1",) if "vest" in ids else ())      # R5.10: con vestidor, el principal sin placard
-    checks += faltan
+    equipo, faltan = EQ.equipar(rooms, doors, aberturas, equip, nb_eff, fachadas, chicas, accesible,   # F5: artefactos y
+                                ("bed1",) if "vest" in ids else (), principal)   # muebles (R5.10: con vestidor, el principal
+    checks += faltan                                                             # sin placard; R5.12: la cama doble en principal)
+    for a in avisos_est:                               # R5.12: lo que no se pudo aplicar (layout lo copia a los avisos)
+        checks.append({"ok": True, "info": True, "msg": "Estancia a mano: " + a})
     for w in warnings:
         if isinstance(w, tuple):
             checks.append({"ok": True, "info": True, "msg": w[1]})
@@ -2279,10 +2589,10 @@ def _plano(poly, nb, is_facade, equip, accesible, ediciones, ventanas, lateral=F
         checks.append({"ok": True, "msg": TODO_BIEN})
     if below:
         checks.append({"ok": True, "info": True, "msg": "Por debajo de la medida típica: " + "; ".join(below)})
-    rng = V["rango_vivienda"][min(nb, len(V["rango_vivienda"]) - 1)]
+    rng = V["rango_vivienda"][min(nb_eff, len(V["rango_vivienda"]) - 1)]
     tot = abs(G.area(poly))
     if tot < rng[0] or tot > rng[1]:
-        checks.append({"ok": True, "info": True, "msg": "Superficie %.0f m² fuera del rango de referencia ANV para %d dorm. (%d-%d m²)" % (tot, nb, rng[0], rng[1])})
+        checks.append({"ok": True, "info": True, "msg": "Superficie %.0f m² fuera del rango de referencia ANV para %d dorm. (%d-%d m²)" % (tot, nb_eff, rng[0], rng[1])})
     nodes = [{"id": r["id"], "name": r["name"], "kind": r["kind"], "pos": G.centroid(r["poly"])} for r in rooms]
     muros = [((c, lo), (c, hi)) if eje == 0 else ((lo, c), (hi, c))     # tabiques interiores (se arrastran en la web);
              for eje, c, lo, hi in paredes({r["id"]: (r["kind"], r["rect"], r["name"]) for r in rooms   # el borde de
@@ -2291,6 +2601,7 @@ def _plano(poly, nb, is_facade, equip, accesible, ediciones, ventanas, lateral=F
     for r in rooms:
         del r["rect"]
     return {"rooms": rooms, "doors": doors, "graph": {"nodes": nodes, "edges": edges}, "equipamiento": equipo,
-            "checks": checks, "score": score, "bedrooms": nb, "facade": round(x1 - x0, 2),
+            "checks": checks, "score": score, "bedrooms": nb_eff, "facade": round(x1 - x0, 2),
             "facade_min": round(facade_min(nb), 2), "accesible": bool(accesible), "paredes": muros,
-            "ediciones": sorted(hechas), "ventanas": vent, "sin_uso": sin_uso, "_banda": usa_banda}
+            "ediciones": sorted(hechas), "ventanas": vent, "sin_uso": sin_uso, "_banda": usa_banda,
+            "avisos_estancias": avisos_est}
