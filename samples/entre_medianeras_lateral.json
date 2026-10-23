@@ -1,0 +1,4 @@
+{"name": "Predio entre medianeras 12 × 32 (pasillo lateral)", "height": 15,
+ "footprint": [[0,0],[12,0],[12,32],[0,32]],
+ "medianeras": [{"a":[12,0],"b":[12,32],"retiro":0},{"a":[0,32],"b":[0,0],"retiro":0}],
+ "between_mode": "lateral"}

@@ -109,6 +109,15 @@ def fondo_sin_tira():
     return BED_MAX + HALL + FR_MAX + 0.95
 
 
+def fondo_profundo():
+    """R11.4 (v2.72): el fondo más chico con el que el plano es «profundo» (_plan_rects: dormitorios, pasillo interno y
+    franja de servicios, el hall en su esquina y la cocina en la zona de día) en vez de «poco profundo» (hall, baño y
+    cocina en fila junto al pasillo común, que pide más frente). Es el fondo mínimo de una vivienda con fachada lateral
+    (su ancho a lo largo del pasillo del esquema «pasillo lateral con patios»: plan_lateral y units.generate_unit_mix),
+    donde el frente es fijo y el plano con el hall en la esquina del pasillo necesita la franja de servicios."""
+    return BED_D + HALL + FR_MIN
+
+
 def frente_principal(bedD=None):
     """R5.16b (v2.65): el frente del dormitorio principal: el típico (BED_MAIN, 3,00 m con las medidas por defecto: la cama
     doble con su paso a los lados y el placard al pie) o, si el fondo que le queda (bedD) no deja el placard al pie de la

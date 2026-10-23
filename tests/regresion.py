@@ -69,7 +69,7 @@ def _edificio(s):
         p["centerlines"] = lines
     if s.get("cores"):
         p["cores_mode"], p["cores"] = "manual", s["cores"]
-    for k in ("stories", "medianeras"):
+    for k in ("stories", "medianeras", "between_mode"):      # between_mode (R11.4): palier transversal o pasillo lateral
         if s.get(k):
             p[k] = s[k]
     if s.get("patios"):

@@ -1259,9 +1259,10 @@ def plan_lateral(fp, plate, params, ancho, minimo=3):
     aptos los tipos del mix con facade_min(dormitorios) ≤ D_u + 0,05; su ancho a lo largo del pasillo es su fondo, w. Con
     n viviendas hacen falta n_patios = ceil(n/2) − 1 patios como mínimo (dos por diente) y el largo del pasillo L reparte
     L = n·w + n_patios·(ancho + 2·outer_wall) + núcleos·core_width + tabiques entre vecinas; se toma el n más grande con
-    w ≥ max(fondo_min() + 0,5 —el fondo que aprovecha un plano—, superficie media de los tipos aptos / D_u / 1,35 —la
-    misma tolerancia de los tipos aptos del reparto—); con n fijo, entre las hileras posibles (cuántas viviendas y si el
-    núcleo va en cada diente) gana la que cumple el fondo de saco (egress_single, desde la puerta: PUERTA_LATERAL hacia
+    w ≥ max(plans.fondo_profundo() —el fondo con el que el plano lleva franja de servicios y el hall en la esquina del
+    pasillo; con menos, el plano «poco profundo» pide más frente que D_u—, superficie media de los tipos aptos / D_u /
+    1,35 —la misma tolerancia de los tipos aptos del reparto—); con n fijo, entre las hileras posibles (cuántas viviendas
+    y si el núcleo va en cada diente) gana la que cumple el fondo de saco (egress_single, desde la puerta: PUERTA_LATERAL hacia
     adentro desde el fondo de cada vivienda, hasta el núcleo más cercano; entre dos núcleos, dos salidas) con un núcleo;
     si ninguna, con dos; después, la de menos patios y la de menor recorrido. Los dientes se reparten en proporción (dos
     viviendas, doble largo; el reparto del mix pone después una o dos en cada uno, units.generate_unit_mix).
@@ -1285,7 +1286,7 @@ def plan_lateral(fp, plate, params, ancho, minimo=3):
             D, min(P.facade_min(_dorms_mix(m)) for m in mix) if mix else P.facade_min(0))
     tot = sum(m["percent"] for m in aptos) or 1.0
     avg = sum(m["percent"] / tot * m["area"] for m in aptos)
-    w_min = max(P.fondo_min() + 0.5, avg / D / 1.35)
+    w_min = max(P.fondo_profundo(), avg / D / 1.35)      # el fondo del plano profundo (con el hall en la esquina)
     bl = params.get("_blind")
     mid = (ly1 - cw / 2) / 2
     fach = [not (bl and bl(G.to_world([(x_, mid)], o, a)[0])) for x_ in (0.0, L)]
@@ -1422,7 +1423,7 @@ def _nucleo_lateral(pc, x, params, pieces):
         for xx in sorted({min(max(x - 0.25 * k, xa), xb), min(max(x + 0.25 * k, xa), xb)}):
             box = (xx - w / 2, -cw / 2, xx + w / 2, y1)
             c = {"x": xx, "side": 1, "box": box, "lateral": True,
-                 "poly_local": G.clip_rect(pc["loc_plate"], box[0], box[2], box[1], box[3])}
+                 "poly_local": G.clean_rel(G.largest_part(G.clip_rect(pc["loc_plate"], box[0], box[2], box[1], box[3])))}
             if c["poly_local"] and abs(G.area(c["poly_local"])) > 0.9 * w * (y1 + cw / 2) and \
                     not _pisa_nucleo(pieces, pc, c):
                 pc["cores"].append(c)

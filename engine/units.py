@@ -109,6 +109,10 @@ def _segments(loc, circ, params):
         for a, b, region in [(a, b, r) for a, b in ivs for r in G.clip_rect_parts(loc, a, b, y0, y1)]:
             if not region or abs(G.area(region)) <= 4:       # un corte que separa la planta da varias franjas
                 continue
+            if circ.get("lateral"):
+                # R11.4: en la planta en peine el núcleo o un patio pueden caer a una millonésima del borde de un diente
+                # (la planta viene redondeada): sin la punta de ancho cero que deja el recorte, que corría x0 del diente
+                region = G.clean_rel(region)
             if _is_rect(region):
                 r = G.bbox(region)
                 parts = [r]
@@ -202,9 +206,10 @@ def generate_unit_mix(circ, params, state=None):
     Pasillo lateral con patios (R11.4, v2.72; circ["lateral"]): cada diente de la hilera (franja entre patios, o entre un
     patio y el núcleo) es una franja cuyas viviendas tienen la fachada en el costado: la fachada de todas mide D (el fondo
     de la franja, fijo) y su ancho a lo largo del pasillo es su fondo. Son aptos los tipos con facade_min(dormitorios) ≤
-    D + 0,05; el frente mínimo de cada vivienda es fondo_min() + 0,5 (el fondo que aprovecha un plano) y su ancho sale de
-    su superficie objetivo / D; en un diente entran a lo sumo tantas viviendas como fachadas tiene (fachadas_diente: una
-    por lado con la calle, el contrafrente o un patio; ninguna junto al núcleo), así ninguna queda sin luz. Cada vivienda
+    D + 0,05; el frente mínimo de cada vivienda es plans.fondo_profundo() (el fondo con el que el plano lleva el hall en la
+    esquina del pasillo y la franja de servicios) y su ancho sale de su superficie objetivo / D; en un diente entran a lo
+    sumo tantas viviendas como fachadas tiene (fachadas_diente: una por lado con la calle, el contrafrente o un patio;
+    ninguna junto al núcleo), así ninguna queda sin luz. Cada vivienda
     anota «lateral» (-1: su fachada es el costado x0; 1: x1; 0: los dos) y _fachada (el costado que el plano usa como
     fondo cuando tiene los dos: la calle o el contrafrente antes que un patio, y a igual, x0)."""
     loc = circ["loc_plate"]
@@ -241,7 +246,7 @@ def generate_unit_mix(circ, params, state=None):
         area_r, corte_r = _perfil(region)
         D_seg = A_seg / length                                  # fondo medio de la franja
         D_util = D_seg if lateral else min(D_seg, P.fondo_sin_tira())    # el fondo que el plano aprovecha entero
-        fmin = {m["name"]: (P.fondo_min() + 0.5 if lateral else P.frente_min(_dorms_de(m), D_seg)) for m in mix}
+        fmin = {m["name"]: (P.fondo_profundo() if lateral else P.frente_min(_dorms_de(m), D_seg)) for m in mix}
         caben = [m for m in mix if fmin[m["name"]] <= length + 1e-6] or [min(mix, key=lambda m: fmin[m["name"]])]
         aptos = [m for m in caben if fmin[m["name"]] * D_seg <= 1.35 * m["area"] + 1e-6] or \
             [min(caben, key=lambda m: fmin[m["name"]] * D_seg / m["area"])]
