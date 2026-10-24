@@ -406,7 +406,8 @@ def _tipo(rm):
             "vestidor": "vestidor"}.get(k)
 
 
-def resolver(rm, puertas, aberturas, S, fachada=(), nb=1, mesa=True, ids=None, acc=False, placard=True, principal="bed1"):
+def resolver(rm, puertas, aberturas, S, fachada=(), nb=1, mesa=True, ids=None, acc=False, placard=True, principal="bed1",
+             snap=0.0):
     """Equipamiento de una estancia (con memoria: estancias iguales se resuelven una vez). puertas: [{p, q, a, b, ancho}];
     aberturas: {id: [(p, q[, id de la otra estancia])]}; fachada: tramos de pared con ventana [(p, q)]; nb: dormitorios
     (los asientos de la mesa); mesa: si el estar lleva la mesa del comedor; ids: estancias que se amueblan juntas (el
@@ -417,11 +418,20 @@ def resolver(rm, puertas, aberturas, S, fachada=(), nb=1, mesa=True, ids=None, a
     van redondeadas a 0,1 mm y se calcula con esos valores; el ancho y el fondo van tal cual, porque la estancia se calcula
     con ellos: en una estancia simétrica (la puerta al medio, la ventana de lado a lado), qué lado ocupan la cama o el
     placard lo decide una diferencia de 1e-15 m entre dos posiciones iguales, y con el ancho redondeado en la clave la
-    primera estancia «igual» que se calculaba fijaba el equipamiento de todas las demás."""
+    primera estancia «igual» que se calculaba fijaba el equipamiento de todas las demás.
+    snap (R5.8a, v2.73): rm["rect"] es el rectángulo libre de la estancia (a medio tabique del eje) y las puertas, las
+    aberturas y la fachada vienen al eje: cada coordenada a snap o menos de un borde del rectángulo se lleva a él, y
+    las demás se recortan a él; con 0 (la estancia al eje, como antes) no se mueve nada."""
     ids = tuple(ids or (rm["id"],))
     x0, v0, x1, v1 = rm["rect"]
     ancho, fondo = x1 - x0, v1 - v0
-    rel = lambda pt: (round(pt[0] - x0, 4), round(pt[1] - v0, 4))
+
+    def rel(pt):
+        x, y = pt[0] - x0, pt[1] - v0
+        if snap > 0:
+            x = 0.0 if abs(x) <= snap else ancho if abs(x - ancho) <= snap else min(max(x, 0.0), ancho)
+            y = 0.0 if abs(y) <= snap else fondo if abs(y - fondo) <= snap else min(max(y, 0.0), fondo)
+        return (round(x, 4), round(y, 4))
     pts = tuple(sorted((rel(d["p"]), rel(d["q"]), round(d["ancho"], 3), d["b"] in ids)
                        for d in puertas if d["a"] in ids or d["b"] in ids))
     abre = tuple(sorted((rel(ab[0]), rel(ab[1]), ab[2] if len(ab) > 2 else "")
@@ -456,13 +466,15 @@ def _contiguos(a, b):
     return abs(a[0] - b[0]) < 0.05 and abs(a[2] - b[2]) < 0.05 and (abs(a[3] - b[1]) < 0.05 or abs(b[3] - a[1]) < 0.05)
 
 
-def equipar(rooms, puertas, aberturas, S, nb, fachadas=None, chicas=(), acc=False, sin_placard=(), principal="bed1"):
+def equipar(rooms, puertas, aberturas, S, nb, fachadas=None, chicas=(), acc=False, sin_placard=(), principal="bed1",
+            snap=0.0):
     """Artefactos y muebles de la vivienda. rooms: [{id, kind, name, rect[, poly]}]; puertas: [{p, q, a, b, ancho}] (la
     hoja abre hacia b); aberturas: {id: [(p, q[, id de la otra estancia])]} bordes abiertos a otra estancia; fachadas:
     {id: [(p, q)]} tramos de pared con ventana; chicas: estancias ya avisadas por no llegar a su medida mínima (se equipan
     igual, pero no se avisa además lo que no entra); acc: vivienda accesible; sin_placard: dormitorios sin placard (R5.10:
     el principal con vestidor); principal (R5.12): el dormitorio principal (cama doble y placard largo; los demás, camas
-    individuales). El comedor y el estar contiguos se amueblan juntos. Devuelve (piezas, comprobaciones)."""
+    individuales); snap (R5.8a): ver resolver (las estancias vienen con su rectángulo libre). El comedor y el estar
+    contiguos se amueblan juntos. Devuelve (piezas, comprobaciones)."""
     fachadas = fachadas or {}
     piezas, checks = [], []
     por_id = {rm["id"]: rm for rm in rooms}
@@ -482,7 +494,7 @@ def equipar(rooms, puertas, aberturas, S, nb, fachadas=None, chicas=(), acc=Fals
             ids, nombre = ("living", "dining"), {"mesa": com["name"]}
         x0, v0 = sala["rect"][0], sala["rect"][1]
         hechas, faltan, info = resolver(sala, puertas, aberturas, S, [s for i in ids for s in fachadas.get(i, [])], nb,
-                                        junto or com is None, ids, acc, rm["id"] not in sin_placard, principal)
+                                        junto or com is None, ids, acc, rm["id"] not in sin_placard, principal, snap)
         for k, o, es, en, w, d in hechas:
             pz = _pieza(k, (o[0] + x0, o[1] + v0), es, en, w, d, rm["id"])
             if junto and rm is est:                       # cada mueble, en la estancia donde cae su centro

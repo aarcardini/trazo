@@ -36,7 +36,51 @@ KITCH_LINE = 2.7      # mesada en línea con la heladera (configure lo toma de e
 KITCH_L = 2.2         # fondo de una cocina en L: la mesada, su paso y la heladera en la otra pared (ídem)
 KITCH_MESADA = 2.0    # R10.8: largo de la mesada sin la heladera: bacha, mesada de trabajo y cocina (ídem)
 KITCH_FRENTE = 1.5    # R10.8: la mesada y su paso delante (ídem)
-V = ST.DEFAULTS["vivienda"]
+V = ST.DEFAULTS["vivienda"]      # las medidas de trabajo (R5.8a: las lineales llevan el tabique, ver _trabajo)
+VN = ST.DEFAULTS["vivienda"]     # R5.8a: las medidas de la norma (libres), para las comprobaciones (_std_for)
+# R5.8a (v2.73): espesor del tabique interior (vivienda["tabique"], 0,10 m) y su mitad. Los rectángulos de las estancias
+# se tocan por el eje del tabique: una estancia dimensionada con `libre + TAB` deja `libre` entre las caras de dos tabiques
+# (T2 a cada lado). Las constantes de trabajo de abajo llevan + TAB (configure); el contorno de la vivienda (fachada,
+# patio, medianera, vecina, pasillo común, núcleo) ya tiene su muro fuera del polígono y no descuenta nada (_libres)
+TAB, T2 = 0.0, 0.0
+_BED_D0 = 3.0         # fondo mínimo de un dormitorio detrás del pasillo interno, libre (BED_D = _BED_D0 + T2: un tabique)
+_LINEALES = ("min_side", "max_side", "typ_side")       # las medidas lineales de cada estancia de vivienda (y «typ»)
+_FACTOR = {"cocina": 0.5, "cocina_integrada": 0.5}      # estancias con medio tabique (ver _trabajo)
+KT = 0.0              # R5.8a: lo que suma el ancho de la cocina (T2: a lo sumo un tabique al costado); su fondo, nada
+
+
+def _trabajo(vivienda, tab):
+    """R5.8a: la copia de trabajo de vivienda con la que el plano dimensiona cada estancia: cada medida lineal (min_side,
+    max_side, typ_side y los dos valores de typ) lleva el tabique sumado, así la estancia queda con su medida libre entre
+    las caras de dos tabiques; las superficies (min_area, typ_area, max_area, las listas) no cambian: las convierte _wa.
+    La cocina (y la integrada) lleva medio tabique: abierta a la zona de día tiene a lo sumo un tabique en su ancho (el
+    baño, el depósito o el lavadero al costado) y ninguno en su fondo (el pasillo común y el estar abierto). Con tab = 0
+    es una copia igual."""
+    out = {}
+    for k, v in vivienda.items():
+        if isinstance(v, dict):
+            d, t_ = dict(v), tab * _FACTOR.get(k, 1.0)
+            for m in _LINEALES:
+                if isinstance(d.get(m), (int, float)):
+                    d[m] = d[m] + t_
+            if isinstance(d.get("typ"), (list, tuple)):
+                d["typ"] = [t + t_ for t in d["typ"]]
+            out[k] = d
+        else:
+            out[k] = v
+    return out
+
+
+def _wa(area, d, nd=2, nw=2):
+    """R5.8a: el ancho al eje que necesita una estancia de superficie libre «area» con el otro lado d (al eje), que tiene nd
+    tabiques (T2 cada uno) y en el ancho nw: area / (d − nd·T2) + nw·T2. Reemplaza a «area / d» donde el plano saca un
+    ancho de una superficie mínima, típica o máxima. Con TAB = 0 es area / d."""
+    return area / max(d - nd * T2, 0.1) + nw * T2
+
+
+def _area_libre(w, d, nw=2, nd=2):
+    """R5.8a: la superficie libre de un rectángulo al eje de w × d con nw y nd tabiques en cada dirección."""
+    return max(0.0, w - nw * T2) * max(0.0, d - nd * T2)
 
 
 def _cama_placard(eq):
@@ -52,35 +96,44 @@ CAMA_FONDO = 2.5      # R5.10: el principal sin placard (con vestidor), la cama 
 
 def configure(vivienda, equip=None, accesible=False):
     """Ajusta las medidas de proyecto a partir de la tabla de estándares (standards.py / web). accesible: el baño
-    principal toma el ancho del baño accesible."""
+    principal toma el ancho del baño accesible.
+    R5.8a (v2.73): las constantes de trabajo llevan el tabique (TAB = vivienda["tabique"]): V es la copia de trabajo
+    (_trabajo: las medidas lineales + TAB) y VN la norma; las que salen del equipamiento (el inodoro con su paso, la
+    mesada, la cama con el placard) suman TAB (o T2 donde la estancia solo tiene un tabique en esa dirección: el fondo de
+    un dormitorio, entre el pasillo interno y la fachada, y el frente del estar, entre el contorno y la zona de noche)."""
     global HALL, LIV_MIN, BED_MAIN, BED_W, BATH_W1, BATH_W2, HALL_W, KITCH_D, LAV_W, BATH2_D, V, DOOR, ENTRY, DOOR_ACC
     global CAMA_PLACARD, CAMA_FONDO, BATH_MIN, BATH_MIN_D, BATH_FULL, FR_MIN, FR_MAX, KITCH_LINE, KITCH_L, KITCH_MESADA
-    global KITCH_FRENTE, EQUIPO
-    V = vivienda
+    global KITCH_FRENTE, EQUIPO, TAB, T2, VN, BED_D, KT
+    VN = vivienda
+    TAB = float(vivienda.get("tabique") or 0.0)
+    T2 = KT = TAB / 2.0
+    V = _trabajo(vivienda, TAB)
     eq = EQUIPO = equip or ST.DEFAULTS["equipamiento"]
-    CAMA_PLACARD = _cama_placard(eq)
-    CAMA_FONDO = eq["cama_doble"][1] + eq["paso_cama"]
+    cp = _cama_placard(eq)
+    CAMA_PLACARD = (cp[0] + TAB, cp[1] + T2)           # el frente, entre dos tabiques; el fondo, hasta la fachada
+    CAMA_FONDO = eq["cama_doble"][1] + eq["paso_cama"] + T2
+    BED_D = _BED_D0 + T2
     DOOR, ENTRY, DOOR_ACC = eq["puerta_interior"], eq["puerta_entrada"], eq["puerta_accesible"]
     MIN_SHARE["puerta"] = DOOR + 0.1
     HALL = max(V["pasillo"]["min_side"], V["pasillo"]["typ_side"])
     BED_MAIN = max(V["dorm_principal"]["min_side"], V["dorm_principal"]["typ"][0])
     BED_W = max(V["dorm_secundario"]["min_side"], V["dorm_secundario"]["typ"][0])
-    LIV_MIN = max(V["estar_comedor"]["min_side"], 0.95 * V["estar_comedor"]["typ"][0])
-    inodoro = eq["inodoro"][1] + eq["paso_bano"]           # un baño angosto: el inodoro contra la pared larga y su paso
-    BATH_W1 = max(V["bano"]["min_side"], V["bano"]["typ"][0], inodoro, eq["bano_accesible"][0] if accesible else 0.0)
+    LIV_MIN = max(VN["estar_comedor"]["min_side"], 0.95 * VN["estar_comedor"]["typ"][0]) + T2    # el contorno en x0
+    inodoro = eq["inodoro"][1] + eq["paso_bano"] + TAB     # un baño angosto: el inodoro contra la pared larga y su paso
+    BATH_W1 = max(V["bano"]["min_side"], V["bano"]["typ"][0], inodoro, eq["bano_accesible"][0] + TAB if accesible else 0.0)
     BATH_W2 = max(V["bano_aux"]["min_side"], V["bano_aux"]["typ"][0], inodoro)
-    LAV_W = max(V["lavadero"]["min_side"], eq["lavarropas"][1] + eq["paso_lavadero"])
-    BATH2_D = eq["inodoro"][1] + eq["paso_bano"] + eq["lavatorio"][0]   # fondo mínimo de un segundo baño (al menos toilette)
-    HALL_W = max(V["hall"]["min_side"], V["hall"]["typ"][0])
+    LAV_W = max(V["lavadero"]["min_side"], eq["lavarropas"][1] + eq["paso_lavadero"] + TAB)
+    BATH2_D = eq["inodoro"][1] + eq["paso_bano"] + eq["lavatorio"][0] + TAB   # fondo mínimo de un segundo baño (toilette)
+    HALL_W = max(VN["hall"]["min_side"], VN["hall"]["typ"][0]) + T2    # un tabique: la zona de noche (la cocina, abierta)
     KITCH_D = V["cocina"]["typ"][1]
     BATH_MIN = max(V["bano"]["min_side"], inodoro)
-    BATH_MIN_D = max(V["bano"]["min_side"], eq["ducha"][1] + eq["paso_bano"])
-    BATH_FULL = (eq["ducha"][0] + eq["inodoro"][0], eq["ducha"][1] + eq["inodoro"][0] + eq["lavatorio"][0])
+    BATH_MIN_D = max(V["bano"]["min_side"], eq["ducha"][1] + eq["paso_bano"] + TAB)
+    BATH_FULL = (eq["ducha"][0] + eq["inodoro"][0] + TAB, eq["ducha"][1] + eq["inodoro"][0] + eq["lavatorio"][0] + TAB)
     FR_MIN, FR_MAX = V["franja_servicios"]["min_side"], V["franja_servicios"]["max_side"]
-    KITCH_LINE = eq["heladera"][0] + eq["bacha_cocina"] + eq["mesada_trabajo"] + eq["cocina_horno"]
-    KITCH_L = eq["mesada_fondo"] + eq["paso_cocina"] + eq["heladera"][1]
-    KITCH_MESADA = eq["bacha_cocina"] + eq["mesada_trabajo"] + eq["cocina_horno"]
-    KITCH_FRENTE = eq["mesada_fondo"] + eq["paso_cocina"]
+    KITCH_LINE = eq["heladera"][0] + eq["bacha_cocina"] + eq["mesada_trabajo"] + eq["cocina_horno"]   # (libres: la
+    KITCH_L = eq["mesada_fondo"] + eq["paso_cocina"] + eq["heladera"][1]                                # cocina suma KT
+    KITCH_MESADA = eq["bacha_cocina"] + eq["mesada_trabajo"] + eq["cocina_horno"]                       # solo en su
+    KITCH_FRENTE = eq["mesada_fondo"] + eq["paso_cocina"]                                                 # ancho)
 MIN_SHARE = {"puerta": DOOR + 0.1, "abierto": 0.85}
 EQUIPO = ST.DEFAULTS["equipamiento"]     # R10.8: las medidas de equipamiento (configure; la mesada de la cocina)
 NAMES = {"hall": "Hall", "kitchen": "Cocina", "living": "Estar-Comedor", "dining": "Comedor", "hallway": "Pasillo",
@@ -158,8 +211,8 @@ def frente_min(nb, D=None, fila=None):
       monoambiente de _plan_rects; con menos, el hall queda bajo su mínimo o la heladera no entra)."""
     if nb == 0:
         kd = min(2.4, D * 0.4) if D else 2.4
-        bano = max(BATH_FULL[0], V["bano"]["min_area"] / kd)
-        return max(facade_min(0), min(HALL_W, V["hall"]["min_side"]) + bano + (_ancho_cocina(kd) or KITCH_LINE))
+        bano = max(BATH_FULL[0], _wa(V["bano"]["min_area"], kd))
+        return max(facade_min(0), min(HALL_W, V["hall"]["min_side"]) + bano + (_ancho_cocina(kd) or KITCH_LINE + KT))
     if fila is not None and D is not None:
         w = frente_fila(nb, D, fila)
         if w is not None:
@@ -168,7 +221,7 @@ def frente_min(nb, D=None, fila=None):
     if D is None or D - HALL - BED_D >= FR_MIN - 1e-9:
         return facade_min(nb, bedD)
     kd = min(2.6, max(1.8, D * 0.4))
-    return facade_min(nb, bedD) - LIV_MIN + max(LIV_MIN, HALL_W + BATH_W1 + max(1.8, _ancho_cocina(kd) or KITCH_LINE))
+    return facade_min(nb, bedD) - LIV_MIN + max(LIV_MIN, HALL_W + BATH_W1 + max(1.8, _ancho_cocina(kd) or KITCH_LINE + KT))
 
 
 def _shared(r1, r2, tol=0.05):
@@ -212,9 +265,11 @@ def paredes(R):
     return out
 
 
-def _mover_pared(R, e, minimo=0.6):
+def _mover_pared(R, e, minimo=None):
     """R5.7: mueve el tabique que pasa por e["p"] hasta e["a"] (marco de la vivienda): corre el lado de todas las
-    estancias que se apoyan en él; cada una conserva al menos `minimo`. Devuelve si se aplicó."""
+    estancias que se apoyan en él; cada una conserva al menos `minimo` (R5.8a: 0,60 m libres, más el tabique, al eje).
+    Devuelve si se aplicó."""
+    minimo = 0.6 + TAB if minimo is None else minimo
     p, a = e["p"], e["a"]
     cerca = []
     for eje, c, lo, hi in paredes(R):
@@ -274,6 +329,7 @@ def _editar_puerta(doors, rect, e, v0):
         return False
     k = 1 if d["vertical"] else 0
     lo, hi = sorted((seg[0][k], seg[1][k]))
+    lo, hi = lo + T2, hi - T2                          # R5.8a: dentro del tramo libre (sin pisar el tabique perpendicular)
     w = ((d["q"][0] - d["p"][0]) ** 2 + (d["q"][1] - d["p"][1]) ** 2) ** 0.5
     if e.get("ancho"):
         w = max(0.5, min(float(e["ancho"]), hi - lo - 0.1))
@@ -618,7 +674,8 @@ def _ventanas(rooms, borde, is_facade, v1, S, cocinas=None):
     cocinas = cocinas or {}
     es_cocina = lambda r: r["kind"] == "kitchen" or "Cocina" in r["name"]
     habit = [r for r in rooms if r["kind"] in ("bedroom", "living", "dining", "study") or es_cocina(r)]
-    tramos = {r["id"]: sorted(_tramos_fachada(r["poly"], borde, is_facade, v1),     # primero la fachada del fondo
+    libre = lambda r: (r.get("libre") or {}).get("poly") or r["poly"]    # R5.8a: la mocheta, desde la cara del tabique
+    tramos = {r["id"]: sorted(_tramos_fachada(libre(r), borde, is_facade, v1),     # primero la fachada del fondo
                               key=lambda t: (t[2][1] < 0.7, -largo(t))) for r in habit}
     comedor = [r for r in habit if r["kind"] == "dining" and not tramos[r["id"]]]
     con_v = lambda i: any(_entra_ventana(largo(t), S) for t in tramos.get(i, ()))    # un tramo con lugar para la ventana
@@ -691,13 +748,13 @@ def _ancho(clave, d, acc=None):
                   "laundry": (V["lavadero"], LAV_W)}[clave]
     if clave != "laundry" and d < BATH_FULL[1] - 1e-6:     # con poco fondo, el ancho que deja lugar a la ducha
         minimo = max(minimo, BATH_FULL[0])
-    return max(minimo, sd["typ_area"] / d)
+    return max(minimo, _wa(sd["typ_area"], d))
 
 
 def _tope(clave, d):
     """Ancho máximo de una estancia de la franja de fondo d: hasta ahí la agranda lo que sobra (B, v2.33)."""
-    return {"bath1": V["bano"], "suite": V["bano"], "bath2": V["bano_aux"], "laundry": V["lavadero"],
-            "storage": V["deposito"]}[clave]["max_area"] / d
+    return _wa({"bath1": V["bano"], "suite": V["bano"], "bath2": V["bano_aux"], "laundry": V["lavadero"],
+                "storage": V["deposito"]}[clave]["max_area"], d)
 
 
 def _fondo_franja(claves, L, lo, hi, acc=None):
@@ -743,7 +800,7 @@ def _anchos_dormitorios(Wn, nf, bedD):
     k = Wn / sum(widths)
     widths = [w * k for w in widths]
     specs = [V["dorm_principal"]] + [V["dorm_secundario"]] * (nf - 1)
-    mw = [max(sp["min_side"], sp["min_area"] / max(bedD, 0.1) + 0.02) for sp in specs]
+    mw = [max(sp["min_side"], _wa(sp["min_area"], bedD, 1) + 0.02) for sp in specs]   # (R5.8a: un tabique en el fondo)
     if bedD < CAMA_PLACARD[1] - 1e-6 and sum(mw[1:]) + max(mw[0], CAMA_PLACARD[0]) <= Wn + 1e-6:
         mw[0] = max(mw[0], CAMA_PLACARD[0])
     if sum(mw) <= Wn + 1e-6:
@@ -767,8 +824,8 @@ def _modos_cocina(costado=True):
     desde el pasillo común (costado: sin puerta ni abertura), en L al revés o la mesada entera contra ella. El fondo, no
     menos del lado mínimo de una cocina."""
     linea = max(V["cocina"]["min_side"], KITCH_FRENTE)
-    return [(linea, KITCH_LINE), (max(linea, KITCH_L), KITCH_MESADA)] + (
-        [(max(linea, KITCH_MESADA), KITCH_L), (max(linea, KITCH_LINE), max(KITCH_FRENTE, _ci()["min_side"]))]
+    return [(linea, KITCH_LINE + KT), (max(linea, KITCH_L), KITCH_MESADA + KT)] + (     # (R5.8a: el ancho, con KT)
+        [(max(linea, KITCH_MESADA), KITCH_L + KT), (max(linea, KITCH_LINE), max(KITCH_FRENTE + KT, _ci()["min_side"]))]
         if costado else [])
 
 
@@ -877,7 +934,10 @@ def _entra_lavadero(rect, deposito=False, forma=None):
     _distribuir (al medio o junto a una punta) y, con deposito, la del depósito al medio de la de x1. Se prueba con el
     equipamiento (EQ.resolver): en una tira de menos de LAV_W (el lavarropas y su paso) pueden entrar contra las paredes
     del costado, o no."""
-    x0, v0, x1, v1 = rect
+    x0, v0, x1, v1 = rect[0] + T2, rect[1], rect[2] - T2, rect[3] - T2    # R5.8a: el rectángulo libre (v0 es el
+    rect = (x0, v0, x1, v1)                                                # pasillo común: sin tabique)
+    if forma and TAB > 0:
+        forma = G.clip_rect(forma, x0, x1, v0, v1) or None
     d, h = v1 - v0, DOOR / 2
     if d < DOOR + 0.1 - 1e-6:
         return False
@@ -896,7 +956,10 @@ def _entra_bano_suite(rect, forma=None):
     """R5.11 (revisión): ¿entran la ducha, el inodoro y el lavatorio en el baño en suite rect, si un muro oblicuo lo
     recorta (forma: su contorno)? La puerta, desde el dormitorio, en su pared de v1, donde la pondría _distribuir (al medio
     o junto a una punta). Si no entran, quedaría como toilette."""
-    x0, v0, x1, v1 = rect
+    x0, v0, x1, v1 = rect[0] + T2, rect[1] + T2, rect[2], rect[3] - T2    # R5.8a: el rectángulo libre (x1 es el
+    rect = (x0, v0, x1, v1)                                                # contorno de la vivienda: sin tabique)
+    if forma and TAB > 0:
+        forma = G.clip_rect(forma, x0, x1, v0, v1) or None
     w, h = x1 - x0, DOOR / 2
     if w < DOOR + 0.1 - 1e-6:
         return False
@@ -1016,9 +1079,9 @@ def _plan_rects(x0, v0, x1, v1, nb, warnings, acc=None, lateral=False, hall_x0=F
         resto -= mas
         wd = 0.0
         if dep["max_area"] > 0 and resto > 1e-6:
-            wmin = max(dep["min_side"], MIN_SHARE["puerta"], dep["min_area"] / d)
+            wmin = max(dep["min_side"], MIN_SHARE["puerta"], _wa(dep["min_area"], d))
             if resto >= wmin - 1e-6:
-                wd = min(resto, dep["max_area"] / d)
+                wd = min(resto, _wa(dep["max_area"], d))
             elif mas >= wmin - resto:                  # el baño le da al depósito lo que le falta
                 mas, wd = mas - (wmin - resto), wmin
             resto = max(0.0, resto - wd)
@@ -1039,31 +1102,31 @@ def _plan_rects(x0, v0, x1, v1, nb, warnings, acc=None, lateral=False, hall_x0=F
         hw = min(1.4, max(1.1, W * 0.2))
         if acc and W - acc[0] - hw >= 1.6 - 1e-6:      # baño accesible, si la cocina sigue entrando
             bw, kd = acc[0], max(kd, min(acc[1], D - 3.5))
-        hmin, ka = min(HALL_W, V["hall"]["min_side"]), _ancho_cocina(kd) or KITCH_FRENTE
+        hmin, ka = min(HALL_W, V["hall"]["min_side"]), _ancho_cocina(kd) or KITCH_FRENTE + KT
         entero = lambda a: real((x1 - a, v0, x1, v0 + kd) if hall_x0 else (x0, v0, x0 + a, v0 + kd)) >= a * kd - 0.01
         if hw < hmin:                                  # v2.41: el hall, con su lado mínimo, solo si la cocina conserva
             if W - bw - hmin >= ka - 1e-6:             # el ancho de su acomodo (con la heladera)
                 hw = hmin
-            elif bw != (acc or (0.0,))[0] and W - hmin - ka >= max(BATH_FULL[0], V["bano"]["min_area"] / kd) - 1e-6 \
+            elif bw != (acc or (0.0,))[0] and W - hmin - ka >= max(BATH_FULL[0], _wa(V["bano"]["min_area"], kd)) - 1e-6 \
                     and entero(W - hmin - ka):         # o si se lo da el baño, que conserva su ducha (sin muro oblicuo)
                 bw, hw = W - hmin - ka, hmin
-            elif W - bw - hw < ka - 1e-6 and W - bw - hmin >= KITCH_FRENTE - 1e-6:
+            elif W - bw - hw < ka - 1e-6 and W - bw - hmin >= KITCH_FRENTE + KT - 1e-6:
                 hw = hmin                              # la cocina ya no tenía su acomodo: el hall, sin quitarle la mesada
         # R10.8: un muro oblicuo que corta el extremo x1 junto al pasillo común: la estancia de ese extremo (el baño con el
         # hall en x0; si no, el hall, con la puerta de entrada) se ensancha lo que pierde su borde recto, sin que la
         # cocina baje del frente de su mesada
         c0 = max(0.0, W / 2 - real((x0 + W / 2, v0, x1, v0 + 0.01)) / 0.01) if area_de else 0.0
         if c0 > 1e-3 and hall_x0:
-            bw = max(bw, min(W - hw - KITCH_FRENTE, bw + c0))
+            bw = max(bw, min(W - hw - KITCH_FRENTE - KT, bw + c0))
         elif c0 > 1e-3:
-            hw = max(hw, min(W - bw - KITCH_FRENTE, hw + c0))
+            hw = max(hw, min(W - bw - KITCH_FRENTE - KT, hw + c0))
         # R10.8: la cocina integrada, de 5 m² como máximo (art. 27): la franja de la entrada comparte el fondo con el baño:
         # primero se angosta (lo que deja: sobrante); si no entra, la franja pierde fondo, sin que el baño baje de su mínimo
         # (si un muro oblicuo lo corta o es el accesible, no lo pierde) y, si se puede, sin que el estar-dormitorio pase de
         # prop veces su ancho (art. 14)
         kb = x1 - bw if hall_x0 else x0
         fb = kd if (acc and bw == acc[0]) or real((kb, v0, kb + bw, v0 + kd)) < bw * kd - 1e-6 else \
-            max(BATH_MIN_D, V["bano"]["min_area"] / max(bw, 0.1))
+            max(BATH_MIN_D, _wa(V["bano"]["min_area"], bw))
         caja = (lambda a, b, bw: (x1 - bw - a, v0, x1 - bw, v0 + b)) if hall_x0 else \
             (lambda a, b, bw: (x0 + bw, v0, x0 + bw + a, v0 + b))
         wk, kd = cocina(W - bw - hw, kd, lambda a, b: caja(a, b, bw), [kd, max(fb, D - prop * W), fb],
@@ -1113,7 +1176,7 @@ def _plan_rects(x0, v0, x1, v1, nb, warnings, acc=None, lateral=False, hall_x0=F
         # zona de noche (de fachada hacia el pasillo común): dormitorios | pasillo | franja de servicios | (sobrante)
         hi = min(FR_MAX, D - HALL - BED_D)
         dep = V["deposito"]
-        angosta = xs - x0 - hw < KITCH_LINE            # la cocina va en L: la franja no la deja sin su fondo
+        angosta = xs - x0 - hw < KITCH_LINE + KT       # la cocina va en L: la franja no la deja sin su fondo
         lo_k = KITCH_L - (HALL - MIN_SHARE["abierto"] - 0.01) if angosta else 0.0
 
         def fondos(d):
@@ -1136,8 +1199,8 @@ def _plan_rects(x0, v0, x1, v1, nb, warnings, acc=None, lateral=False, hall_x0=F
                 anchos[-1] = max(0.0, L - sum(anchos[:-1]))
                 return claves, anchos, 0.0
             libre = L - sum(anchos)
-            if con_dep and dep["max_area"] > 0 and libre >= dep["min_side"] - 1e-6 and libre * d >= dep["min_area"] - 1e-6:
-                claves, anchos = claves + ["storage"], anchos + [min(libre, dep["max_area"] / d)]
+            if con_dep and dep["max_area"] > 0 and libre >= max(dep["min_side"], _wa(dep["min_area"], d)) - 1e-6:
+                claves, anchos = claves + ["storage"], anchos + [min(libre, _wa(dep["max_area"], d))]
             return claves, anchos, L - sum(anchos)
 
         if lateral:                                    # R5.3: el dormitorio lateral pide el fondo entre los pasillos
@@ -1157,7 +1220,7 @@ def _plan_rects(x0, v0, x1, v1, nb, warnings, acc=None, lateral=False, hall_x0=F
                 Wn2, need2 = _frente_noche(W, nb, lateral, bedD)
                 if Wn2 > Wn + 1e-6 and W - need2 >= LIV_MIN - 1e-6:
                     Wn, need, xs = Wn2, need2, x1 - Wn2
-                    angosta = xs - x0 - hw < KITCH_LINE
+                    angosta = xs - x0 - hw < KITCH_LINE + KT
                     lo_k = KITCH_L - (HALL - MIN_SHARE["abierto"] - 0.01) if angosta else 0.0
                     claves, d = _servicios(xb - xs, nb, hi, acc, lo_k)
                     bedD, d, e = fondos(d)
@@ -1190,7 +1253,7 @@ def _plan_rects(x0, v0, x1, v1, nb, warnings, acc=None, lateral=False, hall_x0=F
                         real((x0, v0, xk_, v0 + eb_)) >= V["hall"]["min_side"] ** 2 - 1e-6 and \
                         real(coc) >= _ci()["min_area"] - 1e-6 and _entra_mesada(coc, forma_de, False):
                     bandas.append(("cocina", eb_, wk_))
-            if xb - xs >= max(LAV_W, V["lavadero"]["min_area"] / min(e, KITCH_D)) - 1e-6:
+            if xb - xs >= max(LAV_W, _wa(V["lavadero"]["min_area"], min(e, KITCH_D))) - 1e-6:
                 bandas.append(("servicios", min(e, KITCH_D), 0.0))     # (solo si ninguna «cocina» entra: abajo)
         widths = _anchos_dormitorios(Wn, nf, bedD)
 
@@ -1212,12 +1275,12 @@ def _plan_rects(x0, v0, x1, v1, nb, warnings, acc=None, lateral=False, hall_x0=F
                 bD1, d1, e1 = (bD, d_, e_) if banda else fondos(d1)    # con banda, la tira ya está decidida
                 w1 = _anchos_dormitorios(Wn, nf, bD1)
                 xm1 = x1 - w1[0]
-                vs1 = v1 - bD1 - HALL - d1 + min(d1, max(BATH_MIN_D, V["bano"]["typ_area"] / max(w1[0], 0.1)))
-                vq = v1 - bD1 - HALL - d1 + min(d1, max(BATH_MIN_D, V["bano"]["typ_area" if vestidor else "max_area"] /
-                                                        max(w1[0], 0.1)))      # el principal en suite, desde su baño
+                vs1 = v1 - bD1 - HALL - d1 + min(d1, max(BATH_MIN_D, _wa(V["bano"]["typ_area"], w1[0])))
+                vq = v1 - bD1 - HALL - d1 + min(d1, max(BATH_MIN_D, _wa(V["bano"]["typ_area" if vestidor else "max_area"],
+                                                                        w1[0])))      # el principal en suite, desde su baño
                 bs = (xm1, v1 - bD1 - HALL - d1, x1, vq)       # el baño en suite
-                if w1[0] >= BATH_MIN - 1e-6 and w1[0] * min(d1, max(BATH_MIN_D, V["bano"]["max_area"] / w1[0])) >= \
-                        V["bano"]["min_area"] - 1e-6 and sum(_ancho(k, d1, acc) for k in c1) <= xm1 - xs + 1e-6 and \
+                if w1[0] >= BATH_MIN - 1e-6 and _area_libre(w1[0], min(d1, max(BATH_MIN_D, _wa(V["bano"]["max_area"], w1[0])))) \
+                        >= V["bano"]["min_area"] - 1e-6 and sum(_ancho(k, d1, acc) for k in c1) <= xm1 - xs + 1e-6 and \
                         (so >= 1.0 - 1e-6 or (bD1 >= bD - 1e-6 and _medidas_vestidor(w1[0], vs1, v1, v1 - bD1, True)[2])) \
                         and (not tira or real((xm1, vq, x1, v1)) > 1.0 and real(bs) > 1.0 and (not banda or real(bs) >= (
                             bs[2] - bs[0]) * (bs[3] - bs[1]) - 0.05 or _entra_bano_suite(bs, forma_de(bs)))):
@@ -1230,9 +1293,9 @@ def _plan_rects(x0, v0, x1, v1, nb, warnings, acc=None, lateral=False, hall_x0=F
             chicos = 0
             for j, wj in enumerate(w):
                 sd = V["dorm_principal"] if j == 0 else V["dorm_secundario"]
-                prof = bD if not (su and j == 0) else bD + HALL + d_ - min(d_, max(BATH_MIN_D, V["bano"][
-                    "typ_area" if vestidor else "max_area"] / wj))          # el principal en suite: hasta su baño
-                chicos += (wj < sd["min_side"] - 1e-6) + (wj * prof < sd["min_area"] - 1e-6)
+                prof = bD if not (su and j == 0) else bD + HALL + d_ - min(d_, max(BATH_MIN_D, _wa(V["bano"][
+                    "typ_area" if vestidor else "max_area"], wj)))          # el principal en suite: hasta su baño
+                chicos += (wj < sd["min_side"] - 1e-6) + (_area_libre(wj, prof, 2, 1) < sd["min_area"] - 1e-6)
             an, so = _repartir(cl, an, xz - xs, d_)
             if so < MIN_W["storage"] + 0.1 or so * d_ < 1.0:   # lo poco que queda (no da para una estancia), a la
                 j = max(i for i, k in enumerate(cl) if k != "storage" or i == 0)     # última (no al depósito, que no
@@ -1245,10 +1308,10 @@ def _plan_rects(x0, v0, x1, v1, nb, warnings, acc=None, lateral=False, hall_x0=F
             """R5.11: la banda de largo L y fondo eb después de la cocina (o desde el hall): el lavadero, hasta su máximo;
             con_dep, el depósito, hasta el suyo; lo poco que queda, al lavadero. Devuelve ([[clave, ancho]], lo que queda
             sin uso)."""
-            wl = min(L, max(_ancho("laundry", eb), V["lavadero"]["max_area"] / eb))
+            wl = min(L, max(_ancho("laundry", eb), _wa(V["lavadero"]["max_area"], eb)))
             out, rest = [["laundry", wl]], L - wl
-            if con_dep and dep["max_area"] > 0 and rest >= max(dep["min_side"], dep["min_area"] / eb) - 1e-6:
-                out.append(["storage", min(rest, dep["max_area"] / eb)])
+            if con_dep and dep["max_area"] > 0 and rest >= max(dep["min_side"], _wa(dep["min_area"], eb)) - 1e-6:
+                out.append(["storage", min(rest, _wa(dep["max_area"], eb))])
                 rest -= out[-1][1]
             if rest < MIN_W["storage"] + 0.1 or rest * eb < 1.0:
                 out[0][1] += max(0.0, rest)
@@ -1310,7 +1373,7 @@ def _plan_rects(x0, v0, x1, v1, nb, warnings, acc=None, lateral=False, hall_x0=F
         bv0 = hv0 - d
         if suite:                                      # el baño en suite, hasta su máximo: lo demás, al dormitorio
             wm = widths[0]                             # (R5.10: con vestidor, el típico: lo demás, al vestidor)
-            vs = bv0 + min(d, max(BATH_MIN_D, V["bano"]["typ_area" if vestidor else "max_area"] / wm))
+            vs = bv0 + min(d, max(BATH_MIN_D, _wa(V["bano"]["typ_area" if vestidor else "max_area"], wm)))
             add("hallway", "hallway", (xs, hv0, xm, hv1))
             add("bath2", "bath", (xm, bv0, x1, vs), "Baño en suite")
             E.append(("bed1", "bath2", "puerta"))
@@ -1347,7 +1410,7 @@ def _plan_rects(x0, v0, x1, v1, nb, warnings, acc=None, lateral=False, hall_x0=F
             e, lado, fondo = bv0 - v0, 0.0, 0.0        # junto al hall y lo demás, C: sin uso
             if dep["max_area"] > 0 and e >= dep["min_side"]:
                 lado = max(dep["min_side"], min(xb - xs, e, dep["max_area"] ** 0.5))
-                fondo = min(e, dep["max_area"] / lado)
+                fondo = min(e, _wa(dep["max_area"], lado))
                 add("storage", "storage", (xs, v0, xs + lado, v0 + fondo), "Depósito")
                 E.append(("kitchen" if hall_x0 and xs - x0 - hw >= 1.8 else "hall", "storage", "puerta"))
             resto = (xb - xs) * e - lado * fondo
@@ -1363,7 +1426,7 @@ def _plan_rects(x0, v0, x1, v1, nb, warnings, acc=None, lateral=False, hall_x0=F
         kd = max(1.8, min(KITCH_D, hv0 - v0))
         if modo == "cocina":                           # R5.11: la cocina, en la banda: el estar baja hasta ella
             kd = e
-        elif xs - x0 - hw < KITCH_LINE:                # la heladera no entra en línea: la cocina, más profunda (en L),
+        elif xs - x0 - hw < KITCH_LINE + KT:           # la heladera no entra en línea: la cocina, más profunda (en L),
             kd = max(kd, min(KITCH_D, hv1 - v0 - MIN_SHARE["abierto"] - 0.01))   # sin cerrar la boca del pasillo
     else:
         # unidad poco profunda: pasillo interno junto al pasillo común, dormitorios detrás; el pasillo termina en la
@@ -1422,7 +1485,7 @@ def _plan_rects(x0, v0, x1, v1, nb, warnings, acc=None, lateral=False, hall_x0=F
         puerta = ("kitchen", "storage", "puerta") in E or ("kitchen", "laundry", "puerta") in E   # pared del costado
         kd_max = max(kd, min(KITCH_D, hv1 - v0 - MIN_SHARE["abierto"] - 0.01))
         entra = any(a <= wk0 + 1e-6 and f <= kd_max + 1e-6 for f, a in _modos_cocina(not puerta))
-        if wk0 >= 1.8 - 1e-6 and (wk0 >= KITCH_MESADA - 1e-6 or entra):   # el depósito (o, R5.11, el lavadero de la tira) se abre desde la
+        if wk0 >= 1.8 - 1e-6 and (wk0 >= KITCH_MESADA + KT - 1e-6 or entra):   # el depósito (o, R5.11, el lavadero de la tira) se abre desde la
             pp = KITCH_L if puerta else 0.0                     # de la cocina: su puerta, fuera de la mesada
             wk, kd = cocina(xs - x0 - hw, kd, caja, [max(pcom, pp), max(p14, pp), pp], not puerta, techo=t14)
             if hall_x0:                                # R3.7: el hall en x0 y la cocina hacia la zona de noche
@@ -1438,8 +1501,12 @@ def _plan_rects(x0, v0, x1, v1, nb, warnings, acc=None, lateral=False, hall_x0=F
                 kd_ = min(kd, max(t14, min(f for f, _ in _modos_cocina())))      # típica de una cocina como máximo
                 kd_ = _cocina_integrada(xs - x0 - hw, kd_, 0.0, parte, tope=V["cocina"]["typ_area"],
                                         lado=V["cocina"]["min_side"])[1]
-            kd = kd_ if kd_ is not None and luz((x0, v0, xs, v0 + kd_)) else \
-                _cocina_integrada(xs - x0 - hw, kd, 0.0, parte)[1]
+            con_luz = kd_ is not None and luz((x0, v0, xs, v0 + kd_))
+            kd = kd_ if con_luz else _cocina_integrada(xs - x0 - hw, kd, 0.0, parte)[1]
+            tope_hc = V["cocina"]["typ_area"] if con_luz else tope
+            if parte(0.0, kd) > tope_hc + 1e-6:        # R5.8a: _cocina_integrada angostó la cocina, pero en el hall no hay
+                kd = max(min(f for f, _ in _modos_cocina()),   # parte que angostar: la parte pierde fondo hasta el tope
+                         _hasta(lambda t: parte(0.0, t), 0.0, kd, tope_hc))   # (la mesada, en la pared del costado o en L)
             add("hall", "hall", (x0, v0, xs, v0 + kd), "Hall / Cocina")
     else:
         bw = BATH_W1
@@ -1491,8 +1558,8 @@ def _medidas_vestidor(w, by0, by1, hv1, suite):
     a queda (su medida mínima y el fondo de la cama doble con su paso al pie), menos, hasta su mínimo; en suite, al menos
     hasta el borde del pasillo interno (hv1), que entra por él."""
     sv, sd = V["vestidor"], V["dorm_principal"]
-    queda = max(sd["min_side"], CAMA_FONDO, sd["min_area"] / max(w, 0.1))
-    vmin = max(sv["min_side"], sv["min_area"] / max(w, 0.1))
+    queda = max(sd["min_side"], CAMA_FONDO, _wa(sd["min_area"], w, 2, 1))     # (R5.8a: hasta la fachada, un tabique)
+    vmin = max(sv["min_side"], _wa(sv["min_area"], w, 2, 1))
     vd = max(vmin, min(sv["typ"][1], by1 - by0 - queda))
     tope = max(hv1, by0 + vd) if suite else by0 + vd
     return tope, queda, by1 - tope >= queda - 1e-6 and w >= max(sv["min_side"], sd["min_side"]) - 1e-6
@@ -1563,15 +1630,15 @@ def _pieza_servicio(clave, w, acc=None):
     el segundo baño (bath2), el lavadero y el depósito."""
     if clave == "bath1":
         sd = V["bano"]
-        return (max(BATH_MIN_D, sd["min_area"] / w, acc[1] if acc else 0.0), sd["typ_area"] / w, sd["max_area"] / w)
+        return (max(BATH_MIN_D, _wa(sd["min_area"], w), acc[1] if acc else 0.0), _wa(sd["typ_area"], w), _wa(sd["max_area"], w))
     if clave == "bath2":
         sd = V["bano_aux"]
-        return (max(BATH2_D, sd["min_area"] / w), sd["typ_area"] / w, sd["max_area"] / w)
+        return (max(BATH2_D, _wa(sd["min_area"], w)), _wa(sd["typ_area"], w), _wa(sd["max_area"], w))
     if clave == "laundry":
         sd = V["lavadero"]
-        return (max(LAV_W, sd["min_area"] / w), sd["typ_area"] / w, sd["max_area"] / w)
+        return (max(LAV_W, _wa(sd["min_area"], w)), _wa(sd["typ_area"], w), _wa(sd["max_area"], w))
     sd = V["deposito"]
-    return (max(sd["min_side"], sd["min_area"] / w), max(sd["min_side"], sd["min_area"] / w), sd["max_area"] / w)
+    return (max(sd["min_side"], _wa(sd["min_area"], w)), max(sd["min_side"], _wa(sd["min_area"], w)), _wa(sd["max_area"], w))
 
 
 def _servicios_fila(nb, w, L, acc=None):
@@ -1599,8 +1666,9 @@ def _fila_esquina(x0, v0, x1, v1, nb, add, E, vacios, acc, prop):
     abierta al estar y al pasillo; el baño, el segundo baño, el lavadero y el depósito, con puerta al pasillo) con el
     hall y la puerta de entrada abajo, junto al pasillo común. Devuelve si entra."""
     W, D = x1 - x0, v1 - v0
-    sv = max(BATH_W1, KITCH_MESADA, acc[0] if acc else 0.0)
+    sv = max(BATH_W1, KITCH_MESADA + KT, acc[0] if acc else 0.0)
     kd = _fondo_cocina(sv, True)                       # la cocina en L: su largo en la columna
+    kd += T2                                           # (R5.8a: el baño debajo; arriba, abierta al estar)
     sv_max = max(sv, min(FILA_SV_MAX, _ci()["max_area"] / kd))
     bx = W - HALL - sv
     if bx > FILA_BX_MAX:                               # con más frente, la columna de servicios se ensancha
@@ -1611,7 +1679,7 @@ def _fila_esquina(x0, v0, x1, v1, nb, add, E, vacios, acc, prop):
     estar_typ = V["estar_por_dorms"][min(nb, len(V["estar_por_dorms"]) - 1)]
     dd = max(LIV_MIN, W / prop, min(4.5, estar_typ / W))
     specs = [V["dorm_principal"]] + [V["dorm_secundario"]] * (nb - 1)
-    bvs, sobra = _largos_fila([(max(sd["min_side"], sd["min_area"] / bx), sd["typ"][0], FILA_BV_MAX) for sd in specs],
+    bvs, sobra = _largos_fila([(max(sd["min_side"], _wa(sd["min_area"], bx, 1)), sd["typ"][0], FILA_BV_MAX) for sd in specs],
                               D - dd)
     if bvs is None:
         return False
@@ -1665,17 +1733,18 @@ def _fila_pasante(x0, v0, x1, v1, nb, add, E, vacios, acc, prop):
     W, D = x1 - x0, v1 - v0
     pw = V["pasillo"]["min_side"]                      # el paso, de su lado mínimo (0,90 m): la cocina en línea entra
     wk_lib = W - pw                                    # en 3,60 m
-    if wk_lib < max(KITCH_FRENTE, _ci()["min_side"]) - 1e-6 or W < V["dorm_principal"]["min_side"] - 1e-6:
+    if wk_lib - T2 < max(KITCH_FRENTE + KT, _ci()["min_side"]) - 1e-6 or W < V["dorm_principal"]["min_side"] - 1e-6:
         return False
-    kd = _fondo_cocina(wk_lib, True)
+    kd = _fondo_cocina(wk_lib - T2, True) + TAB        # (R5.8a: la cocina cerrada tiene tabiques en los cuatro lados: el
+                                                       # paso y el depósito al costado, el estar y el baño en el fondo)
     wk = min(wk_lib, V["cocina"]["typ_area"] / kd)     # cerrada: hasta su superficie típica (no rige el art. 27)
     pw = min(1.5, max(pw, W - wk))                     # lo que la cocina no usa, al paso (hasta 1,50 m)
     wd = W - pw - wk                                   # y si queda más, un depósito junto a la cocina
-    if wd < max(V["deposito"]["min_side"], V["deposito"]["min_area"] / kd) - 1e-6:
+    if wd < max(V["deposito"]["min_side"], _wa(V["deposito"]["min_area"], kd)) - 1e-6:
         wk, wd = wk + wd, 0.0
     bedD = max(BED_D, CAMA_PLACARD[1] if W < CAMA_PLACARD[0] - 1e-6 else BED_D)   # el placard al pie si no entra al costado
     h2 = HALL if nb >= 2 else 0.0                      # el pasillo interno de los dormitorios
-    ld_min = max(V["estar_comedor"]["min_side"], V["estar_comedor"]["min_area"] / W, W / prop)
+    ld_min = max(V["estar_comedor"]["min_side"], _wa(V["estar_comedor"]["min_area"], W, 0, 1), W / prop)
     estar_typ = V["estar_por_dorms"][min(nb, len(V["estar_por_dorms"]) - 1)]
     ld_typ = max(ld_min, min(5.0, estar_typ / W))
     sf = _servicios_fila(nb, W - pw, D - ld_min - kd - bedD - h2, acc)
@@ -1777,17 +1846,17 @@ def frente_fila(nb, D, lado, prop=None):
         pw = V["pasillo"]["min_side"]                  # como en _fila_pasante: el paso de 0,90 m
         base = max(V["dorm_principal"]["min_side"], V["estar_comedor"]["min_side"],
                    facade_min(nb) - LIV_MIN if nb >= 2 else 0.0)
-        for w in sorted({max(base, pw + KITCH_MESADA), max(base, pw + KITCH_LINE)}):    # la cocina en L o en línea
+        for w in sorted({max(base, pw + KITCH_MESADA + KT), max(base, pw + KITCH_LINE + KT)}):    # la cocina en L o en línea
             kd = _fondo_cocina(w - pw, True)           # (la de línea pide más frente y menos fondo)
-            need = max(V["estar_comedor"]["min_side"], V["estar_comedor"]["min_area"] / w, w / prop) + kd + \
+            need = max(V["estar_comedor"]["min_side"], _wa(V["estar_comedor"]["min_area"], w, 0, 1), w / prop) + kd + \
                 _pieza_servicio("bath1", w - pw)[0] + BED_D + (HALL if nb >= 2 else 0.0)
             if D >= need - 1e-6:
                 return w
         return None
-    sv = max(BATH_W1, KITCH_MESADA)
+    sv = max(BATH_W1, KITCH_MESADA + KT)
     w = sv + HALL + BED_D
     dd = max(LIV_MIN, w / prop)
-    need = dd + sum(max(sd["min_side"], sd["min_area"] / BED_D) for sd in specs)
+    need = dd + sum(max(sd["min_side"], _wa(sd["min_area"], BED_D, 1)) for sd in specs)
     return w if D >= need - 1e-6 else None
 
 
@@ -1924,14 +1993,14 @@ def _std_for(r, nb, integradas=(), principal="bed1"):
     """Medidas mínimas de la estancia r. integradas (R10.8): las cocinas integradas al estar sin ventana propia, que
     toman las de la norma nacional para ellas (art. 27: de 3 a 5 m², lado 1,40) en lugar de las de una cocina (art. 21).
     principal (R5.12): el id del dormitorio principal."""
-    k, i = r["kind"], r["id"]
+    k, i = r["kind"], r["id"]                          # (R5.8a: las de la norma, VN, libres: se comparan con la medida libre)
     if k == "bedroom":
-        return V["dorm_principal"] if (i == principal) else V["dorm_secundario"]
+        return VN["dorm_principal"] if (i == principal) else VN["dorm_secundario"]
     if k == "kitchen" and i in integradas:
-        return _ci()
-    return {"living": V["estar_comedor"], "kitchen": V["cocina"], "laundry": V["lavadero"], "study": V["estudio"],
-            "hallway": V["pasillo"], "hall": V["hall"], "vestidor": V["vestidor"],
-            "bath": V["bano"] if i == "bath1" else V["bano_aux"]}.get(k)
+        return VN.get("cocina_integrada") or ST.DEFAULTS["vivienda"]["cocina_integrada"]
+    return {"living": VN["estar_comedor"], "kitchen": VN["cocina"], "laundry": VN["lavadero"], "study": VN["estudio"],
+            "hallway": VN["pasillo"], "hall": VN["hall"], "vestidor": VN["vestidor"],
+            "bath": VN["bano"] if i == "bath1" else VN["bano_aux"]}.get(k)
 
 
 def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None, accesible=False, ediciones=None, ventanas=None,
@@ -2250,6 +2319,9 @@ def _espejar(res, m):
     """R5.3: devuelve al marco de la vivienda un plano hecho al revés (m: la simetría x -> x0 + x1 - x)."""
     for r in res["rooms"]:
         r["poly"] = [m(p) for p in r["poly"]][::-1]
+        if r.get("libre") and r["libre"].get("rect"):  # R5.8a: el rectángulo libre, al revés también
+            a, b, c, d_ = r["libre"]["rect"]
+            r["libre"]["rect"] = (m((c, b))[0], b, m((a, b))[0], d_)
     for d in res["doors"]:                             # la bisagra sigue en p; una hoja vertical abre hacia el otro x
         d["p"], d["q"] = m(d["p"]), m(d["q"])
         if d["vertical"]:
@@ -2264,6 +2336,45 @@ def _espejar(res, m):
         n["pos"] = m(n["pos"])
     res["sin_uso"] = [[m(p) for p in pl][::-1] for pl in res["sin_uso"]]
     return res
+
+
+def _libres(rooms, R, E, poly, tol=0.02):
+    """R5.8a (v2.73): el rectángulo libre de cada estancia: el rectángulo al eje menos T2 por cada lado interior —el que
+    no está sobre el contorno de la vivienda (su punto medio queda dentro del polígono, lejos del borde) y no está abierto
+    a otra estancia en todo su largo (una conexión "abierto" de E: la cocina con el estar, el hall con la cocina, la boca
+    del pasillo interno, el vestidor con su dormitorio)—; los lados sobre el contorno (fachada, patio, medianera, vecina,
+    pasillo común, núcleo) ya tienen su muro fuera del polígono y no descuentan nada. Cada estancia recibe r["libre"] =
+    {rect, poly (el libre recortado por la vivienda, como su poly), w, d, area} y su "area" pasa a ser la libre (la ficha
+    y las comprobaciones la usan). Con TAB = 0 nada cambia."""
+    abiertos = {}
+    for a, b, t in E:
+        if t == "abierto" and a in R and b in R:
+            seg = _shared(R[a][1], R[b][1])
+            if seg:
+                abiertos.setdefault(a, []).append(seg)
+                abiertos.setdefault(b, []).append(seg)
+    n = len(poly)
+    borde = lambda m: min(_dist_seg(m, poly[j], poly[(j + 1) % n]) for j in range(n))
+    for r in rooms:
+        x0, v0, x1, v1 = r["rect"]
+        des = []
+        for m, eje, c in (((x0, (v0 + v1) / 2), 0, x0), ((x1, (v0 + v1) / 2), 0, x1),
+                          (((x0 + x1) / 2, v0), 1, v0), (((x0 + x1) / 2, v1), 1, v1)):
+            interior = T2 > 0 and borde(m) > tol and G.point_in_poly(m, poly)
+            if interior:                               # abierto en (casi) todo su largo: sin tabique
+                L = (v1 - v0) if eje == 0 else (x1 - x0)
+                abierto = sum(_largo(s) for s in abiertos.get(r["id"], ())
+                              if abs(s[0][eje] - c) < 1e-6 and abs(s[1][eje] - c) < 1e-6)
+                interior = abierto < L - 0.10
+            des.append(T2 if interior else 0.0)
+        lr = (x0 + des[0], v0 + des[2], x1 - des[1], v1 - des[3])
+        if r["id"].startswith("annex"):
+            pl = G.clip_rect(poly, lr[0] - 0.01, lr[2] + 0.01, lr[1] - 0.01, lr[3] + 0.01)
+        else:
+            pl = G.clip_rect(poly, lr[0], lr[2], lr[1], lr[3])
+        area = abs(G.area(pl)) if pl else r["area"]
+        r["libre"] = {"rect": lr, "poly": pl or r["poly"], "w": lr[2] - lr[0], "d": lr[3] - lr[1], "area": area}
+        r["area"] = area
 
 
 def _programa(res):
@@ -2313,13 +2424,14 @@ def _plano(poly, nb, is_facade, equip, accesible, ediciones, ventanas, lateral=F
         pk = G.clip_rect(poly, rect[0], rect[2], rect[1], rect[3])
         return bool(pk) and any(_entra_ventana(((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2) ** 0.5, S_v)
                                 for a, b, _ in _tramos_fachada(G.ensure_ccw(pk), poly, is_facade, v1))
+    acc = [a + TAB for a in equip["bano_accesible"]] if accesible else None    # (R5.8a: al eje, con sus tabiques)
     if fila is None:
-        R, E, vacios = _plan_rects(x0, v0, x1, v1, nb, warnings, equip["bano_accesible"] if accesible else None, lateral,
+        R, E, vacios = _plan_rects(x0, v0, x1, v1, nb, warnings, acc, lateral,
                                    hall_x0, vestidor, lambda r: G.strip_area(poly, r[0], r[2], r[1], r[3]), prop,
                                    lambda r: G.clip_rect(poly, r[0], r[2], r[1], r[3]), S_v, con_banda,
                                    luz_cocina if is_facade is not None else None)
     else:
-        rv = _plan_fila(x0, v0, x1, v1, nb, fila, warnings, equip["bano_accesible"] if accesible else None, prop)
+        rv = _plan_fila(x0, v0, x1, v1, nb, fila, warnings, acc, prop)
         if rv is None:
             return None
         R, E, vacios = rv
@@ -2400,6 +2512,10 @@ def _plano(poly, nb, is_facade, equip, accesible, ediciones, ventanas, lateral=F
         if p and abs(G.area(p)) > 1.0:
             ids[i] = len(rooms)
             rooms.append({"id": i, "name": name, "kind": kind, "poly": p, "area": abs(G.area(p)), "rect": rect})
+    _libres(rooms, R, E, poly)                         # R5.8a: el rectángulo libre de cada estancia ("area" pasa a ser la libre)
+    libre = {r["id"]: r["libre"]["rect"] for r in rooms}
+    sala = lambda r: dict(r, rect=r["libre"]["rect"], poly=r["libre"]["poly"])   # la estancia libre, para el equipamiento
+    snap = T2 + 0.01                                   # las puertas (al eje) caen a T2 del borde libre: EQ las lleva a él
     principal = est["principal"]
     if principal in ids:
         rooms[ids[principal]]["principal"] = True        # R5.12: la cama doble y el placard van en él
@@ -2432,13 +2548,13 @@ def _plano(poly, nb, is_facade, equip, accesible, ediciones, ventanas, lateral=F
             corto = lambda t: p[1] != q[1] and abs(t[1][1] - t[0][1]) < 1.0    # junto a la esquina de la fachada: no es ventana
             out += [t for t in tramos if not corto(t)]
         return out
-    fachadas = {r["id"]: en_fachada(r["rect"]) for r in rooms if r["kind"] in ("bedroom", "living", "dining")}
+    fachadas = {r["id"]: en_fachada(libre[r["id"]]) for r in rooms if r["kind"] in ("bedroom", "living", "dining")}
     # R10.8: las cocinas integradas a la zona de día (abiertas a ella) sin ventana propia (Trazo todavía no les pone):
-    # norma nacional, art. 27. De un «Hall / Cocina» cuenta solo la parte de la cocina
+    # norma nacional, art. 27. De un «Hall / Cocina» cuenta solo la parte de la cocina (R5.8a: superficies libres)
     abiertas = {x for a, b, t in E if t == "abierto" for x in (a, b)}
     integradas = {r["id"]: r["area"] if r["kind"] == "kitchen" else
-                  max(0.0, r["area"] - HALL_W * (r["rect"][3] - r["rect"][1]))
-                  for r in rooms if (r["kind"] == "kitchen" or "Cocina" in r["name"]) and r["id"] in abiertas}
+                  max(0.0, r["area"] - (HALL_W - T2) * r["libre"]["d"])   # (el hall, HALL_W al eje con su medio tabique:
+                  for r in rooms if (r["kind"] == "kitchen" or "Cocina" in r["name"]) and r["id"] in abiertas}   # lo que midió el plano)
     vent, sin_luz = _ventanas(rooms, poly, is_facade, v1, S_v, integradas)   # R5.5 (R10.9: la cocina con fachada,
     con_ventana = {w["room"] for w in vent}                                   # con la suya; las demás, con extractor)
     integradas = {i: a for i, a in integradas.items() if i not in con_ventana}
@@ -2464,6 +2580,8 @@ def _plano(poly, nb, is_facade, equip, accesible, ediciones, ventanas, lateral=F
         L = 0.0 if not seg else ((seg[1][0] - seg[0][0]) ** 2 + (seg[1][1] - seg[0][1]) ** 2) ** 0.5
         rb = rooms[ids[b]]
         ancho = DOOR_ACC if accesible and (rb["kind"] == "bedroom" or b == "bath1") else DOOR
+        if typ == "puerta":                            # R5.8a: la puerta entra en el tramo libre del borde (sin los
+            L -= TAB                                   # medios tabiques perpendiculares de sus dos puntas)
         ok = L >= (ancho + 0.1 if typ == "puerta" else MIN_SHARE[typ]) - 1e-6     # un borde de 0,8999… m es de 0,90 m
         edges.append({"a": a, "b": b, "type": typ, "ok": ok})
         if ok and typ == "puerta":
@@ -2476,6 +2594,7 @@ def _plano(poly, nb, is_facade, equip, accesible, ediciones, ventanas, lateral=F
                 # y muebles (v2.67: también la cocina cerrada de la pasante en fila, con su puerta desde el paso)
                 k = 1 if vertical else 0                     # la puerta se corre a lo largo del borde
                 lo, hi = sorted((seg[0][k], seg[1][k]))
+                lo, hi = lo + T2, hi - T2                    # (R5.8a: el tramo libre)
                 notas, cands = {}, [m[k], lo + d + 0.1, hi - d - 0.1]      # al medio o junto a una esquina
                 ent = next((x for x in doors if x["b"] == a), None) if R[a][0] == "vestidor" else None
                 if ent:                                      # R5.10: el baño en suite, junto a la entrada del vestidor (sus
@@ -2485,10 +2604,11 @@ def _plano(poly, nb, is_facade, equip, accesible, ediciones, ventanas, lateral=F
                 for c in cands:
                     pq = hoja((m[0], c) if vertical else (c, m[1]))
                     pu = [{"p": pq[0], "q": pq[1], "a": desde, "b": hacia, "ancho": ancho}]
-                    _, falta, info = EQ.resolver(rb, pu, {}, equip, fachadas.get(b, ()), nb, acc=accesible)
+                    _, falta, info = EQ.resolver(sala(rb), pu, {}, equip, fachadas.get(b, ()), nb, acc=accesible, snap=snap)
                     notas[c] = 2 * len(falta) + len(info)    # un toilette (sin ducha) es peor que el baño completo
                     if R[a][0] == "kitchen":                 # R5.11: el lavadero desde la cocina: donde entra también
-                        notas[c] += 2 * len(EQ.resolver(rooms[ids[a]], pu, abiertos(a), equip, (), nb)[1])   # su mesada
+                        notas[c] += 2 * len(EQ.resolver(sala(rooms[ids[a]]), pu, abiertos(a), equip, (), nb,
+                                                        snap=snap)[1])                                  # su mesada
                     if not notas[c]:
                         break
                 c = min(notas, key=lambda c: (notas[c], c != cands[0]))
@@ -2507,6 +2627,8 @@ def _plano(poly, nb, is_facade, equip, accesible, ediciones, ventanas, lateral=F
         r = rooms[ids[entrada_id]]["rect"]
         borde = [p[1] for p in rooms[ids[entrada_id]]["poly"] if abs(p[0] - r[0]) < 1e-6]
         lo, hi = (min(borde), max(borde)) if borde else (r[1], r[3])
+        if TAB > 0:                                    # R5.8a: dentro del tramo libre del hall (sin el medio tabique)
+            lo, hi = max(lo, libre[entrada_id][1]), min(hi, libre[entrada_id][3])
         mv = (lo + hi) / 2 if hi - lo < ENTRY else max(lo + ENTRY / 2, min(hi - ENTRY / 2, (lo + hi) / 2))
         doors.append({"p": (r[0], mv - ENTRY / 2), "q": (r[0], mv + ENTRY / 2), "into": 1, "vertical": True,
                       "a": "exterior", "b": entrada_id, "entry": True, "ancho": ENTRY})
@@ -2520,6 +2642,8 @@ def _plano(poly, nb, is_facade, equip, accesible, ediciones, ventanas, lateral=F
         borde = [p[0] for p in rooms[ids[entrada_id]]["poly"] if abs(p[1] - v0) < 1e-6]     # R10.8: dentro de su borde
         if borde:                                                                     # real (un muro oblicuo lo acorta)
             lo, hi = min(borde), max(borde)
+            if TAB > 0:                                # R5.8a: dentro del tramo libre del hall (sin el medio tabique)
+                lo, hi = max(lo, libre[entrada_id][0]), min(hi, libre[entrada_id][2])
             mx = (lo + hi) / 2 if hi - lo < ENTRY else max(lo + ENTRY / 2, min(hi - ENTRY / 2, mx))
         doors.append({"p": (mx - ENTRY / 2, v0), "q": (mx + ENTRY / 2, v0), "into": 1, "vertical": False,
                       "a": "exterior", "b": entrada_id, "entry": True, "ancho": ENTRY})
@@ -2567,7 +2691,7 @@ def _plano(poly, nb, is_facade, equip, accesible, ediciones, ventanas, lateral=F
             if not fac:
                 checks.append({"ok": False, "msg": "%s sin fachada (sin luz natural)" % r["name"]})
                 oscuras.add(r["id"])
-        w = min(r["rect"][2] - r["rect"][0], r["rect"][3] - r["rect"][1])
+        w = min(r["libre"]["w"], r["libre"]["d"])        # R5.8a: los lados y las superficies, libres, contra la norma
         sd = _std_for(r, nb, integradas, principal)
         if r["id"] in integradas and integradas[r["id"]] > _ci()["max_area"] + 1e-6:     # R10.8: art. 27
             checks.append({"ok": False, "msg": "Cocina integrada sin ventana de %.1f m²%s: la norma nacional admite de %g a "
@@ -2593,7 +2717,7 @@ def _plano(poly, nb, is_facade, equip, accesible, ediciones, ventanas, lateral=F
             chicas.add(r["id"])
         if r["kind"] in ("bedroom", "living", "dining", "study") and r["id"] not in chicas and r["id"] not in oscuras \
                 and (r["kind"] != "dining" or r["id"] in con_v):   # el comedor interior, con el estar (abajo)
-            corto, largo = sorted((r["rect"][2] - r["rect"][0], r["rect"][3] - r["rect"][1]))
+            corto, largo = sorted((r["libre"]["w"], r["libre"]["d"]))
             if largo > prop * corto + 1e-6:            # R10.8: art. 14 (si no se avisó ya por su medida o su fachada)
                 checks.append({"ok": False, "msg": "%s: %.2f m de profundidad, más de %g veces su lado menor (%.2f m) "
                                                    "(norma nacional, art. 14)" % (r["name"], largo, prop, corto)})
@@ -2601,8 +2725,9 @@ def _plano(poly, nb, is_facade, equip, accesible, ediciones, ventanas, lateral=F
         est = next((r for r in rooms if r["kind"] == "living" and r["id"] not in chicas and r["id"] not in oscuras and
                     _shared(r["rect"], d["rect"])), None)
         if est:                                        # R10.8: el comedor interior, con el estar que lo ilumina (art. 14)
-            prof = max(est["rect"][3], d["rect"][3]) - min(est["rect"][1], d["rect"][1])
-            ancho = min(est["rect"][2] - est["rect"][0], d["rect"][2] - d["rect"][0])
+            le, ld = libre[est["id"]], libre[d["id"]]  # (R5.8a: con las medidas libres)
+            prof = max(le[3], ld[3]) - min(le[1], ld[1])
+            ancho = min(le[2] - le[0], ld[2] - ld[0])
             if prof > prop * ancho + 1e-6:
                 checks.append({"ok": False, "msg": "%s y comedor: %.2f m de profundidad desde la ventana, más de %g veces "
                                                    "su ancho (%.2f m) (norma nacional, art. 14)" % (
@@ -2615,9 +2740,10 @@ def _plano(poly, nb, is_facade, equip, accesible, ediciones, ventanas, lateral=F
                 aberturas.setdefault(i, []).append((seg[0], seg[1], otra))
     checks += [{"ok": False, "msg": c["msg"]} for c in sin_luz           # R5.5: vano mínimo (no en una estancia ya
                if c["room"] not in oscuras and c["room"] not in chicas]       # avisada por su fachada o su medida)
-    equipo, faltan = EQ.equipar(rooms, doors, aberturas, equip, nb_eff, fachadas, chicas, accesible,   # F5: artefactos y
-                                ("bed1",) if "vest" in ids else (), principal)   # muebles (R5.10: con vestidor, el principal
-    checks += faltan                                                             # sin placard; R5.12: la cama doble en principal)
+    equipo, faltan = EQ.equipar([sala(r) for r in rooms], doors, aberturas, equip, nb_eff, fachadas, chicas, accesible,
+                                ("bed1",) if "vest" in ids else (), principal, snap=snap)   # F5: artefactos y muebles, en
+    checks += faltan                                   # el rectángulo libre (R5.8a); R5.10: con vestidor, el principal sin
+                                                       # placard; R5.12: la cama doble en principal
     for a in avisos_est:                               # R5.12: lo que no se pudo aplicar (layout lo copia a los avisos)
         checks.append({"ok": True, "info": True, "msg": "Estancia a mano: " + a})
     for w in warnings:
@@ -2649,6 +2775,7 @@ def _plano(poly, nb, is_facade, equip, accesible, ediciones, ventanas, lateral=F
     score = _calidad(checks)
     for r in rooms:
         del r["rect"]
+        r["libre"].pop("poly", None)                   # R5.8a: queda {rect, w, d, area} (units quita rect)
     return {"rooms": rooms, "doors": doors, "graph": {"nodes": nodes, "edges": edges}, "equipamiento": equipo,
             "checks": checks, "score": score, "bedrooms": nb_eff, "facade": round(x1 - x0, 2),
             "facade_min": round(facade_min(nb), 2), "accesible": bool(accesible), "paredes": muros,

@@ -1,7 +1,7 @@
 {
  "ejemplo": "samples/torre_mixta.json",
  "nombre": "Barra mixta (estac. + comercio + oficinas + vivienda)",
- "version_motor": "2.72",
+ "version_motor": "2.73",
  "metricas": {
   "unidades": 16,
   "unidades_totales": 80,

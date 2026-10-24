@@ -83,6 +83,11 @@ DEFAULTS = {
         # viviendas (Reglamentación, art. 6 A) y, criterio, miden 35 m² con muros o más (proyecto de ley de 2026 en
         # discusión; REFERENCIAS.md, sección 1). Solo avisa: el mix no se cambia
         "promovida": {"mono_max_pct": 25, "mono_min_area": 35},
+        # R5.8a (v2.73, criterio del usuario, v2.41): espesor de los tabiques interiores de la vivienda (ladrillo de 0,10
+        # o placa de yeso). El plano dimensiona cada estancia con el tabique (los rectángulos se tocan por su eje) y la
+        # informa y la comprueba libre, entre caras; los muros del contorno (exterior, entre viviendas, del núcleo) van
+        # aparte (outer_wall, party_wall, nucleo.muro)
+        "tabique": 0.10,
     },
     "nucleo": {
         "escalera_ancho": 1.20,          # ancho de cada tramo (IT 19)

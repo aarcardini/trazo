@@ -27,7 +27,7 @@ from .units import (_bisect_x, _chain_union, _is_rect, _segments, generate_unit_
                     superficie_con_muros)  # noqa: F401
 from .patios import (auto_patios, _anillo, split_blocks, make_patio_dark, _block_of, _block_of_line)  # noqa: F401
 
-VERSION = "2.72"
+VERSION = "2.73"
 
 DEFAULT_PARAMS = {
     # Masa
@@ -689,8 +689,10 @@ def generate(data):
             item["rooms"] = [dict({"id": r["id"], "name": r["name"], "kind": r["kind"], "area": round(r["area"], 1),
                                    "poly": W(pc, r["poly_local"])},
                                   **({"ventilacion": r["ventilacion"]} if r.get("ventilacion") else {}),   # R10.9
-                                  **({"principal": True} if r.get("principal") else {}))     # R5.12: el dormitorio principal
-                             for r in pl["rooms"]]
+                                  **({"principal": True} if r.get("principal") else {}),     # R5.12: el dormitorio principal
+                                  **({"libre": {"w": round(r["libre"]["w"], 2), "d": round(r["libre"]["d"], 2),
+                                                "area": round(r["libre"]["area"], 1)}} if r.get("libre") else {}))
+                             for r in pl["rooms"]]                # R5.8a: las medidas libres (area ya es la libre)
             for a in pl.get("avisos_estancias") or []:      # R5.12: una estancia editada que no se pudo aplicar
                 res["warnings"].append("Estancia a mano de %s: %s (deshazlo o descarta los cambios por dentro en su "
                                        "ficha)" % (u["id"], a))

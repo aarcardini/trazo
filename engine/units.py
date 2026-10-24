@@ -1124,6 +1124,9 @@ def unit_rooms(u, params, pc=None, plate=None, ediciones=None):
         return out[::-1] if refleja else out
     for r in res["rooms"]:
         r["poly_local"] = back_poly(r.pop("poly"))
+        if r.get("libre"):
+            r["libre"].pop("rect", None)                # R5.8a: quedan las medidas libres {w, d, area} (el rectángulo
+                                                        # es del marco de la vivienda)
     for q in res["equipamiento"]:
         q["poly"] = back_poly(q["poly"])
         q["lines"] = [[back(p) for p in ln] for ln in q["lines"]]

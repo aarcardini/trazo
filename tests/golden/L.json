@@ -1,29 +1,29 @@
 {
  "ejemplo": "samples/L.json",
  "nombre": "Forma en L",
- "version_motor": "2.72",
+ "version_motor": "2.73",
  "metricas": {
-  "unidades": 15,
-  "unidades_totales": 75,
+  "unidades": 13,
+  "unidades_totales": 65,
   "por_tipo": {
-   "1 dorm": 8,
+   "1 dorm": 7,
    "2 dorm": 4,
    "3 dorm": 1,
-   "Mono": 2
+   "Mono": 1
   },
   "nucleos": 3,
   "ascensores": 1,
   "tramos": 2,
   "area_planta": 1053.5,
-  "eficiencia_planta": 75.7,
-  "eficiencia_total": 71.5,
-  "sin_usar": 43.4,
+  "eficiencia_planta": 76.1,
+  "eficiencia_total": 71.8,
+  "sin_usar": 39.3,
   "circulacion": 19.5,
-  "match_score": 95.0,
-  "fit_m2": 6.5,
+  "match_score": 96.5,
+  "fit_m2": 10.3,
   "calidad_planos": 100,
   "evacuacion_max": 17.7,
-  "nsa_total": 3987.5,
+  "nsa_total": 4008.0,
   "sin_luz": 6.7
  }
 }
