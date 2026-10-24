@@ -12,7 +12,8 @@ def _medidas_anteriores(planta, vivienda):
     máximo de 14 m y escalera de 1,20 m con ascensor. `vivienda` (v2.61): estar-comedor por dormitorios [18, 18, 20, 24, 27] y
     el mix de 2 y 3 dormitorios de 75 y 95 m² al 50 % (el «Inversor» de v2.61 lo reemplazó); v2.65 (R5.16b): los frentes
     típicos de antes del estar (3,60 m) y de los dormitorios (3,20 y 2,80), con los que la vivienda pedía 6,6 / 9,4 / 12,2 m
-    de frente para 1, 2 y 3 dormitorios (ahora 6,0 / 8,5 / 11,0)."""
+    de frente para 1, 2 y 3 dormitorios (ahora 6,0 / 8,5 / 11,0). v2.73 (R5.8a): siempre, el tabique interior en 0 (las
+    pruebas de geometría exacta de antes miden las estancias al eje; con tabique 0 el plano es el de v2.72)."""
     import contextlib
 
     @contextlib.contextmanager
@@ -20,8 +21,9 @@ def _medidas_anteriores(planta, vivienda):
         from engine import layout as LY, standards as ST
         params, escalera = dict(LY.DEFAULT_PARAMS), ST.DEFAULTS["nucleo"]["escalera_ancho_con_ascensor"]
         V = ST.DEFAULTS["vivienda"]
-        estar = V["estar_por_dorms"]
+        estar, tabique = V["estar_por_dorms"], V.get("tabique")
         typ = {k: list(V[k]["typ"]) for k in ("dorm_principal", "dorm_secundario", "estar_comedor")}
+        V["tabique"] = 0.0
         if planta:
             LY.DEFAULT_PARAMS.update(corridor_width=2.0, min_unit_width=5.0, max_unit_depth=14.0)
             ST.DEFAULTS["nucleo"]["escalera_ancho_con_ascensor"] = 1.20
@@ -36,7 +38,7 @@ def _medidas_anteriores(planta, vivienda):
         finally:
             LY.DEFAULT_PARAMS.update(params)
             ST.DEFAULTS["nucleo"]["escalera_ancho_con_ascensor"] = escalera
-            V["estar_por_dorms"] = estar
+            V["estar_por_dorms"], V["tabique"] = estar, tabique
             for k, t in typ.items():
                 V[k]["typ"] = t
     return cm()
@@ -64,6 +66,12 @@ def vivienda_anterior(f):
     frente mínimo, fondo máximo, escalera) queda con las medidas nuevas de v2.60. Para las pruebas que ya corrían con ellas
     y solo suponían el mix de 2 y 3 dormitorios (cantidad de viviendas de cada tipo, qué vivienda es la U03...)."""
     return _con(False, True)(f)
+
+def tabique_cero(f):
+    """R5.8a (v2.73): solo el tabique interior en 0 (las demás medidas, las de ahora). Para las pruebas de geometría exacta
+    escritas antes de v2.73 que miden las estancias al eje (frentes de 6,04 / 8,54 / 11,04, cajas de estancias, reparto del
+    frente); con el tabique de 0,10 las cubre test_tabiques_espesor."""
+    return _con(False, False)(f)
 
 def test_bar():
     r = run([[0,0],[60,0],[60,16],[0,16]])
@@ -987,6 +995,7 @@ if __name__ == "__main__":
     test_aviso_ancho(); print("OK30")
 
 
+@tabique_cero   # R5.8a: el reparto del frente con los frentes de v2.65
 def test_editar_viviendas():
     """R4.4: el usuario edita las viviendas con cambios en orden (puntos de mundo, en params.unit_edits): mueve el
     tabique entre dos vecinas, las une o divide una en dos. Las demás no cambian, los planos, la evacuación y las
@@ -1184,7 +1193,8 @@ def test_muebles():
         if (c[0] - px) * n[0] + (c[1] - py) * n[1] < 0:
             n = (-n[0], -n[1])
         barrido = caja([(px, py), (qx, qy), (qx + n[0], qy + n[1]), (px + n[0], py + n[1])])
-        assert not any(choca(barrido, caja(b["poly"])) for b in cuerpos if b["room"] == d["b"]), d["b"]
+        assert not any(choca(barrido, caja(b["poly"]), -1e-3) for b in cuerpos if b["room"] == d["b"]), d["b"]   # (R5.8a: la
+        # puerta al eje y las piezas redondeadas a 0,1 mm en el rectángulo libre: 1 mm de tolerancia)
     contra_ventana = lambda c, v1: abs(c[3] - v1) < 0.01 and c[2] - c[0] > 0.61     # a lo largo de la fachada (v = v1)
     for q in res["equipamiento"]:                                      # placard y rack: no contra la ventana
         if q["kind"] in ("placard", "rack_tv"):
@@ -1329,6 +1339,7 @@ def test_accesible():
 if __name__ == "__main__":
     test_accesible(); print("OK34")
 
+@tabique_cero   # R5.8a: tabiques y puertas movidos a mano, medidos al eje
 def test_editar_interior():
     """R5.7: editar la vivienda por dentro. Un tabique interior se arrastra: las estancias que se apoyan en él se agrandan
     o se achican (cada una conserva al menos 0,60 m). Una puerta se corre a lo largo de su pared, cambia de ancho o abre
@@ -1546,6 +1557,7 @@ def test_ventanas():
 if __name__ == "__main__":
     test_ventanas(); print("OK36")
 
+@tabique_cero   # R5.8a: cuántas viviendas usan la esquina, con los frentes de v2.65
 def test_segunda_fachada():
     """R5.3: una vivienda con fachada al fondo y en un costado (de esquina o de extremo) la usa. Si el frente alcanza, el
     estar va a la esquina (el plano se hace al revés si el costado es el otro) y lleva ventana en las dos fachadas; si el
@@ -1636,6 +1648,7 @@ if __name__ == "__main__":
     test_segunda_fachada(); print("OK37")
 
 
+@tabique_cero   # R5.8a: lados al eje («lado 2.55 m < mínimo 2.60 m»)
 def test_normativa_nacional():
     """v2.27: mínimos de la vivienda de la Normativa Nacional de Edificación, Higiene de la Vivienda (Congreso de
     Intendentes, MVOTMA y SAU, 2016). Las comprobaciones de cada plano los usan: un dormitorio principal de 2,55 m de lado
@@ -3002,7 +3015,7 @@ def test_proporcion_y_divisoria():
     # la web: rótulos de las medidas nuevas, la lista de superficies mínimas en «Normativa → Vivienda»
     html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
     for t in ("cocina_integrada:'", "vano_min:'", "superficie_min:'", "retiro_divisoria:'", "proporcion_max:'",
-              "superficie_min:1}", "else if(g==='vivienda'&&k!=='superficie_min'&&k!=='superficie_media_mercado') continue;"):   # (v2.66: y la referencia de mercado, R10.12b)
+              "superficie_min:1}", "else if(g==='vivienda'&&k!=='superficie_min'&&k!=='superficie_media_mercado'&&k!=='tabique') continue;"):   # (v2.66: y la referencia de mercado, R10.12b; v2.73: y el tabique, R5.8a)
         assert t in html, t
 
 if __name__ == "__main__":
@@ -6027,6 +6040,7 @@ if __name__ == "__main__":
     test_calibracion_vivienda(); print("OK77")
 
 
+@tabique_cero   # R5.8a: el reparto del frente con los frentes de v2.65
 def test_reparto_frente():
     """R5.16b (v2.62): el reparto del mix da a cada vivienda el frente que pide su plano (plans.frente_min), elige la
     cantidad de viviendas entre las que caben con esos frentes y deja fuera de una franja los tipos que ahí pasarían de
@@ -6285,6 +6299,7 @@ def test_factibilidad():
     assert tuple(int(x) for x in LY.VERSION.split(".")) >= (2, 64)
 
 
+@tabique_cero   # R5.8a: la planta libre que deja el reparto con los frentes de v2.65
 def test_sin_usar():
     """v2.64: «sin usar» (metrics.unused_area) mide la planta que no cubren pasillos, núcleos ni viviendas. La caja de cada
     núcleo incluye su tramo de pasillo, que ya está en res["corridors"] (y en un anillo, las esquinas donde se encuentran dos
@@ -6360,6 +6375,7 @@ if __name__ == "__main__":
     test_factibilidad(); test_sin_usar(); print("OK80")
 
 
+@tabique_cero   # R5.8a: frente_min(2, 7,17) = 8,54 contra la base, al eje
 def test_comparar_tipologias():
     """tools/comparar_tipologias.py (R5.16b, segunda parte): la comparación plano por plano del motor contra la base de
     tipologías. (a) Corre sobre todas las viviendas de precisión alta sin excepciones ni avisos y cada registro trae las
@@ -6456,6 +6472,7 @@ def test_comparar_tipologias():
             assert CT.main(["comparar_tipologias.py", os.path.join(tmp, "no_existe")]) == 2
 
 
+@tabique_cero   # R5.8a: los frentes de v2.65 (6,04 / 8,54 / 11,04) y las cajas al eje; con el tabique, test_tabiques_espesor
 def test_calibracion_frentes():
     """R5.16b (v2.65, fase 2, entrega 1): los frentes típicos del estar y de los dormitorios siguen lo medido en la base de
     tipologías (data/tipologias/COMPARACION.md, 5.1): estar 3,20 (el motor toma el 95 %, 3,04 m), dormitorio principal
@@ -6563,6 +6580,7 @@ def test_calibracion_frentes():
     assert R["bed1"]["area"] >= V["dorm_principal"]["min_area"] - 1e-6 and len([q for q in res["equipamiento"] if q["room"] == "vest"]) >= 1
 
 
+@tabique_cero   # R5.8a: frente_fila 3,6 / 5,5 / 6,0 al eje; con el tabique, test_tabiques_espesor
 def test_esquema_fila():
     """R5.16b (v2.67, fase 2, entrega 2): el esquema «dormitorios en fila sobre la segunda fachada» (`plans._plan_fila`,
     elegido en `layout_unit` cuando `_fila_posible` ve una segunda fachada y el plano sale mejor que el de siempre sin
@@ -7182,6 +7200,7 @@ if __name__ == "__main__":
     test_circulacion_real(); print("OK85")
 
 
+@tabique_cero   # R5.8a: cajas de estancias al eje (4.0, 4.5, 9.0, 9.0)
 def test_estancias_editables():
     """R5.12 (v2.70): estancias editables en el plano. Con una vivienda elegida, un clic en una estancia abre su ficha:
     nombre, función (dormitorio, estudio, depósito, lavadero, comedor), dormitorio principal o secundario (la cama doble y
@@ -7857,6 +7876,7 @@ if __name__ == "__main__":
     test_abrir_padron(); print("OK87")
 
 
+@tabique_cero   # R5.8a: el palier transversal de v2.71 y los fondos del esquema, con los frentes de v2.65
 def test_entre_medianeras_lateral():
     """R11.4 (v2.72): «pasillo lateral con patios» en un predio entre medianeras. El pasillo corre de punta a punta
     pegado a una medianera, las viviendas van en hilera hacia la otra con un patio de aire y luz (predio.patio_min) entre
@@ -7998,3 +8018,198 @@ def test_entre_medianeras_lateral():
 
 if __name__ == "__main__":
     test_entre_medianeras_lateral(); print("OK88")
+
+
+def test_tabiques_espesor():
+    """R5.8a (v2.73): tabiques con espesor, parte (a). La medida nueva `vivienda.tabique` (0,10 m: criterio del usuario,
+    v2.41) se suma a las medidas lineales de trabajo del plano (`plans.configure`, `_trabajo`, `_wa`): una estancia
+    dimensionada con `libre + tabique` deja `libre` entre las caras de dos tabiques; el estar, el hall, el fondo de los
+    dormitorios y la cocina, con un tabique o ninguno en esa dirección, suman la mitad o nada. Cada estancia del resultado
+    trae `libre` = {w, d, area} (el rectángulo al eje menos medio tabique por cada lado interior que no está abierto a otra
+    estancia; el contorno de la vivienda no descuenta nada) y su `area` pasa a ser la libre; las comprobaciones de lados y
+    superficies mínimas, los muebles (en el rectángulo libre), las puertas (dentro del tramo libre del borde) y la mocheta
+    de las ventanas usan las medidas libres. (a) Las constantes de trabajo y los frentes: 6,19 / 8,79 / 11,39 m para 1, 2 y
+    3 dormitorios (antes 6,04 / 8,54 / 11,04) y 5,05 el monoambiente. (b) Invariante: con `tabique = 0` el motor reproduce
+    v2.72 en los 14 ejemplos (unidades, por tipo, calidad, NSA y sin usar de sus referencias) y `libre` coincide con la
+    caja al eje. (c) «Barra 60x16» con el tabique por defecto: cada estancia trae `libre`, un dormitorio entre dos tabiques
+    mide 0,10 m menos que su caja y el estar 0,05 en el frente, ninguna comprobación de lado o superficie mínima falla,
+    calidad 100. (d) En rectángulos de 1, 2 y 3 dormitorios con el frente justo, el monoambiente, la pasante y la esquina
+    en fila: muebles dentro del rectángulo libre, puertas en el tramo libre, ventanas con la mocheta desde la cara.
+    (e) Un tabique movido a mano conserva 0,60 m libres (0,70 al eje). (f) `EQ.resolver(..., snap)` lleva al borde libre
+    una puerta que viene al eje. (g) La web: «Tabique interior» en Normativa → Vivienda (`STD_LABELS`, `renderStd`),
+    `medidasCambiadas` la guarda si cambia y la ficha dice que las superficies son libres. (h) Documentación."""
+    import json, re, shutil, subprocess, tempfile
+    import regresion
+    from engine import plans as P, standards as ST, equipamiento as EQ, layout as LY, geometry as G
+    raiz = os.path.join(os.path.dirname(__file__), "..")
+    # ---- (a) la medida y las constantes de trabajo
+    assert ST.DEFAULTS["vivienda"]["tabique"] == 0.10 and LY.VERSION >= "2.73"
+    S = ST.merged({})
+    V = S["vivienda"]
+    P.configure(V, S["equipamiento"])
+    assert (P.TAB, P.T2, P.KT) == (0.10, 0.05, 0.05) and P.VN is V and P.V is not V
+    r2 = lambda x: round(x, 2)
+    assert r2(P.V["dorm_secundario"]["min_side"]) == 2.10 and [r2(t) for t in P.V["dorm_secundario"]["typ"]] == [2.60, 3.70]
+    assert r2(P.V["cocina"]["min_side"]) == 1.65 and r2(P.V["cocina_integrada"]["min_side"]) == 1.45      # la cocina, medio tabique
+    assert P.V["dorm_principal"]["min_area"] == V["dorm_principal"]["min_area"] and P.V["superficie_min"] == V["superficie_min"]
+    assert (r2(P.HALL), r2(P.HALL_W), r2(P.BED_D), r2(P.BED_MAIN), r2(P.BED_W), r2(P.LIV_MIN)) == (1.10, 1.45, 3.05, 3.10, 2.60, 3.09)
+    assert (r2(P.BATH_W1), r2(P.BATH_W2), r2(P.LAV_W), r2(P.FR_MIN), r2(P.FR_MAX), r2(P.BATH_MIN_D)) == (1.80, 1.40, 1.30, 1.90, 2.90, 1.55)
+    assert (r2(P.KITCH_LINE), r2(P.KITCH_MESADA), r2(P.KITCH_L), r2(P.KITCH_FRENTE)) == (2.70, 2.00, 2.20, 1.50)   # libres: la cocina
+    assert sorted(a for _, a in P._modos_cocina()) == [1.55, 2.05, 2.25, 2.75]                           # suma KT en su ancho
+    assert (r2(P.CAMA_PLACARD[0]), r2(P.CAMA_PLACARD[1]), r2(P.CAMA_FONDO)) == (3.30, 3.15, 2.55)
+    assert [r2(P.facade_min(n)) for n in (1, 2, 3)] == [6.19, 8.79, 11.39]
+    assert [r2(P.frente_min(n, 6.8)) for n in (0, 1, 2, 3)] == [5.05, 6.19, 8.79, 11.39]
+    assert (r2(P.fondo_min()), r2(P.fondo_sin_tira()), r2(P.fondo_profundo())) == (4.15, 9.45, 6.05)
+    assert abs(P._wa(3.0, 2.0) - (3.0 / 1.9 + 0.1)) < 1e-9 and abs(P._wa(3.0, 2.0, 1, 2) - (3.0 / 1.95 + 0.1)) < 1e-9
+    assert abs(P._area_libre(2.0, 3.0) - 1.9 * 2.9) < 1e-9 and abs(P._area_libre(2.0, 3.0, 2, 1) - 1.9 * 2.95) < 1e-9
+    # ---- (b) el invariante: con tabique 0, lo de v2.72 (las referencias de tests/golden/ de v2.72)
+    V272 = {
+        "L": [15, {"1 dorm": 8, "2 dorm": 4, "3 dorm": 1, "Mono": 2}, 100, 3987.5, 43.4],
+        "L_ochava": [16, {"1 dorm": 9, "2 dorm": 4, "3 dorm": 1, "Mono": 2}, 95, 4224.5, 47.0],
+        "L_polilinea": [15, {"1 dorm": 8, "2 dorm": 4, "3 dorm": 1, "Mono": 2}, 91, 3976.0, 65.6],
+        "T_dos_lineas": [16, {"1 dorm": 7, "2 dorm": 3, "3 dorm": 6}, 88, 6585.5, 107.2],
+        "barra": [14, {"1 dorm": 8, "2 dorm": 4, "3 dorm": 1, "Mono": 1}, 100, 3540.5, 40.6],
+        "barra_larga": [21, {"1 dorm": 12, "2 dorm": 6, "3 dorm": 1, "Mono": 2}, 100, 8264.9, 65.5],
+        "cruz_dos_lineas": [16, {"1 dorm": 3, "2 dorm": 3, "3 dorm": 4, "Mono": 6}, 76, 5548.5, 45.4],
+        "entre_medianeras": [3, {"1 dorm": 3}, 100, 851.4, 2.8],
+        "entre_medianeras_lateral": [3, {"2 dorm": 3}, 100, 1088.0, 3.4],
+        "entre_medianeras_patio": [4, {"1 dorm": 3, "Mono": 1}, 100, 1004.0, 8.6],
+        "entre_medianeras_patio_central": [13, {"1 dorm": 7, "2 dorm": 3, "3 dorm": 1, "Mono": 2}, 96, 3573.5, 38.7],
+        "patio_central": [13, {"1 dorm": 7, "2 dorm": 3, "3 dorm": 1, "Mono": 2}, 100, 3785.5, 33.7],
+        "quiebre_45": [18, {"1 dorm": 10, "2 dorm": 5, "3 dorm": 1, "Mono": 2}, 93, 4664.0, 52.5],
+        "torre_mixta": [16, {"1 dorm": 9, "2 dorm": 4, "3 dorm": 1, "Mono": 2}, 100, 4478.5, 47.4],
+    }
+    muestra = lambda n: json.load(open(os.path.join(regresion.SAMPLES, n + ".json"), encoding="utf-8"))
+    rect = lambda w, d: [(0.0, 0.0), (w, 0.0), (w, d), (0.0, d)]
+    caja = lambda pl: (min(p[0] for p in pl), min(p[1] for p in pl), max(p[0] for p in pl), max(p[1] for p in pl))
+    with _medidas_anteriores(False, False):
+        assert ST.DEFAULTS["vivienda"]["tabique"] == 0.0
+        for nombre, (n, tipos, calidad, nsa, libre_) in V272.items():
+            m = regresion._edificio(muestra(nombre))
+            assert (m["unidades"], m["por_tipo"], m["calidad_planos"]) == (n, tipos, calidad), (nombre, m)
+            assert abs(m["nsa_total"] - nsa) < 0.06 and abs(m["sin_usar"] - libre_) < 0.06, (nombre, m)
+        r0 = run(muestra("barra")["footprint"], h=muestra("barra")["height"])
+        assert len(r0["units"]) == 14 and all(rm["libre"]["area"] == rm["area"] for u in r0["units"] for rm in u["rooms"])
+        res0 = P.layout_unit(rect(8.54, 6.8), 2, None, ST.merged({})["vivienda"], S["equipamiento"], False, None, S["ventanas"])
+        assert P.TAB == 0.0 and res0["score"] == 100 and [r2(P.facade_min(k)) for k in (1, 2, 3)] == [6.04, 8.54, 11.04]
+        for rm in res0["rooms"]:                       # con tabique 0, el libre es la caja al eje
+            assert all(abs(a - b) < 1e-9 for a, b in zip(rm["libre"]["rect"], caja(rm["poly"]))) and rm["libre"]["area"] == rm["area"]
+    P.configure(V, S["equipamiento"])
+    assert P.TAB == 0.10
+    # ---- (c) «Barra 60x16» con el tabique por defecto
+    s = muestra("barra")
+    r = run(s["footprint"], h=s["height"])
+    assert len(r["units"]) == 13 and r["metrics"]["plan_score"] == 100 and r["metrics"]["mix"]["by_type"]["1 dorm"]["count"] == 7
+    assert not any("mínimo" in c["msg"] for u in r["units"] for c in u["checks"] if not c["ok"]), \
+        [(u["id"], c["msg"]) for u in r["units"] for c in u["checks"] if not c["ok"]]
+    dims = lambda rm: (round(caja(rm["poly"])[2] - caja(rm["poly"])[0], 3), round(caja(rm["poly"])[3] - caja(rm["poly"])[1], 3))
+    for u in r["units"]:                               # (la barra: el x del marco es el x del mundo, cajas alineadas)
+        assert u["area"] > 0 and u["area_muros"] > u["area"]
+        for rm in u["rooms"]:
+            assert set(rm["libre"]) == {"w", "d", "area"} and rm["libre"]["area"] == rm["area"], rm
+            dx, dy = dims(rm)
+            des = (dx - rm["libre"]["w"], dy - rm["libre"]["d"])
+            assert all(any(abs(x - k) < 0.011 for k in (0.0, 0.05, 0.10)) for x in des), (u["id"], rm["name"], des)
+    u3 = next(u for u in r["units"] if u["type"] == "3 dorm")
+    bed2 = next(rm for rm in u3["rooms"] if rm["name"] == "Dormitorio 2")      # entre dos tabiques: −0,10 en el frente
+    assert abs(dims(bed2)[0] - bed2["libre"]["w"] - 0.10) < 0.011 and abs(dims(bed2)[1] - bed2["libre"]["d"] - 0.05) < 0.011
+    estar = next(rm for rm in u3["rooms"] if rm["kind"] == "living")           # un tabique (la zona de noche): −0,05
+    assert abs(dims(estar)[0] - estar["libre"]["w"] - 0.05) < 0.011 and abs(dims(estar)[1] - estar["libre"]["d"]) < 0.011
+    pasillo = next(rm for rm in u3["rooms"] if rm["kind"] == "hallway")        # el pasillo interno: 1,10 al eje, 1,00 libre
+    assert abs(pasillo["libre"]["d"] - 1.0) < 0.011 and abs(dims(pasillo)[1] - 1.1) < 0.011
+    assert all(any(("Dormitorio" in rm["name"] or rm["kind"] == "living") and rm["libre"]["w"] >= 2.5 - 1e-6 for rm in u["rooms"])
+               for u in r["units"] if u["type"] != "Mono")
+    # ---- (d) muebles, puertas y ventanas en el rectángulo libre
+    T2 = P.T2
+    dentro = lambda b, lr, h=1e-3: b[0] >= lr[0] - h and b[1] >= lr[1] - h and b[2] <= lr[2] + h and b[3] <= lr[3] + h
+
+    def fachada(W, D, lados):
+        def f(p, q):
+            return any(l == "v0" and abs(p[1]) < 1e-6 and abs(q[1]) < 1e-6 or
+                       l == "v1" and abs(p[1] - D) < 1e-6 and abs(q[1] - D) < 1e-6 or
+                       l == "x1" and abs(p[0] - W) < 1e-6 and abs(q[0] - W) < 1e-6 for l in lados)
+        f.ventana = f
+        return f
+    casos = [(1, 6.2, 6.8, ("v1",)), (2, 8.8, 6.8, ("v1",)), (3, 11.4, 6.8, ("v1",)), (1, 6.6, 7.75, ("v1",)), (0, 5.05, 6.5, ("v1",)),
+             (3, 12.0, 9.0, ("v1",)), (1, 3.6, 9.8, ("v0", "v1")), (3, 7.7, 11.8, ("v1", "x1"))]
+    for nb, W, D, lados in casos:
+        res = P.layout_unit(rect(W, D), nb, fachada(W, D, lados), V, S["equipamiento"], False, None, S["ventanas"])
+        R = {rm["id"]: rm for rm in res["rooms"]}
+        fallas = [c["msg"] for c in res["checks"] if not c["ok"]]
+        assert res["score"] >= (90 if lados == ("v0", "v1") else 100), (nb, W, D, res["score"], fallas)
+        if len(lados) == 2:
+            assert res.get("segunda_fachada") == "fila", (nb, W, D, res.get("segunda_fachada"))
+        for rm in res["rooms"]:
+            e, lr = caja(rm["poly"]), rm["libre"]["rect"]
+            assert dentro(lr, e, 1e-9) and abs((lr[2] - lr[0]) - rm["libre"]["w"]) < 1e-9 and abs(rm["libre"]["area"] - rm["area"]) < 1e-9
+            for x in ((e[2] - e[0]) - rm["libre"]["w"], (e[3] - e[1]) - rm["libre"]["d"]):
+                assert any(abs(x - k) < 1e-6 for k in (0.0, T2, 2 * T2)), (rm["name"], x)
+        for q in res["equipamiento"]:                  # muebles y artefactos, en el rectángulo libre de su estancia
+            ids = ("living", "dining") if q["room"] in ("living", "dining") and "dining" in R else (q["room"],)
+            lrs = [R[i]["libre"]["rect"] for i in ids]
+            lr = (min(l[0] for l in lrs), min(l[1] for l in lrs), max(l[2] for l in lrs), max(l[3] for l in lrs))
+            assert dentro(caja(q["poly"]), lr), (nb, W, D, q["name"], q["room"], caja(q["poly"]), lr)
+        for d in res["doors"]:                         # puertas, dentro del tramo libre del borde (sin el tabique perpendicular)
+            if d.get("entry"):
+                lr, xs = R[d["b"]]["libre"]["rect"], sorted((d["p"][0], d["q"][0]))
+                assert xs[0] >= lr[0] - 1e-6 and xs[1] <= lr[2] + 1e-6, (nb, W, D, d, lr)
+                continue
+            seg = P._shared(caja(R[d["a"]]["poly"]), caja(R[d["b"]]["poly"]))
+            k = 1 if d["vertical"] else 0
+            lo, hi = sorted((seg[0][k], seg[1][k]))
+            ds = sorted((d["p"][k], d["q"][k]))
+            assert ds[0] >= lo + T2 - 1e-6 and ds[1] <= hi - T2 + 1e-6, (nb, W, D, d["a"], d["b"], ds, (lo, hi))
+        for w in res["ventanas"]:                      # la mocheta, desde la cara del tabique
+            lr, xs = R[w["room"]]["libre"]["rect"], sorted((w["p"][0], w["q"][0]))
+            if abs(w["p"][1] - D) < 1e-6:
+                assert xs[0] >= lr[0] + S["ventanas"]["mocheta"] - 1e-6 and xs[1] <= lr[2] - S["ventanas"]["mocheta"] + 1e-6, (w, lr)
+        if nb == 1 and (W, D) == (6.6, 7.75):          # la cocina aparte, sin tabiques: libre = eje; el hall, uno
+            assert R["kitchen"]["libre"]["w"] == caja(R["kitchen"]["poly"])[2] - caja(R["kitchen"]["poly"])[0] and \
+                abs(caja(R["hall"]["poly"])[2] - caja(R["hall"]["poly"])[0] - R["hall"]["libre"]["w"] - T2) < 1e-9
+        if lados == ("v0", "v1"):                      # la pasante: la cocina cerrada con su heladera y su mesada
+            assert {("kitchen", "Heladera"), ("kitchen", "Mesada"), ("bed1", "Cama doble")} <= {(q["room"], q["name"]) for q in res["equipamiento"]}
+    # ---- (e) un tabique movido a mano conserva 0,60 m libres
+    res = P.layout_unit(rect(8.8, 6.8), 2, None, V, S["equipamiento"], False, None, S["ventanas"])
+    R = {rm["id"]: rm for rm in res["rooms"]}
+    b1, b2 = caja(R["bed1"]["poly"]), caja(R["bed2"]["poly"])
+    x, vm = b1[2], (b1[1] + b1[3]) / 2
+    mov = P.layout_unit(rect(8.8, 6.8), 2, None, V, S["equipamiento"], False, [(0, {"op": "pared", "p": (x, vm), "a": (8.75, vm)})], S["ventanas"])
+    Rm = {rm["id"]: rm for rm in mov["rooms"]}
+    assert mov["ediciones"] == [0] and abs(caja(Rm["bed2"]["poly"])[2] - caja(Rm["bed2"]["poly"])[0] - 0.70) < 1e-6 and \
+        abs(Rm["bed2"]["libre"]["w"] - 0.65) < 1e-6       # (0,70 al eje: 0,60 libres entre dos caras; aquí el contorno en x1)
+    # ---- (f) EQ.resolver(..., snap): la puerta al eje, llevada al borde libre
+    rm = {"id": "bath1", "kind": "bath", "name": "Baño", "rect": (0.05, 0.0, 1.75, 2.35)}
+    pu = lambda v: [{"p": (0.5, v), "q": (1.2, v), "a": "hallway", "b": "bath1", "ancho": 0.7}]
+    EQ._memo.clear()
+    con = EQ.resolver(rm, pu(2.4), {}, S["equipamiento"], snap=0.06)
+    EQ._memo.clear()
+    sin = EQ.resolver(rm, pu(2.35), {}, S["equipamiento"])
+    assert con == sin and not con[1], (con, sin)
+    EQ._memo.clear()
+    assert EQ.resolver(rm, pu(2.4), {}, S["equipamiento"]) != con       # sin snap la puerta no cae en la pared: otro resultado
+    # ---- (g) la web
+    html = open(os.path.join(raiz, "web", "index.html"), encoding="utf-8").read()
+    js = html.split("<script>", 1)[1].split("</script>", 1)[0]
+    assert "tabique:'Tabique interior (m)'" in js and "k!=='superficie_media_mercado'&&k!=='tabique'" in js
+    assert "Superficies libres, entre caras de tabiques" in js
+    node = shutil.which("node")
+    if node:
+        fn = re.search(r"function medidasCambiadas\(\)\{.*?return Object\.keys\(d\)\.length\?d:null; \}", js, re.S).group(0)
+        prog = ("const STD_DEF=%s; const STD=JSON.parse(JSON.stringify(STD_DEF)); STD.vivienda.tabique=0.15; %s\n"
+                "console.log(JSON.stringify(medidasCambiadas()));" % (json.dumps(ST.DEFAULTS), fn))
+        with tempfile.TemporaryDirectory() as tmp:
+            ruta = os.path.join(tmp, "p.js")
+            open(ruta, "w", encoding="utf-8").write(prog)
+            c = subprocess.run([node, ruta], capture_output=True, text=True, encoding="utf-8")
+            assert c.returncode == 0 and json.loads(c.stdout) == {"vivienda": {"tabique": 0.15}}, (c.stdout, c.stderr)
+            open(ruta, "w", encoding="utf-8").write(js)
+            c = subprocess.run([node, "--check", ruta], capture_output=True, text=True, encoding="utf-8")
+            assert c.returncode == 0, c.stderr
+    # ---- (h) documentación
+    assert "Tabiques interiores (R5.8a, v2.73" in open(os.path.join(raiz, "STANDARDS.md"), encoding="utf-8").read()
+    assert "## Novedades v2.73" in open(os.path.join(raiz, "README.md"), encoding="utf-8").read()
+    assert "Hecho (v2.73, parte a)" in open(os.path.join(raiz, "ROADMAP.md"), encoding="utf-8").read()
+    assert "Tabiques con espesor (R5.8a, v2.73)" in open(os.path.join(raiz, "CLAUDE.md"), encoding="utf-8").read()
+
+if __name__ == "__main__":
+    test_tabiques_espesor(); print("OK89")

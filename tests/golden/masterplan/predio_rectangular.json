@@ -1,7 +1,7 @@
 {
  "ejemplo": "samples/masterplan/predio_rectangular.json",
  "nombre": "Predio rectangular 260 × 180 (damero)",
- "version_motor": "2.72",
+ "version_motor": "2.73",
  "metricas": {
   "manzanas": 4,
   "lotes": 64,
