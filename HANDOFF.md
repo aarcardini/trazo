@@ -7,27 +7,30 @@ Dice dónde estamos ahora. Cómo es el código está en `CLAUDE.md`; qué falta 
 - Cada entrada lleva fecha. Lo cerrado se borra, no se tacha: el historial está en git.
 - Máximo unas 80 líneas; si crece, está repitiendo a `CLAUDE.md` o al `ROADMAP.md`.
 
-## 1. Estado del repositorio (23/10/2026)
+## 1. Estado del repositorio (24/10/2026)
 - `main` = v2.71 (8b77a15): #89 (R1.6 «Abrir padrón de Montevideo», v2.71) integrado el 23/10, después de #87 y #88; encima, dos commits chicos de este archivo.
-- PR abierto (base `main`, espera el «aceptá» del usuario): **#90** `entre-medianeras-lateral`: R11.4 «Entre medianeras con más de dos viviendas por piso» (pasillo lateral con patios), v2.72 / OK88. Al integrarlo: `git fetch` y `git merge --ff-only origin/main` en el clon, y quitar el worktree `scratchpad/lateral/repo`.
+- PRs abiertos, en el orden en que se integran (el usuario los aceptó el 24/10; se integran cuando el CI de cada uno está verde):
+  1. **#90** `entre-medianeras-lateral` (base `main`): R11.4 «Entre medianeras con más de dos viviendas por piso» (pasillo lateral con patios), v2.72 / OK88. GitHub no disparó su CI al abrirlo: se lanzó a mano (`workflow_dispatch` de `pruebas.yml` sobre la rama).
+  2. `tabiques-espesor` (base `entre-medianeras-lateral`, apilado): R5.8 (a) «Tabiques con espesor», v2.73 / OK89. Al integrar #90, retargetear a `main` e integrar; después `git fetch` y `git merge --ff-only origin/main` en el clon, y quitar los worktrees `scratchpad/lateral/repo` y `scratchpad/tabiques/repo`.
 
-## 2. Trabajo en curso (23/10/2026)
-- Ninguna tarea abierta fuera del PR de arriba.
-- **R1.6:** integrado (#89) con dos supuestos (sección 4). Si el usuario responde distinto, se ajusta en una rama nueva (`engine/padron.py`: `normativa`/`CAMPOS` y `_lados`).
+## 2. Trabajo en curso (24/10/2026)
+- Ninguna tarea abierta fuera de los PRs de arriba. Después de integrarlos, el usuario pidió parar en ese punto («nos quedamos allí hasta que te diga de continuar»).
+- **R5.8 (a):** lo pendiente quedó en el ROADMAP (partes (b) relleno de muros en web, DXF y Rhino, y (c) R7.1; `data/tipologias/comparacion.json` y `COMPARACION.md` no se regeneraron con los frentes nuevos: `python tools/comparar_tipologias.py data/tipologias` y revisar `test_esquema_fila (e)`; decisión abierta para (b): si se descuenta también medio tabique en los lados al contorno y si el último dormitorio pierde el medio tabique que le sobra). Decisiones que no se vuelven a discutir: tabique de 0,10 m; la superficie de la vivienda se informa libre y con muros; las estancias se informan libres; la cocina abierta suma medio tabique solo en su ancho.
 - **R11.4:** lo pendiente quedó en el ROADMAP (recortar el pasillo en la última puerta, patios manuales sobre la planta en peine, pasante con la fila de v2.67 y puerta lateral, núcleos manuales en la hilera, vestidor en `_plano_lateral`, patios según altura R11.2). Decisiones que no se vuelven a discutir: esquema B (pasillo longitudinal contra una medianera, hilera hacia la otra, patios de `patio_min` entre viviendas, entrada por el costado, viviendas giradas 90°); el núcleo nunca le quita la fachada a una vivienda y llega hasta la medianera opuesta; la evacuación se mide desde la puerta real; como máximo dos viviendas por diente; el planificador prefiere más viviendas antes que el fondo de saco (avisa).
+- **R1.6:** integrado (#89) con dos supuestos (sección 4). Si el usuario responde distinto, se ajusta en una rama nueva (`engine/padron.py`: `normativa`/`CAMPOS` y `_lados`).
 - **Base de tipologías:** el usuario busca más planos. Cuando mande un `.zip`: descomprimir en una carpeta nueva del scratchpad, pasar cada DXF por `python tools/ver_dxf.py`, organizar en `data/tipologias/` (DXF, nota por proyecto, filas en `indice.csv`; sin SVG ni PNG), regenerar con `python -m engine.tipologias` y `python tools/comparar_tipologias.py`, y abrir un PR como el #73.
 - Decisiones de R5.13 que no se vuelven a discutir: primera etapa = la entrada en una de las tres posiciones que el plano ya arma (punta x0, junto a la zona de noche, punta x1 al revés); la posición cualquiera es la segunda etapa y queda en el ROADMAP.
 
-## 3. Cola de tareas (23/10/2026), en el orden acordado; la rama siguiente toma v2.73 y OK89
-1. **R5.8 Muros y tabiques con espesor** (L; `standards.py`, `plans.py`, `equipamiento.py`: Fable): tabiques interiores con espesor en los planos; antes de R7.1. Empezar por (a), que sola es M: espesores en `standards.py` y medidas libres en las comprobaciones, los muebles y las puertas. Decisión del usuario (v2.41): tabiques de 0,10 m; la superficie se informa libre y con muros.
-2. **Reparto del mix con el frente de la segunda fachada** (`units.generate_unit_mix`; quedó fuera de v2.67): solo vale cuando se prioricen crujías simples y predios entre medianeras con franjas profundas.
+## 3. Cola de tareas (24/10/2026), en el orden acordado; la rama siguiente toma v2.74 y OK90
+1. **Reparto del mix con el frente de la segunda fachada** (`units.generate_unit_mix`; quedó fuera de v2.67; Fable): solo vale cuando se prioricen crujías simples y predios entre medianeras con franjas profundas; con el pasillo lateral de R11.4 y los frentes con tabique de R5.8a, medir primero cuánto cambia.
+2. Después, lo que el usuario pida (candidatos del ROADMAP: R5.8 (b), la segunda etapa de R5.13, R11.2 patios según altura).
 
-## 4. Decisiones pendientes del usuario (23/10/2026)
+## 4. Decisiones pendientes del usuario (24/10/2026)
 - R1.6 (#89 integrado con los supuestos de la sección 2): (a) ¿mostrar altura, FOS y uso preferente aunque sean orientativos (la capa parece heredada y 1 de 7 retiros difiere del CITIM), o solo categoría y retiro frontal? (b) ¿escribir a la IM (uit@imm.gub.uy, sig@imm.gub.uy) para confirmar la capa y su vigencia? (c) ¿las medianeras deducidas van como propuesta editable o solo se señalan los lados con vecino?
-- ¿La segunda etapa de R5.13 (la entrada en cualquier posición, corriendo la división día / noche) va antes de R5.8? Si sí, entra en la cola; si no, queda en el ROADMAP hasta que la pida.
+- ¿La segunda etapa de R5.13 (la entrada en cualquier posición, corriendo la división día / noche) va antes del reparto del mix? Si sí, entra en la cola; si no, queda en el ROADMAP hasta que la pida.
 - Cerradas y anotadas en el ROADMAP (no reabrir): 22/10: costos por gama cerrados; ingreso de oficinas, comercio y cocheras para más adelante; el tope del 25 % de monoambientes queda; sin ventanas hacia galerías ni corredores; GitHub Pages desestimado, se sigue en la red local; los avisos del motor siguen con punto decimal. 23/10: R1.6 se programa aceptando el servicio público de la IM sin garantía, con carga a mano o DXF como respaldo; R11.4 con el esquema B.
 
-## 5. Convenciones de sesión (23/10/2026), las que no están en `CLAUDE.md`
+## 5. Convenciones de sesión (24/10/2026), las que no están en `CLAUDE.md`
 - **Aceptación:** el usuario acepta con «aceptá» / «acepta» / «ya acepté», en general varios PRs juntos; se integran con `merge` (nunca squash ni rebase) en el orden de las versiones, con `expectedHeadSha`. Las ramas remotas ya integradas las borra el usuario en GitHub (desde la sesión da 403).
 - **Ramas apiladas:** una tarea por rama y PR; una rama que depende de otra abierta parte de ella y su PR lleva esa rama como base; al integrar la de abajo se retargetea la de arriba a `main` y se integra después. Cada rama toma la versión y el número de prueba (`print("OKnn")`) siguientes **en el orden previsto de integración**; la que se integra después mezcla `main` (o la rama de abajo) y resuelve: `VERSION` la mayor, la cola de pruebas en orden, «Novedades» del README con la más nueva arriba, `CLAUDE.md` y `ROADMAP.md` con las dos partes, `tests/golden/` con `--actualizar` solo si lo único que cambia es `version_motor`.
 - **Worktrees:** uno por tarea bajo `/tmp/claude-0/-home-user-trazo/<sesión>/scratchpad/<tarea>/repo` (`git worktree add -b <rama> ... origin/main`); se quitan al integrar. Nada se edita en `/home/user/trazo` fuera de `main`.
