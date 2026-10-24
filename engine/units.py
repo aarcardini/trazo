@@ -5,7 +5,7 @@ from . import geometry as G
 from . import plans as P
 from . import standards as ST
 from .massing import _dist_to_boundary
-from .circulation import ancho_de
+from .circulation import ancho_de, fachadas_diente, PUERTA_LATERAL
 
 
 # ---------------------------------------------------------------- mix de unidades
@@ -89,8 +89,10 @@ def _segments(loc, circ, params):
                     pk = G.clip_rect(loc, b[0], b[2], b[3] + pw / 2, None)
                 else:
                     pk = G.clip_rect(loc, b[0], b[2], None, b[1] - pw / 2)
-                # sin bolsillo si detrás del núcleo hay otro bloqueo (el pasillo de otra línea que llega, otro núcleo)
-                if pk and abs(G.area(pk)) >= 6 and _is_rect(pk) and \
+                # sin bolsillo si detrás del núcleo hay otro bloqueo (el pasillo de otra línea que llega, otro núcleo);
+                # R11.4: en la hilera del pasillo lateral tampoco (la vivienda vecina se dibuja girada y el bolsillo le
+                # quedaría detrás de su fondo: el núcleo automático llega hasta la medianera)
+                if pk and abs(G.area(pk)) >= 6 and _is_rect(pk) and not circ.get("lateral") and \
                         not any(o0 < b[2] - 0.05 and o1 > b[0] + 0.05 for o0, o1 in otros):
                     pockets.append((b[0], b[2], pk))
         blocks += otros
@@ -107,6 +109,10 @@ def _segments(loc, circ, params):
         for a, b, region in [(a, b, r) for a, b in ivs for r in G.clip_rect_parts(loc, a, b, y0, y1)]:
             if not region or abs(G.area(region)) <= 4:       # un corte que separa la planta da varias franjas
                 continue
+            if circ.get("lateral"):
+                # R11.4: en la planta en peine el núcleo o un patio pueden caer a una millonésima del borde de un diente
+                # (la planta viene redondeada): sin la punta de ancho cero que deja el recorte, que corría x0 del diente
+                region = G.clean_rel(region)
             if _is_rect(region):
                 r = G.bbox(region)
                 parts = [r]
@@ -196,17 +202,28 @@ def generate_unit_mix(circ, params, state=None):
     - La cantidad de viviendas es la que mejor ajusta las superficies a sus objetivos (como antes: la que da la
       superficie media del mix, una más o una menos) entre las que caben con sus frentes mínimos; si ni una cabe
       (la franja entera es más corta que el frente), va una sola con lo que hay.
-    Los tabiques entre vecinas (party_wall) se descuentan del frente de cada una."""
+    Los tabiques entre vecinas (party_wall) se descuentan del frente de cada una.
+    Pasillo lateral con patios (R11.4, v2.72; circ["lateral"]): cada diente de la hilera (franja entre patios, o entre un
+    patio y el núcleo) es una franja cuyas viviendas tienen la fachada en el costado: la fachada de todas mide D (el fondo
+    de la franja, fijo) y su ancho a lo largo del pasillo es su fondo. Son aptos los tipos con facade_min(dormitorios) ≤
+    D + 0,05; el frente mínimo de cada vivienda es plans.fondo_profundo() (el fondo con el que el plano lleva el hall en la
+    esquina del pasillo y la franja de servicios) y su ancho sale de su superficie objetivo / D; en un diente entran a lo
+    sumo tantas viviendas como fachadas tiene (fachadas_diente: una por lado con la calle, el contrafrente o un patio;
+    ninguna junto al núcleo), así ninguna queda sin luz. Cada vivienda
+    anota «lateral» (-1: su fachada es el costado x0; 1: x1; 0: los dos) y _fachada (el costado que el plano usa como
+    fondo cuando tiene los dos: la calle o el contrafrente antes que un patio, y a igual, x0)."""
     loc = circ["loc_plate"]
     cw, pw = ancho_de(circ, params), params["party_wall"]
-    mix = [m for m in params["unit_mix"] if m.get("percent", 0) > 0 and m.get("area", 0) > 0]
+    mix_todo = [m for m in params["unit_mix"] if m.get("percent", 0) > 0 and m.get("area", 0) > 0]
+    lateral = circ.get("lateral")
+    mix = [m for m in mix_todo if not lateral or P.facade_min(_dorms_de(m)) <= lateral["D"] + 0.05] or mix_todo
     tot = sum(m["percent"] for m in mix) or 1.0
     for m in mix:
         m["_p"] = m["percent"] / tot
     segs = _segments(loc, circ, params)
     frentes = extremos_al_frente(circ, params)              # R3.7
     state = state if state is not None else {}
-    placed = state.setdefault("placed", {m["name"]: 0 for m in mix})
+    placed = state.setdefault("placed", {m["name"]: 0 for m in mix_todo})
     n_placed = state.get("n", 0)
     units = []
     warnings = []
@@ -219,12 +236,17 @@ def generate_unit_mix(circ, params, state=None):
         length = xmax - xmin
         if length < 0.6 * params["min_unit_width"] or A_seg < 0.4 * min(m_["area"] for m_ in mix):
             continue
+        fach = fachadas_diente(circ, xmin, xmax) if lateral else None    # R11.4: qué hay a cada lado del diente
+        if lateral and not any(fach):
+            continue                                        # un diente sin fachada (entre el núcleo y otro bloqueo)
         avg = sum(m["_p"] * m["area"] for m in mix)
         n_max = max(1, int(length // max(params["min_unit_width"], 1.0)))
+        if lateral:
+            n_max = min(n_max, sum(1 for f in fach if f))   # R11.4: una vivienda por fachada del diente
         area_r, corte_r = _perfil(region)
         D_seg = A_seg / length                                  # fondo medio de la franja
-        D_util = min(D_seg, P.fondo_sin_tira())                 # el fondo que el plano aprovecha entero
-        fmin = {m["name"]: P.frente_min(_dorms_de(m), D_seg) for m in mix}     # el frente que pide cada tipo
+        D_util = D_seg if lateral else min(D_seg, P.fondo_sin_tira())    # el fondo que el plano aprovecha entero
+        fmin = {m["name"]: (P.fondo_profundo() if lateral else P.frente_min(_dorms_de(m), D_seg)) for m in mix}
         caben = [m for m in mix if fmin[m["name"]] <= length + 1e-6] or [min(mix, key=lambda m: fmin[m["name"]])]
         aptos = [m for m in caben if fmin[m["name"]] * D_seg <= 1.35 * m["area"] + 1e-6] or \
             [min(caben, key=lambda m: fmin[m["name"]] * D_seg / m["area"])]
@@ -422,13 +444,18 @@ def generate_unit_mix(circ, params, state=None):
             placed[m["name"]] += 1
             n_placed += 1
         state["n"] = n_placed
-        for (xs0, xe), m in zip(cuts, seq):
+        for j, ((xs0, xe), m) in enumerate(zip(cuts, seq)):
             poly = G.largest_part(G.clip_rect(region, xs0, xe))      # una unidad es una sola figura
             if poly:
                 a_ = abs(G.area(poly))
                 w = xe - xs0
                 units.append({"type": m["name"], "target": m["area"], "area": a_, "width": w,
                               "side": side, "x0": xs0, "x1": xe, "poly_local": poly, "_region": region})
+                if lateral:                                     # R11.4: de qué lado tiene su fachada cada vivienda
+                    izq, der = (fach[0] and j == 0), (fach[1] and j == len(cuts) - 1)
+                    units[-1]["lateral"] = 0 if izq and der else (-1 if izq else 1)
+                    units[-1]["_fachada"] = (1 if fach[1] == "punta" and fach[0] != "punta" else -1) if izq and der \
+                        else units[-1]["lateral"]
                 if w < params["min_unit_width"]:
                     warnings.append("Unidad con ancho %.2f m < mínimo %.2f m" % (w, params["min_unit_width"]))   # con 1 decimal, 4.98 < 5 se leía «5.0 < 5.0»
     # puertas, evacuación y profundidad
@@ -439,10 +466,23 @@ def generate_unit_mix(circ, params, state=None):
         u["egress"] = 0.0
         ys = [p[1] for p in u["poly_local"]]
         u["depth"] = (max(ys) - min(ys))
+        if u.get("lateral") is not None:
+            _medidas_lateral(u, params)                     # R11.4: frente = la fachada lateral, fondo = a lo largo del pasillo
         if u["depth"] > params["max_unit_depth"] + 0.5:
             warnings.append("Unidad %s de %.0f m² tiene profundidad %.1f m (> %.1f m): poca luz natural" %
                             (u["type"], u["area"], u["depth"], params["max_unit_depth"]))
     return units, warnings
+
+
+def _medidas_lateral(u, params):
+    """R11.4: una vivienda con fachada lateral mide al revés: su frente es la fachada (el fondo de la franja) y su fondo,
+    su ancho a lo largo del pasillo; la puerta queda en el costado que da al pasillo, a PUERTA_LATERAL del fondo (el lado
+    opuesto a su fachada; el plano la pone después, en el hall, y layout vuelve a medir la evacuación desde ahí)."""
+    ys = [p[1] for p in u["poly_local"]]
+    u["width"], u["depth"] = max(ys) - min(ys), u["x1"] - u["x0"]
+    xd = (u["x1"] - PUERTA_LATERAL) if u.get("_fachada", u["lateral"]) < 0 else (u["x0"] + PUERTA_LATERAL)
+    u["door_local"] = (min(max(xd, u["x0"]), u["x1"]), _y_puerta(u["_pc"], params) * u["side"] if u.get("_pc") else
+                       u["door_local"][1])
 
 
 # ---------------------------------------------------------------- pasillo sin puntas muertas (R3.7)
@@ -456,8 +496,9 @@ def extremos_al_frente(pc, params):
     de la planta en esa punta: punta libre (sin unión) que llega a la fachada, con el pasillo apoyado en el borde de la
     planta (del otro lado no hay viviendas). Devuelve {e: (x de la punta, franja)}: franja, la del pasillo con el medio
     tabique hacia las viviendas, de todo el largo (marco de la pieza)."""
-    if pc.get("between") or pc.get("puntas") or pc.get("galeria") or not pc.get("corridor_local"):
-        return {}                                      # R3.8: la banda de una galería está fuera de la planta
+    if pc.get("between") or pc.get("puntas") or pc.get("galeria") or pc.get("lateral") or not pc.get("corridor_local"):
+        return {}                                      # R3.8: la banda de una galería está fuera de la planta; R11.4: la
+
     cw, pw = ancho_de(pc, params), params["party_wall"]
     loc = pc["loc_plate"]
     planta = pc.get("_planta") or G.to_world(loc, pc["origin"], pc["angle"])
@@ -534,7 +575,7 @@ def puntas_libres(units, pieces, params):
     S = ST.merged(params.get("standards"))
     largo = max(S["vivienda"]["hall"]["min_side"], S["vivienda"]["hall"]["typ"][0]) + S["equipamiento"]["puerta_entrada"] + 0.3
     for pc in pieces:
-        if pc.get("between"):
+        if pc.get("between") or pc.get("lateral"):
             continue
         t = pc.get("tramo") or (pc["xa"], pc["xb"])
         for e in (0, 1):
@@ -578,6 +619,8 @@ def _recortar(u, x0, x1, params):
     u.update({"x0": x0, "x1": x1, "poly_local": poly, "area": abs(G.area(poly)), "width": x1 - x0,
               "depth": max(ys) - min(ys), "door_local": ((x0 + x1) / 2.0, _y_puerta(u["_pc"], params) * u["side"]),
               "editada": True})
+    if u.get("lateral") is not None:
+        _medidas_lateral(u, params)                         # R11.4
     return True
 
 
@@ -952,7 +995,21 @@ def _marco_vivienda(u, params, pc=None):
     galeria = bool((pc or u.get("_pc") or {}).get("galeria"))    # R3.8: el pasillo común está del otro lado del muro
     y_in = cw / 2 + (params["outer_wall"] if galeria else pw / 2)
     fr = u.get("frente")
-    if fr:                                     # R3.7: al frente, v desde la punta del pasillo; la puerta, en 0 <= x <= cw
+    if u.get("lateral") is not None:
+        # R11.4: fachada lateral: x a lo largo de la fachada (el costado de la pieza, desde el pasillo común: x = 0 es el
+        # borde del pasillo, donde va la puerta) y v desde el fondo de la vivienda (la vecina, el núcleo o el otro
+        # patio) hasta su fachada (v1 = el costado que el plano usa como fondo: u["_fachada"])
+        x0u, x1u = u["x0"], u["x1"]
+        if u.get("_fachada", u["lateral"]) > 0:            # la fachada en x1: v = x - x0
+            ida = lambda pt: (pt[1] - y_in, pt[0] - x0u)
+            back = lambda pt: (x0u + pt[1], y_in + pt[0])
+            refleja = True
+        else:                                              # la fachada en x0: v = x1 - x
+            ida = lambda pt: (pt[1] - y_in, x1u - pt[0])
+            back = lambda pt: (x1u - pt[1], y_in + pt[0])
+            refleja = False
+        entrada = punta = None
+    elif fr:                                   # R3.7: al frente, v desde la punta del pasillo; la puerta, en 0 <= x <= cw
         xh, sg = (fr["a"], 1) if fr["e"] == 1 else (fr["b"], -1)
         ida = lambda pt: (pt[1] + cw / 2, sg * (pt[0] - xh))
         back = lambda pt: (xh + sg * pt[1], pt[0] - cw / 2)
@@ -988,6 +1045,8 @@ def acceso_cerca(u, params, pc, p):
     """R5.13: (distancia, x) del punto de mundo p al borde de la vivienda u sobre el pasillo común, en el marco de la
     vivienda (el de unit_rooms: x a lo largo de su fachada); None si no tiene ese borde. layout asigna cada acceso a mano
     a la vivienda más cercana (hasta ACCESO_CERCA)."""
+    if u.get("lateral") is not None:
+        return None                                    # R11.4: la entrada va en el costado, donde la pone el plano
     ida = _marco_vivienda(u, params, pc)
     q = ida[0](G.to_local([p], pc["origin"], pc["angle"])[0])
     d = _borde_pasillo(q, ida[3])
@@ -1045,7 +1104,7 @@ def unit_rooms(u, params, pc=None, plate=None, ediciones=None):
         for k, e in ediciones:
             q = marco(e["p"])
             if e.get("op") == "acceso":            # R5.13: sobre el borde del pasillo común; el último pedido manda
-                d = _borde_pasillo(q, poly)
+                d = _borde_pasillo(q, poly) if u.get("lateral") is None else None   # (R11.4: en el costado, no se mueve)
                 if d is not None and d <= ACCESO_CERCA:
                     acceso = q[0]
                     accesos.append(k)
@@ -1053,7 +1112,8 @@ def unit_rooms(u, params, pc=None, plate=None, ediciones=None):
                 mias.append((k, dict(e, p=q, a=marco(e["a"]) if e.get("a") else None)))
     S = ST.merged(params.get("standards"))
     res = P.layout_unit(poly, nb, is_fac, S["vivienda"], S["equipamiento"], bool(spec.get("accesible")), mias,
-                        S["ventanas"], entrada, bool(spec.get("vestidor")), punta=punta, acceso=acceso)
+                        S["ventanas"], entrada, bool(spec.get("vestidor")), punta=punta, acceso=acceso,
+                        puerta_lateral=-1 if u.get("lateral") is not None else None)    # R11.4: la entrada en x = 0
     if accesos:
         res["ediciones"] = sorted(res["ediciones"] + accesos)
         if res.get("acceso") and res["acceso"].get("x_medio") is not None:

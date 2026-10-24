@@ -1,7 +1,7 @@
 {
  "ejemplo": "samples/entre_medianeras_patio_central.json",
  "nombre": "Entre medianeras 30 × 45 con patio central (U cerrada)",
- "version_motor": "2.71",
+ "version_motor": "2.72",
  "metricas": {
   "unidades": 13,
   "unidades_totales": 65,

@@ -363,8 +363,10 @@ def test_patios():
     assert run(fp, medianeras=meds(10, 40), patios_mode="manual").get("dark_zones"), "sin patios vuelve la zona sin luz"
     # el lote de 10 × 28 no es tan profundo: sigue sin patio
     assert not run([[0,0],[10,0],[10,28],[0,28]], medianeras=meds(10, 28))["patios"]
-    # 16 × 60: tres bloques con su núcleo y planos sin observaciones
-    r = run([[0,0],[60,0],[60,16],[0,16]], h=18, medianeras=[{"a":[0,0],"b":[60,0],"retiro":0},{"a":[60,16],"b":[0,16],"retiro":0}])
+    # 16 × 60: tres bloques con su núcleo y planos sin observaciones (v2.72: con el palier transversal; en «auto» va el
+    # pasillo lateral con patios de R11.4, que mide test_entre_medianeras_lateral)
+    r = run([[0,0],[60,0],[60,16],[0,16]], h=18, medianeras=[{"a":[0,0],"b":[60,0],"retiro":0},{"a":[60,16],"b":[0,16],"retiro":0}],
+            between_mode="transversal")
     assert r["metrics"]["blocks"] == 3 and r["metrics"]["core_count"] == 3 and r["metrics"]["plan_score"] == 100, r["metrics"]
     # patio manual angosto (2 m): avisa y sus caras no iluminan
     r = run(fp, medianeras=meds(10, 40), patios_mode="manual", patios=[[[-1,19],[11,19],[11,21],[-1,21]]])
@@ -3506,7 +3508,7 @@ def test_quitar_pasillo():
     #    (v2.62: con 30 m de fondo ya no se abre patio: los bloques dejarían viviendas de 3,65 m de fondo)
     fp = [[0, 0], [15, 0], [15, 36], [0, 36]]
     med = [{"a": [15, 0], "b": [15, 36], "retiro": 0}, {"a": [0, 36], "b": [0, 0], "retiro": 0}]
-    e0 = run(fp, medianeras=med)
+    e0 = run(fp, medianeras=med, between_mode="transversal")     # (v2.72: en «auto» iría el pasillo lateral de R11.4)
     assert e0["patios_auto"] and len(e0["blocks"]) == 2 and [p["bloque"] for p in e0["pasillos"]] == [0, 1]
     lin, nuc = a_lineas(e0)
     manual = dict(medianeras=med, cores_mode="manual", cores=nuc, patios_mode="manual", patios=e0["patios"])
@@ -6081,12 +6083,14 @@ def test_reparto_frente():
     assert rb["metrics"]["plan_score"] <= r["metrics"]["plan_score"] and len(rb["units"]) < len(r["units"]), rb["metrics"]
     # 6) auto_patios: en «Predio entre medianeras 10 x 28» no se abre patio (dos viviendas de 9,3 × 7,6 m con luz entera: antes,
     #    con la superficie media del mix, un patio de 3 m y cuatro viviendas de 3,4 m de fondo); en el de 10 × 40 sí (dos bloques)
+    #    (v2.72: medido con el palier transversal, que es lo que decide auto_patios; en «auto», R11.4 elige en los dos el
+    #    pasillo lateral con sus patios entre viviendas: test_entre_medianeras_lateral)
     s = muestra("entre_medianeras")
-    r = run(s["footprint"], h=s["height"], medianeras=s["medianeras"])
+    r = run(s["footprint"], h=s["height"], medianeras=s["medianeras"], between_mode="transversal")
     assert not r["patios"] and len(r["units"]) == 2 and r["metrics"]["plan_score"] == 100, (r["patios"], r["metrics"])
     assert all(u["depth"] > 7.0 for u in r["units"]) and any("Zona central sin luz" in w for w in r["warnings"]), r["warnings"]
     s = muestra("entre_medianeras_patio")
-    r = run(s["footprint"], h=s["height"], medianeras=s["medianeras"])
+    r = run(s["footprint"], h=s["height"], medianeras=s["medianeras"], between_mode="transversal")
     assert len(r["patios"]) == 1 and r["metrics"]["blocks"] == 2 and all(u["depth"] >= P.fondo_min() + 0.5 for u in r["units"])
     # 7) con el mix de 75 y 95 m² y las medidas de antes, tampoco queda ninguna vivienda por debajo de su frente (la L)
     with _medidas_anteriores(True, True):
@@ -7046,7 +7050,7 @@ def test_acceso_a_mano():
     for t in ("function accesoBotones(", "function moverEntrada(", "function salirAcceso(", "function quitarAcceso(",
               "function etqAcceso(", "function posicionAcceso(", "function bordeVivienda(", "function limitarAcceso(",
               "function accesoVirtual(", "function puntoAcceso(", "const accesosDe=", "Mover la entrada…", "Quitar el acceso a mano",
-              "if(!pa&&esEntrada(dragIn)) dragIn.tipo='acceso';", "if(dragIn.tipo==='acceso') dragIn.d=limitarAcceso(dragIn);",
+              "if(!pa&&esEntrada(dragIn)){ if(esLateral(dragIn.u)){ dragIn=null; return; } dragIn.tipo='acceso'; }", "if(dragIn.tipo==='acceso') dragIn.d=limitarAcceso(dragIn);",
               "if(g.tipo==='acceso') return editarInterior({op:'acceso',p:puntoAcceso(g)},'mover la entrada de '+g.u);",
               "${extenderBotones(u)}${accesoBotones(u)}${puertasPanel(u)}", "'Entrada '+(k==='medio'?'junto a la zona de noche':'en la punta '+(lado?'de '+lado:k))"):
         assert t in js, t
@@ -7851,3 +7855,146 @@ console.log(JSON.stringify({ paneles, l4, l0, origen, inf, inf2, inf3, adv, fuen
 
 if __name__ == "__main__":
     test_abrir_padron(); print("OK87")
+
+
+def test_entre_medianeras_lateral():
+    """R11.4 (v2.72): «pasillo lateral con patios» en un predio entre medianeras. El pasillo corre de punta a punta
+    pegado a una medianera, las viviendas van en hilera hacia la otra con un patio de aire y luz (predio.patio_min) entre
+    vivienda y vivienda, pegado a la medianera opuesta y hasta el muro del pasillo; cada vivienda tiene su fachada en el
+    costado (la calle, el contrafrente o un patio; nunca tres seguidas sin patio) y se dibuja girada, con el hall en la
+    esquina del pasillo y la puerta de entrada en el borde lateral del hall; el núcleo va en la hilera, llega hasta la
+    medianera opuesta y nunca le quita la fachada a una vivienda. params.between_mode = auto (lateral si entran tres
+    viviendas o más con sus patios; si no, el palier transversal de siempre) | transversal | lateral (si no cabe, avisa y
+    queda el transversal); metrics.between_mode dice cuál quedó."""
+    import shutil, subprocess, tempfile
+    from engine import layout as LY, plans as P, standards as ST
+    meds = lambda w, d: [{"a": [w, 0], "b": [w, d], "retiro": 0}, {"a": [0, d], "b": [0, 0], "retiro": 0}]
+    malos = lambda u: [c["msg"] for c in u["checks"] if not c["ok"]]
+    caja = lambda pl: (min(p[0] for p in pl), min(p[1] for p in pl), max(p[0] for p in pl), max(p[1] for p in pl))
+    ow, cw, pw = (LY.DEFAULT_PARAMS[k] for k in ("outer_wall", "corridor_width", "party_wall"))
+    patio_min = ST.merged(None)["predio"]["patio_min"]
+    S = ST.merged(None)
+    P.configure(S["vivienda"], S["equipamiento"])
+    assert LY.DEFAULT_PARAMS["between_mode"] == "auto" and abs(P.fondo_profundo() - (P.BED_D + P.HALL + P.FR_MIN)) < 1e-9
+
+    def hilera_ok(r, w, d):
+        """Lo que pide el esquema en un lote w × d con el pasillo contra x = w: una pieza, el pasillo de punta a punta
+        contra la medianera, cada vivienda con luz, calidad y evacuación, patios de patio_min hasta la medianera opuesta
+        con una vivienda a cada lado, nunca tres viviendas seguidas sin patio y el núcleo hasta la medianera opuesta sin
+        tocar la calle ni el contrafrente."""
+        m = r["metrics"]
+        assert m["between"] and m["between_mode"] == "lateral" and m["wings"] == 1 and len(r["pasillos"]) == 1 == len(r["corridors"]), m
+        cx0, cy0, cx1, cy1 = caja(r["corridors"][0])
+        assert abs(cx1 - (w - ow)) < 0.01 and abs(cx0 - (w - ow - cw)) < 0.01 and abs(cy0 - ow) < 0.01 and \
+            abs(cy1 - (d - ow)) < 0.01, (cx0, cy0, cx1, cy1)                   # pegado a la medianera, de punta a punta
+        us = sorted(r["units"], key=lambda u: caja(u["poly"])[1])
+        assert len(us) >= 3 and m["plan_score"] >= 80 and not m.get("dark_area"), (len(us), m["plan_score"], m.get("dark_area"))
+        for u in us:
+            assert u["lateral"] in (-1, 0, 1) and u["egress_status"] == "ok" and u["ventanas"] and u["plan_score"] >= 80, \
+                (u["id"], u["lateral"], u["egress_status"], u["plan_score"])
+            assert not any("sin fachada" in c or c.startswith("Sin cocina") or c.startswith("Sin acceso") for c in malos(u)), (u["id"], malos(u))
+            assert u["area_muros"] > u["area"] and any(("art. 3" in c["msg"] or "art. 2" in c["msg"]) and c["ok"] for c in u["checks"]), u["id"]   # (art. 2: monoambiente)
+            assert abs(u["width"] - (w - 2 * ow - cw - pw / 2)) < 0.02 and u["depth"] >= P.fondo_profundo() - 0.01, (u["width"], u["depth"])
+            bx0, by0, bx1, by1 = caja(u["poly"])
+            ent = next(x for x in u["doors"] if x["entry"])          # la puerta de entrada, vertical, en el borde al pasillo
+            assert abs(ent["p"][0] - ent["q"][0]) < 1e-6 and abs(ent["p"][0] - bx1) < 1e-6 and abs(bx1 - (cx0 - pw / 2)) < 0.02, (u["id"], ent)
+            assert abs(u["door"][0] - bx1) < 1e-6 and by0 < u["door"][1] < by1, (u["id"], u["door"])
+            for v in u["ventanas"]:                                   # las ventanas, en la fachada lateral (y = by0 o by1)
+                assert all(abs(p[1] - by0) < 0.02 or abs(p[1] - by1) < 0.02 for p in v["seg"]), (u["id"], v["room"], v["seg"])
+                assert u["lateral"] == 0 or all(abs(p[1] - (by0 if u["lateral"] < 0 else by1)) < 0.02 for p in v["seg"]), (u["id"], v)
+        assert r["patios"] and r["patios_auto"] and m["patio_area"] > 0
+        lados = []
+        for pa in r["patios"]:
+            px0, py0, px1, py1 = caja(pa)
+            assert abs(py1 - py0 - patio_min) < 0.01 and abs(px0) < 1e-6 and abs(px1 - (w - 2 * ow - cw)) < 0.01, caja(pa)
+            lados += [py0 - ow, py1 + ow]                              # en la planta, con el muro exterior a cada lado
+        toca = lambda y: any(abs(caja(u["poly"])[3] - y) < 0.02 or abs(caja(u["poly"])[1] - y) < 0.02 for u in us)
+        for y0, y1 in zip(lados[::2], lados[1::2]):                   # cada patio ilumina al menos a una vivienda (del otro
+            assert toca(y0) or toca(y1), (y0, y1)                     # lado puede estar el núcleo: [patio][K][patio])
+        seguidas = 1
+        for a, b in zip(us, us[1:]):
+            ya, yb = caja(a["poly"])[3], caja(b["poly"])[1]
+            seguidas = 1 if any(caja(pa)[1] >= ya - 0.01 and caja(pa)[3] <= yb + 0.01 for pa in r["patios"]) else seguidas + 1
+            assert seguidas <= 2, "tres viviendas seguidas sin patio: %s, %s" % (a["id"], b["id"])
+        assert len(r["cores"]) >= 1
+        for c in r["cores"]:
+            kx0, ky0, kx1, ky1 = caja(c["poly"])
+            assert abs(kx0 - ow) < 0.02 and abs(kx1 - (w - ow)) < 0.02, caja(c["poly"])    # hasta la medianera opuesta
+            assert ky0 > ow + 1.0 and ky1 < d - ow - 1.0, caja(c["poly"])                   # sin tocar la calle ni el contrafrente
+            for y in lados:                                           # el núcleo nunca le quita la luz a una vivienda: si
+                if abs(ky1 - y) < 0.02 or abs(ky0 - y) < 0.02:        # ocupa un lado de un patio, del otro hay una vivienda
+                    otro = lados[lados.index(y) ^ 1]
+                    assert toca(otro), "el núcleo ocupa el lado de un patio que no ilumina a nadie"
+        return us, lados, toca
+
+    # 1) 12 × 32 con «lateral»: tres viviendas de 2 dormitorios de 9,65 m de fachada y 7,5 m de fondo, un núcleo entre las dos
+    #    del frente ([U][K][U][patio][U]) y un patio de 3 m
+    fp = [[0, 0], [12, 0], [12, 32], [0, 32]]
+    r = run(fp, medianeras=meds(12, 32), between_mode="lateral")
+    us, lados, toca = hilera_ok(r, 12, 32)
+    assert len(us) == 3 and len(r["patios"]) == 1 and len(r["cores"]) == 1 and all(u["type"] == "2 dorm" for u in us), [u["type"] for u in us]
+    assert all(toca(y) for y in lados), "el patio con una vivienda a cada lado"    # y el núcleo no toca el patio
+    assert all(abs(u["depth"] - 7.52) < 0.05 for u in us) and [u["lateral"] for u in us] == [-1, 1, 0], [(u["id"], u["depth"], u["lateral"]) for u in us]
+    assert r["metrics"]["plan_score"] == 100 and not any(w.startswith(("Evacuación:", "Fondo de saco:")) for w in r["warnings"]), r["warnings"]
+    ky0, ky1 = caja(r["cores"][0]["poly"])[1], caja(r["cores"][0]["poly"])[3]
+    assert abs(caja(us[0]["poly"])[3] - ky0) < 0.02 and abs(caja(us[1]["poly"])[1] - ky1) < 0.02      # el núcleo entre U01 y U02
+    assert r["metrics"]["between_mode"] == run(fp, medianeras=meds(12, 32))["metrics"]["between_mode"] == "lateral"   # auto lo elige
+    # el ejemplo nuevo, tal cual lo abre la web (con su between_mode), y la regresión lo lee del ejemplo
+    s = json.load(open(os.path.join(os.path.dirname(__file__), "..", "samples", "entre_medianeras_lateral.json"), encoding="utf-8"))
+    assert s["between_mode"] == "lateral" and s["footprint"] == fp
+    assert '"between_mode"' in open(os.path.join(os.path.dirname(__file__), "regresion.py"), encoding="utf-8").read().split("def _edificio", 1)[1].split("\ndef ", 1)[0]
+    # con el contrafrente ciego (tres medianeras) el planificador pone el núcleo entre dos patios y la última vivienda toma
+    # su luz del patio (antes, el recorte dejaba una punta de ancho cero y la vivienda del fondo se perdía)
+    r3 = run(fp, medianeras=meds(12, 32) + [{"a": [12, 32], "b": [0, 32], "retiro": 0}], between_mode="lateral")
+    assert len(r3["units"]) == 3 and r3["metrics"]["between_mode"] == "lateral" and len(r3["patios"]) == 2 and r3["metrics"]["plan_score"] >= 80
+    assert all(u["ventanas"] and not any("sin fachada" in c for c in malos(u)) for u in r3["units"]), [(u["id"], malos(u)) for u in r3["units"]]
+    assert all(len(c["poly"]) == 4 for c in r3["cores"]), [c["poly"] for c in r3["cores"]]        # el núcleo, un rectángulo limpio
+    # 2) 10 × 28 («Predio entre medianeras 10 x 28»): en «auto» va el lateral, con tres viviendas de 1 dormitorio de 7,65 × 6,2 m
+    #    y un patio; con «transversal», lo de siempre (dos viviendas de 9,3 × 9,2 m, idéntico a la referencia de v2.71)
+    fp = [[0, 0], [10, 0], [10, 28], [0, 28]]
+    r = run(fp, h=18, medianeras=meds(10, 28))
+    us = hilera_ok(r, 10, 28)[0]
+    assert len(us) == 3 and len(r["patios"]) == 1 and all(u["type"] == "1 dorm" and abs(u["depth"] - 6.18) < 0.05 for u in us), [(u["type"], u["depth"]) for u in us]
+    t = run(fp, h=18, medianeras=meds(10, 28), between_mode="transversal")
+    m = t["metrics"]
+    assert m["between_mode"] == "transversal" and m["mix"]["count"] == 2 and not t["patios"] and m["plan_score"] == 100 and \
+        abs(m["efficiency"] - 61.2) < 0.06 and abs(m["dark_area"] - 23.2) < 0.06 and abs(m["egress_max"] - 6.8) < 0.06 and \
+        abs(m["nsa_total"] - 932.4) < 0.5, m
+    assert all(u.get("lateral") is None and u["ventanas"] for u in t["units"]) and not any("Pasillo lateral" in w for w in t["warnings"])
+    # 3) 10 × 14 con «lateral»: no entran tres viviendas con sus patios: avisa y queda el palier transversal
+    r = run([[0, 0], [10, 0], [10, 14], [0, 14]], medianeras=meds(10, 14), between_mode="lateral")
+    assert r["metrics"]["between_mode"] == "transversal" and len(r["units"]) == 2 and not r["patios"]
+    assert any(w.startswith("Pasillo lateral con patios: ") and w.endswith("; queda el palier transversal") for w in r["warnings"]), r["warnings"]
+    assert not any("Pasillo lateral" in w for w in run([[0, 0], [10, 0], [10, 14], [0, 14]], medianeras=meds(10, 14))["warnings"])   # en auto, sin aviso
+    # 4) 10 × 40 («patio automático»): en auto, cuatro viviendas en dos dientes con el núcleo entre dos patios
+    r = run([[0, 0], [10, 0], [10, 40], [0, 40]], medianeras=meds(10, 40))
+    us = hilera_ok(r, 10, 40)[0]
+    assert len(us) == 4 and len(r["patios"]) == 2 and len(r["cores"]) == 1, (len(us), len(r["patios"]), len(r["cores"]))
+    # 5) la hilera girada con el lote (medianeras a lo largo de x): el mismo resultado que 12 × 32
+    g = run([[0, 0], [32, 0], [32, 12], [0, 12]], medianeras=[{"a": [0, 0], "b": [32, 0], "retiro": 0}, {"a": [32, 12], "b": [0, 12], "retiro": 0}],
+            between_mode="lateral")
+    assert g["metrics"]["between_mode"] == "lateral" and len(g["units"]) == 3 and g["metrics"]["plan_score"] == 100 and \
+        all(u["egress_status"] == "ok" and u["ventanas"] for u in g["units"]), g["metrics"]["plan_score"]
+    # 6) web: el selector en Circulación, en params(), setMass y «Nuevo» lo dejan en auto, abrirProyecto lo devuelve, y en la
+    #    ficha de una vivienda con fachada lateral no hay «Mover la entrada…» ni arrastre de la puerta de entrada
+    html = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html"), encoding="utf-8").read()
+    js = html.split("<script>", 1)[1].split("</script>", 1)[0]
+    sel = html.split('<select id="between_mode"', 1)[1].split("</select>", 1)[0]
+    assert all('value="%s"' % v in sel for v in ("auto", "transversal", "lateral")) and "run(lastStage" in sel
+    assert sel in html.split('<div class="grupo" data-grupo="circ"', 1)[1].split('<div class="grupo"', 1)[0], "el selector va en Circulación"
+    for t_ in ("between_mode:$('between_mode').value,", "$('between_mode').value=m.between_mode||'auto';", "$('between_mode').value='auto';",
+               "between_mode:P.between_mode,", "function esLateral(id)", "if(esLateral(dragIn.u)){ dragIn=null; return; }",
+               "Fachada lateral (entrada por el costado)", "(u.lateral!=null?' · fachada lateral':'')"):
+        assert t_ in js, t_
+    assert "u.lateral!=null||" in js.split("function accesoBotones(u){", 1)[1].split("\n", 1)[0]
+    assert js.count("$('between_mode').value='auto';") == 1 and "$('between_mode').value='auto';" in js.split("function nuevo(", 1)[1].split("\nfunction ", 1)[0]
+    node = shutil.which("node")
+    if node:
+        with tempfile.TemporaryDirectory() as tmp:
+            ruta = os.path.join(tmp, "programa.js")
+            open(ruta, "w", encoding="utf-8").write(js)
+            c = subprocess.run([node, "--check", ruta], capture_output=True, text=True, encoding="utf-8")
+            assert c.returncode == 0, c.stderr
+
+if __name__ == "__main__":
+    test_entre_medianeras_lateral(); print("OK88")

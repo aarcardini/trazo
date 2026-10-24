@@ -1,7 +1,7 @@
 {
  "ejemplo": "samples/T_dos_lineas.json",
  "nombre": "T con 2 polilíneas",
- "version_motor": "2.71",
+ "version_motor": "2.72",
  "metricas": {
   "unidades": 16,
   "unidades_totales": 80,

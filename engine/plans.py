@@ -109,6 +109,15 @@ def fondo_sin_tira():
     return BED_MAX + HALL + FR_MAX + 0.95
 
 
+def fondo_profundo():
+    """R11.4 (v2.72): el fondo más chico con el que el plano es «profundo» (_plan_rects: dormitorios, pasillo interno y
+    franja de servicios, el hall en su esquina y la cocina en la zona de día) en vez de «poco profundo» (hall, baño y
+    cocina en fila junto al pasillo común, que pide más frente). Es el fondo mínimo de una vivienda con fachada lateral
+    (su ancho a lo largo del pasillo del esquema «pasillo lateral con patios»: plan_lateral y units.generate_unit_mix),
+    donde el frente es fijo y el plano con el hall en la esquina del pasillo necesita la franja de servicios."""
+    return BED_D + HALL + FR_MIN
+
+
 def frente_principal(bedD=None):
     """R5.16b (v2.65): el frente del dormitorio principal: el típico (BED_MAIN, 3,00 m con las medidas por defecto: la cama
     doble con su paso a los lados y el placard al pie) o, si el fondo que le queda (bedD) no deja el placard al pie de la
@@ -257,8 +266,8 @@ def _editar_puerta(doors, rect, e, v0):
         if d is None or dist(d) > 0.4:
             return False
     if d.get("entry"):                                 # la de entrada, en el borde del hall sobre el pasillo común
-        r = rect(d["b"])
-        seg = ((r[0], v0), (r[2], v0))
+        r = rect(d["b"])                               # (R11.4: vertical, en el borde lateral del hall)
+        seg = ((r[0], r[1]), (r[0], r[3])) if d["vertical"] else ((r[0], v0), (r[2], v0))
     else:
         seg = _shared(rect(d["a"]), rect(d["b"]))
     if not seg:
@@ -1926,7 +1935,7 @@ def _std_for(r, nb, integradas=(), principal="bed1"):
 
 
 def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None, accesible=False, ediciones=None, ventanas=None,
-                entrada=None, vestidor=False, punta=None, acceso=None):
+                entrada=None, vestidor=False, punta=None, acceso=None, puerta_lateral=None):
     """Distribuye una unidad. poly en el marco de la unidad. Devuelve dict con estancias, puertas, grafo, equipamiento y
     comprobaciones. is_facade(p, q): opcional, dice si el segmento p-q (marco de la unidad) está sobre la fachada.
     accesible: puertas de dormitorios y baño de DOOR_ACC, el baño abre hacia afuera y se equipa para silla de ruedas.
@@ -1956,10 +1965,25 @@ def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None, accesible=F
     a la zona de noche, o la del esquema en fila) y la punta x1 (el plano al revés)—; con entrada, el acceso tiene que
     caer en ese tramo, y si el plano con la entrada en la punta pierde cocina, dormitorios, estar o baño se avisa y se
     ignora. El resultado trae "acceso" = {x: la puerta de entrada, posicion: x0 | medio | x1, aplicado, motivo?}; los
-    demás cambios a mano (ediciones) siguen valiendo (ver con_acceso)."""
+    demás cambios a mano (ediciones) siguen valiendo (ver con_acceso).
+    puerta_lateral (R11.4, v2.72): -1 | 1, la vivienda con fachada lateral del pasillo lateral entre medianeras: el
+    pasillo común da al costado x0 (-1) o x1 (1) del marco, no a v0. El hall va a esa esquina (hall_x0, con el plano
+    derecho o al revés) y la puerta de entrada se pone en el borde lateral del hall; entrada, punta, acceso y el esquema
+    en fila no aplican (un acceso a mano se avisa y se ignora)."""
     equip = equip or ST.DEFAULTS["equipamiento"]
     configure(vivienda or ST.DEFAULTS["vivienda"], equip, accesible)
     poly = G.ensure_ccw(poly)
+    if puerta_lateral is not None:                     # R11.4: el hall en la esquina del pasillo común, en el costado
+        res = _plano_lateral(poly, nb, is_facade, equip, accesible, ediciones, ventanas, vestidor, puerta_lateral > 0)
+        if acceso is not None:
+            res["checks"].append({"ok": True, "info": True, "msg": "Acceso a mano: la entrada de una vivienda con fachada "
+                                  "lateral va en el costado, junto al hall; el plano queda como estaba"})
+            res["acceso"] = {"x": None, "x_medio": None, "posicion": None, "aplicado": False,
+                             "motivo": "la entrada va en el costado, junto al hall"}
+        res["checks"].append({"ok": True, "info": True, "msg": "Fachada lateral: la entrada por el costado, en el hall; "
+                              "el estar y los dormitorios, sobre la fachada lateral"})
+        res["segunda_fachada"] = None
+        return res
     espejar, lateral, lado = _segunda_fachada(poly, nb, is_facade)
     lat_posible = lateral
 
@@ -2143,7 +2167,7 @@ def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None, accesible=F
     if vestidor and any(r["id"] == "vest" for r in res["rooms"]):
         # R5.10: el vestidor, solo si el plano no empeora (calidad y estancias); si no, sin él y con aviso
         sin = layout_unit(poly, nb, is_facade, vivienda, equip, accesible, ediciones, ventanas, entrada, punta=punta,
-                          acceso=acceso)
+                          acceso=acceso, puerta_lateral=puerta_lateral)
         if res["score"] < sin["score"] or any(a < b for a, b in zip(programa(res), programa(sin))):
             antes = {c["msg"] for c in sin["checks"] if not c["ok"]}
             nuevos = [c["msg"].replace("Vestidor: ", "", 1) for c in res["checks"] if not c["ok"] and c["msg"] not in antes]
@@ -2157,6 +2181,23 @@ def layout_unit(poly, nb, is_facade=None, vivienda=None, equip=None, accesible=F
             "el estar en la esquina, con luz por dos fachadas")})
     res["segunda_fachada"] = usa
     return res
+
+
+def _plano_lateral(poly, nb, is_facade, equip, accesible, ediciones, ventanas, vestidor, al_reves):
+    """R11.4: el plano de una vivienda con fachada lateral: el de siempre con el hall en x0 (hall_x0) y la puerta de
+    entrada en el borde lateral del hall (_plano(..., puerta_lateral=True)); con al_reves, el plano espejado (la puerta
+    en x1). Sin esquema en fila ni dormitorio al costado: la segunda fachada (si la hay, en v0) la usan las ventanas."""
+    if not al_reves:
+        return _distribuir(poly, nb, is_facade, equip, accesible, ediciones, ventanas, False, True, vestidor,
+                           puerta_lateral=True)
+    bx0, _, bx1, _ = G.bbox(poly)
+    m = lambda p: (bx0 + bx1 - p[0], p[1])
+    fac = lambda p, q: is_facade(m(p), m(q)) if is_facade else None
+    if hasattr(is_facade, "ventana"):
+        fac.ventana = lambda p, q: is_facade.ventana(m(q), m(p))
+    ed = [(k, dict(e, p=m(e["p"]), a=m(e["a"]) if e.get("a") else None)) for k, e in (ediciones or [])]
+    return _espejar(_distribuir([m(p) for p in poly][::-1], nb, fac if is_facade else None, equip, accesible, ed,
+                                ventanas, False, True, vestidor, puerta_lateral=True), m)
 
 
 def _x_entrada(res):
@@ -2232,7 +2273,7 @@ def _programa(res):
 
 
 def _distribuir(poly, nb, is_facade, equip, accesible, ediciones, ventanas, lateral=False, hall_x0=False, vestidor=False,
-                fila=None, entrada=None):
+                fila=None, entrada=None, puerta_lateral=False):
     """El plano de layout_unit (poly antihorario, medidas ya configuradas). R5.11 (revisión): si un muro oblicuo o un
     entrante recorta el rectángulo principal, la banda de servicios va solo si el plano no empeora: si sin ella tiene más
     calidad o más estancias del programa, va el plano sin banda (como en v2.41). Se comparan sin los cambios a mano.
@@ -2242,7 +2283,8 @@ def _distribuir(poly, nb, is_facade, equip, accesible, ediciones, ventanas, late
         if res is not None:
             res.pop("_banda", None)
         return res
-    pl = lambda ed, con: _plano(poly, nb, is_facade, equip, accesible, ed, ventanas, lateral, hall_x0, vestidor, con)
+    pl = lambda ed, con: _plano(poly, nb, is_facade, equip, accesible, ed, ventanas, lateral, hall_x0, vestidor, con,
+                                puerta_lateral=puerta_lateral)
     res = pl(ediciones, True)
     if not res.pop("_banda"):
         return res
@@ -2255,7 +2297,7 @@ def _distribuir(poly, nb, is_facade, equip, accesible, ediciones, ventanas, late
 
 
 def _plano(poly, nb, is_facade, equip, accesible, ediciones, ventanas, lateral=False, hall_x0=False, vestidor=False,
-           con_banda=True, fila=None, entrada=None):
+           con_banda=True, fila=None, entrada=None, puerta_lateral=False):
     """El plano de _distribuir, con la banda de servicios (R5.11) o sin ella. Trae "_banda": si la usa y un muro oblicuo
     o un entrante recorta el rectángulo principal. fila (R5.16b, v2.67): el esquema en fila con esa segunda fachada
     (_plan_fila) en vez de _plan_rects; None si no entra."""
@@ -2461,7 +2503,14 @@ def _plano(poly, nb, is_facade, equip, accesible, ediciones, ventanas, lateral=F
     # da al estar, que está sobre ese borde)
     entrada_id = "hall" if "hall" in ids else next((i for i in ("living", "hall") if fila == 0 and i in ids and
                                                      any(abs(p[1] - v0) < 1e-6 for p in rooms[ids[i]]["poly"])), None)
-    if entrada_id is not None:
+    if entrada_id is not None and puerta_lateral:      # R11.4: en el borde lateral del hall (x0), que da al pasillo común
+        r = rooms[ids[entrada_id]]["rect"]
+        borde = [p[1] for p in rooms[ids[entrada_id]]["poly"] if abs(p[0] - r[0]) < 1e-6]
+        lo, hi = (min(borde), max(borde)) if borde else (r[1], r[3])
+        mv = (lo + hi) / 2 if hi - lo < ENTRY else max(lo + ENTRY / 2, min(hi - ENTRY / 2, (lo + hi) / 2))
+        doors.append({"p": (r[0], mv - ENTRY / 2), "q": (r[0], mv + ENTRY / 2), "into": 1, "vertical": True,
+                      "a": "exterior", "b": entrada_id, "entry": True, "ancho": ENTRY})
+    elif entrada_id is not None:
         r = rooms[ids[entrada_id]]["rect"]
         mx = r[0] + min(HALL_W, r[2] - r[0]) / 2 if hall_x0 else (r[0] + r[2]) / 2     # R3.7: junto a x0
         if entrada_id == "living":                     # (pasante en fila: junto al paso, en x1, o donde llega el

@@ -208,6 +208,8 @@ def build_pieces(plate, params):
         up = build_user_pieces(plate, params)
         if up:
             return up
+    if params.get("_lateral"):
+        return [_pieza_lateral(plate, params)]           # R11.4: el pasillo lateral con patios (plan_lateral)
     holes = params.get("_huecos")
     cands = decompose_wings(plate, holes=holes, blind=params.get("_blind"), candidatos=True)
     dec = (cands[0][1], cands[0][2]) if cands else None
@@ -369,7 +371,7 @@ def _galeria(pieces, plate, params):
     if not params.get("_galerias") or params.get("_huecos"):
         return pieces
     for pc in pieces:
-        if not pc.get("single") or "eje" in pc or pc.get("between") or pc.get("user"):
+        if not pc.get("single") or "eje" in pc or pc.get("between") or pc.get("user") or pc.get("lateral"):
             continue
         cw = ancho_de(pc, params)
         _, y0, _, _ = G.bbox(pc["loc_plate"])
@@ -1150,7 +1152,7 @@ def _puntas_tras_cruce(pieces, params):
     unión (q["tramo"]). Las viviendas del otro lado entran por lo que queda (q["puntas"], ver units.entradas)."""
     pw = params["party_wall"]
     for q in pieces:
-        if q.get("user") or q.get("between") or q.get("galeria"):
+        if q.get("user") or q.get("between") or q.get("galeria") or q.get("lateral"):
             continue                                     # R3.8: la banda de una galería está fuera de la planta
         cw = ancho_de(q, params)                         # R10.8: cada pasillo con su ancho
         lin = cw / 2 + pw / 2
@@ -1235,9 +1237,276 @@ def _between_depth(params):
     return max(7.5, min(params["max_unit_depth"], 1.15 * avg_a / max(avg_f, 1.0)))
 
 
+# ---------------------------------------------------------------- pasillo lateral con patios (R11.4)
+PUERTA_LATERAL = 1.45    # R11.4: hasta dónde entra, desde el fondo de la vivienda, la puerta de una vivienda con fachada
+#   lateral (la mitad del fondo máximo de la franja de la entrada, plans.KITCH_D / 2): el planificador mide la evacuación con eso
+
+
+def _dorms_mix(m):
+    return int(m["dorms"]) if m.get("dorms") is not None else P.bedrooms_for(m["area"])
+
+
+def plan_lateral(fp, plate, params, ancho, minimo=3):
+    """R11.4 (v2.72): el esquema «pasillo lateral con patios» de un predio entre medianeras: el pasillo corre de punta a
+    punta contra una medianera (el marco de _single_frame) y las viviendas van todas del otro lado, en hilera hacia la
+    medianera opuesta, con patios de aire y luz de `ancho` m entre vivienda y vivienda (pegados a la medianera opuesta
+    y hasta el borde del pasillo; en la planta, con el muro exterior a cada lado: ancho + 2·outer_wall). Cada vivienda
+    tiene una fachada lateral (la calle, el contrafrente o un patio): los «dientes» entre patios llevan a lo sumo dos
+    viviendas, nunca tres seguidas sin patio. El núcleo va en la hilera y llega hasta la medianera opuesta; nunca le
+    quita la fachada a una vivienda: entre las dos de un diente ([U K U]), junto a una que tiene la suya del otro lado
+    ([K U], [U K]) o solo entre dos patios ([K]).
+    Cuántas entran: la fachada de cada vivienda es D_u = ancho de la planta − pasillo − medio tabique (fija), así que son
+    aptos los tipos del mix con facade_min(dormitorios) ≤ D_u + 0,05; su ancho a lo largo del pasillo es su fondo, w. Con
+    n viviendas hacen falta n_patios = ceil(n/2) − 1 patios como mínimo (dos por diente) y el largo del pasillo L reparte
+    L = n·w + n_patios·(ancho + 2·outer_wall) + núcleos·core_width + tabiques entre vecinas; se toma el n más grande con
+    w ≥ max(plans.fondo_profundo() —el fondo con el que el plano lleva franja de servicios y el hall en la esquina del
+    pasillo; con menos, el plano «poco profundo» pide más frente que D_u—, superficie media de los tipos aptos / D_u /
+    1,35 —la misma tolerancia de los tipos aptos del reparto—); con n fijo, entre las hileras posibles (cuántas viviendas
+    y si el núcleo va en cada diente) gana la que cumple el fondo de saco (egress_single, desde la puerta: PUERTA_LATERAL hacia
+    adentro desde el fondo de cada vivienda, hasta el núcleo más cercano; entre dos núcleos, dos salidas) con un núcleo;
+    si ninguna, con dos; después, la de menos patios y la de menor recorrido. Los dientes se reparten en proporción (dos
+    viviendas, doble largo; el reparto del mix pone después una o dos en cada uno, units.generate_unit_mix).
+    Devuelve (plan, None) o (None, por qué no entra): plan = {origin, angle, L, y1 (el fondo de la planta en el marco),
+    D, fachadas [extremo x0, x1], patios (mundo, restados de la huella como los manuales), patios_loc [(x0, x1)] en la
+    planta, nucleos [x del centro], dientes [[(x0, x1, "U"|"K")]], n, w}. minimo: viviendas mínimas (3)."""
+    if not is_between(plate, params):
+        return None, "no es un predio entre medianeras"
+    th, (poly,) = decompose_wings(plate)
+    x0, y0, x1, y1 = G.bbox([G.rotate(p, -th) for p in poly])
+    ang = th if (x1 - x0) >= (y1 - y0) else th + math.pi / 2
+    cw, pw, ow = params["corridor_width"], params["party_wall"], params["outer_wall"]
+    o, a, _, L = _single_frame(plate, ang, params, G.centroid(plate))
+    loc = G.to_local(plate, o, a)
+    _, ly0, _, ly1 = G.bbox(loc)
+    D = ly1 - cw / 2 - pw / 2                              # la fachada lateral de cada vivienda (fija)
+    mix = [m for m in params["unit_mix"] if m.get("percent", 0) > 0 and m.get("area", 0) > 0]
+    aptos = [m for m in mix if P.facade_min(_dorms_mix(m)) <= D + 0.05]
+    if not aptos:
+        return None, "el ancho del lote deja %.1f m de fachada a cada vivienda y el tipo más chico del mix pide %.1f m" % (
+            D, min(P.facade_min(_dorms_mix(m)) for m in mix) if mix else P.facade_min(0))
+    tot = sum(m["percent"] for m in aptos) or 1.0
+    avg = sum(m["percent"] / tot * m["area"] for m in aptos)
+    w_min = max(P.fondo_profundo(), avg / D / 1.35)      # el fondo del plano profundo (con el hall en la esquina)
+    bl = params.get("_blind")
+    mid = (ly1 - cw / 2) / 2
+    fach = [not (bl and bl(G.to_world([(x_, mid)], o, a)[0])) for x_ in (0.0, L)]
+    ap, c = ancho + 2 * ow, params["core_width"]
+    egress = params["egress_single"]
+    patrones = (("U",), ("U", "U"), ("K",), ("K", "U"), ("U", "K"), ("U", "K", "U"))
+
+    def vale(pat, izq, der):
+        """El diente pat con fachada a la izquierda (izq) y a la derecha (der): cada vivienda con una fachada propia."""
+        for k, e in enumerate(pat):
+            if e == "U" and not ((k == 0 and izq) or (k == len(pat) - 1 and der)):
+                return False
+        return True
+
+    def hileras(t, cores):
+        """Todas las hileras de t dientes con cores núcleos: listas de patrones."""
+        def rec(k, quedan):
+            if k == t:
+                if quedan == 0:
+                    yield []
+                return
+            izq, der = (fach[0] if k == 0 else True), (fach[1] if k == t - 1 else True)
+            for pat in patrones:
+                nk = pat.count("K")
+                if nk <= quedan and vale(pat, izq, der):
+                    for resto in rec(k + 1, quedan - nk):
+                        yield [pat] + resto
+        return rec(0, cores)
+
+    def armar(hilera, w):
+        """Posiciones de cada hilera con viviendas de ancho w: dientes [(x0, x1, tipo)], patios [(x0, x1)], núcleos [x]."""
+        x, dientes, patios, nucleos = 0.0, [], [], []
+        for k, pat in enumerate(hilera):
+            d = []
+            for j, e in enumerate(pat):
+                if e == "U":
+                    d.append((x, x + w, "U"))
+                    x += w + (pw if j + 1 < len(pat) and pat[j + 1] == "U" else 0.0)
+                else:
+                    d.append((x, x + c, "K"))
+                    nucleos.append(x + c / 2)
+                    x += c
+            dientes.append(d)
+            if k + 1 < len(hilera):
+                patios.append((x, x + ap))
+                x += ap
+        return dientes, patios, nucleos
+
+    def saco_max(hilera, dientes, nucleos):
+        """El fondo de saco más largo: desde cada puerta (a PUERTA_LATERAL del fondo de la vivienda, el lado opuesto a su
+        fachada) hasta el núcleo más cercano; 0 entre dos núcleos."""
+        peor = 0.0
+        for k, (pat, d) in enumerate(zip(hilera, dientes)):
+            izq, der = (fach[0] if k == 0 else True), (fach[1] if k == len(hilera) - 1 else True)
+            for j, (u0, u1, e) in enumerate(d):
+                if e != "U":
+                    continue
+                lado = _lado_fachada(pat, j, izq, der)
+                puerta = (u1 - PUERTA_LATERAL) if lado < 0 else (u0 + PUERTA_LATERAL)
+                if any(n0 <= puerta <= n1 for n0, n1 in zip(nucleos, nucleos[1:])):
+                    continue
+                peor = max(peor, min(abs(puerta - n_) for n_ in nucleos))
+        return peor
+    mejor = None
+    n_max = int(L // w_min)
+    for n in range(n_max, minimo - 1, -1):
+        for cores in (1, 2):
+            p_min = max(0, int(math.ceil(n / 2.0)) - 1)
+            for t in range(p_min + 1, n + 2):              # dientes: al menos los que piden dos viviendas por diente
+                for h in hileras(t, cores):
+                    if sum(pat.count("U") for pat in h) != n:
+                        continue
+                    muros = sum(sum(1 for j in range(len(pat) - 1) if pat[j] == "U" and pat[j + 1] == "U") for pat in h)
+                    libre = L - (t - 1) * ap - cores * c - muros * pw
+                    w = libre / n
+                    if w < w_min - 1e-9:
+                        continue
+                    dientes, patios, nucleos = armar(h, w)
+                    sm = saco_max(h, dientes, nucleos)
+                    clave = (-n, sm > egress + 1e-6, cores, t, round(sm, 3))
+                    if mejor is None or clave < mejor[0]:
+                        mejor = (clave, h, w, dientes, patios, nucleos)
+        if mejor is not None:
+            break
+    if mejor is None:
+        return None, "el fondo del lote (%.1f m de pasillo) no da para %d viviendas de %.1f m de fondo con sus patios y el " \
+                     "núcleo" % (L, minimo, w_min)
+    _, h, w, dientes, patios, nucleos = mejor
+    W = lambda pts: G.to_world(pts, o, a)
+    patios_w = [W([(p0 + ow, cw / 2 + ow), (p1 - ow, cw / 2 + ow), (p1 - ow, ly1 + ow + 1.0), (p0 + ow, ly1 + ow + 1.0)])
+                for p0, p1 in patios]                       # en la huella: de ancho `ancho`, hasta el muro del pasillo
+    return {"origin": o, "angle": a, "L": L, "y1": ly1, "D": D, "fachadas": fach, "patios": patios_w,
+            "patios_loc": patios, "nucleos": nucleos, "dientes": dientes, "hilera": h, "n": sum(pat.count("U") for pat in h),
+            "w": w}, None
+
+
+def _lado_fachada(pat, j, izq, der):
+    """R11.4: de qué lado tiene su fachada la vivienda j del diente pat: -1 (x0), 1 (x1) o 0 (las dos: una sola vivienda
+    entre dos fachadas). izq/der: si el diente tiene fachada a cada lado. (units.generate_unit_mix decide lo mismo con
+    las viviendas reales de cada diente: fachadas_diente.)"""
+    f_izq = izq and (j == 0)
+    f_der = der and (j == len(pat) - 1)
+    if f_izq and f_der:
+        return 0
+    return -1 if f_izq else 1
+
+
+def fachadas_diente(pc, x0, x1, tol=0.05):
+    """R11.4: qué tiene a cada lado el diente [x0, x1] de la hilera de la pieza lateral pc: "punta" (el frente o el
+    contrafrente del lote, si no son medianera), "patio" o None (el núcleo, u otra cosa sin luz). Con eso el reparto sabe
+    cuántas viviendas pueden ir en el diente (una por fachada) y de qué lado tiene la suya cada una."""
+    pl = pc["lateral"]
+    out = []
+    for k, x in enumerate((x0, x1)):
+        if abs(x - (0.0 if k == 0 else pl["L"])) < tol:
+            out.append("punta" if pl["fachadas"][k] else None)
+        elif any(abs(x - (p1 if k == 0 else p0)) < tol for p0, p1 in pl["patios_loc"]):
+            out.append("patio")
+        else:
+            out.append(None)
+    return out
+
+
+def _nucleo_lateral(pc, x, params, pieces):
+    """R11.4: un núcleo en x (centro) en la hilera de la pieza lateral: del lado de las viviendas, de core_width de frente
+    y hasta la medianera opuesta (lo que la escalera y los ascensores no usan es depósito o sala de máquinas:
+    programs.core_parts). Se corre lo mínimo para entrar en el pasillo y no pisar otro núcleo; None si no hay lugar."""
+    cw, w = ancho_de(pc, params), params["core_width"]
+    y1 = pc["lateral"]["y1"]
+    xa, xb = pc["xa"] + w / 2, pc["xb"] - w / 2
+    if xb < xa:
+        return None
+    for k in range(0, int(2 * (pc["xb"] - pc["xa"]) / 0.25) + 1):
+        for xx in sorted({min(max(x - 0.25 * k, xa), xb), min(max(x + 0.25 * k, xa), xb)}):
+            box = (xx - w / 2, -cw / 2, xx + w / 2, y1)
+            c = {"x": xx, "side": 1, "box": box, "lateral": True,
+                 "poly_local": G.clean_rel(G.largest_part(G.clip_rect(pc["loc_plate"], box[0], box[2], box[1], box[3])))}
+            if c["poly_local"] and abs(G.area(c["poly_local"])) > 0.9 * w * (y1 + cw / 2) and \
+                    not _pisa_nucleo(pieces, pc, c):
+                pc["cores"].append(c)
+                return xx
+    return None
+
+
+def _nucleos_manuales(pieces, params, next_side=None):
+    """Núcleos manuales (cores_mode = manual): cada punto de params["cores"] se ajusta al pasillo más cercano (R3.5 y
+    R10.7: con sus medidas, giro y ascensores propios). next_side: el lado para un punto sobre el eje de un pasillo
+    central (sin él, alternando)."""
+    counter = [0]
+
+    def alterna():
+        s_ = side_for(counter[0], params["core_side"])
+        counter[0] += 1
+        return s_
+    next_side = next_side or alterna
+    for idx, spec in enumerate(params.get("cores") or []):
+        wx, wy = nucleo_punto(spec)
+        giro, w, d = medidas_nucleo(spec, params)
+        half = w / 2.0
+        best = None
+        for i, pc in enumerate(pieces):
+            lx, ly = G.to_local([(wx, wy)], pc["origin"], pc["angle"])[0]
+            dx = max(pc["xa"] - lx, 0.0, lx - pc["xb"])
+            dist = math.hypot(dx, ly)
+            if best is None or dist < best[0]:
+                best = (dist, i, lx, ly)
+        if best is None:
+            continue
+        _, i, lx, ly = best
+        pc = pieces[i]
+        if pc["xb"] - pc["xa"] >= 2 * half:
+            lx = min(max(lx, pc["xa"] + half), pc["xb"] - half)
+        else:
+            lx = (pc["xa"] + pc["xb"]) / 2.0
+        side = 1 if pc.get("single") else (1 if ly >= 0 else -1) if abs(ly) > 0.3 else next_side()
+        _add_core(pc, lx, side, dict(params, core_width=w, core_depth=d), bolsillo=not (isinstance(spec, dict) and spec.get("fondo")))
+        pc["cores"][-1].update({"spec": idx, "giro": giro, "pisa": _pisa_nucleo(pieces, pc, pc["cores"][-1])})
+        if isinstance(spec, dict) and spec.get("ascensores") is not None:
+            pc["cores"][-1]["ascensores"] = max(0, int(spec["ascensores"]))      # R10.7: propios
+    return pieces
+
+
+def _circulacion_lateral(pieces, params):
+    """R11.4: el pasillo lateral: el pasillo de punta a punta contra la medianera, las viviendas del otro lado (la planta
+    en peine, con los patios ya restados) y los núcleos del plan (plan_lateral); si aun así algún punto del pasillo queda
+    a más de egress_multi de un núcleo y auto_cores, se agregan más (como en cualquier pasillo)."""
+    pc = pieces[0]
+    cw = ancho_de(pc, params)
+    pc["corridor_local"] = G.clip_rect(pc["loc_plate"], pc["xa"], pc["xb"], -cw / 2, cw / 2)
+    pc["side_region"] = {1: pc["loc_plate"], -1: []}
+    if params.get("cores_mode") == "manual":
+        return _nucleos_manuales(pieces, params)
+    for x in pc["lateral"]["nucleos"]:
+        _nucleo_lateral(pc, x, params, pieces)
+    guard = 0
+    while params.get("auto_cores") and len(pc["cores"]) < 8 and guard < 10:
+        guard += 1
+        n = max(2, int(pc["xb"] - pc["xa"]))
+        peor = max(((egress_at(pieces, 0, pc["xa"] + (pc["xb"] - pc["xa"]) * k / n), pc["xa"] + (pc["xb"] - pc["xa"]) * k / n)
+                    for k in range(n + 1)), key=lambda t: t[0])
+        if peor[0] <= params["egress_multi"] or _nucleo_lateral(pc, peor[1], params, pieces) is None:
+            break
+    return pieces
+
+
+def _pieza_lateral(plate, params):
+    """R11.4: la pieza del pasillo lateral: single, con el marco del plan (params["_lateral"]), las viviendas de un solo
+    lado (side_region[1] es la planta en peine: los patios ya están restados) y nada del otro."""
+    pl = params["_lateral"]
+    pc = _make_piece(plate, pl["origin"], pl["angle"], 0.0, pl["L"], _ancho_ala(plate, _pedidos_ancho(params), params))
+    pc["single"] = True
+    pc["lateral"] = pl
+    return pc
+
+
 def _generate_circulation(plate, params):
     pieces = build_pieces(plate, params)
     cw = params["corridor_width"]
+    if len(pieces) == 1 and pieces[0].get("lateral"):
+        return _circulacion_lateral(pieces, params)
     if len(pieces) == 1 and pieces[0].get("between"):
         # franja central: núcleo contra una medianera + hall; una vivienda hacia cada frente
         pc = pieces[0]
@@ -1298,31 +1567,7 @@ def _generate_circulation(plate, params):
 
     half = params["core_width"] / 2.0
     if params.get("cores_mode") == "manual":
-        for idx, spec in enumerate(params.get("cores") or []):
-            wx, wy = nucleo_punto(spec)
-            giro, w, d = medidas_nucleo(spec, params)
-            half = w / 2.0
-            best = None
-            for i, pc in enumerate(pieces):
-                lx, ly = G.to_local([(wx, wy)], pc["origin"], pc["angle"])[0]
-                dx = max(pc["xa"] - lx, 0.0, lx - pc["xb"])
-                dist = math.hypot(dx, ly)
-                if best is None or dist < best[0]:
-                    best = (dist, i, lx, ly)
-            if best is None:
-                continue
-            _, i, lx, ly = best
-            pc = pieces[i]
-            if pc["xb"] - pc["xa"] >= 2 * half:
-                lx = min(max(lx, pc["xa"] + half), pc["xb"] - half)
-            else:
-                lx = (pc["xa"] + pc["xb"]) / 2.0
-            side = 1 if pc.get("single") else (1 if ly >= 0 else -1) if abs(ly) > 0.3 else next_side()
-            _add_core(pc, lx, side, dict(params, core_width=w, core_depth=d), bolsillo=not (isinstance(spec, dict) and spec.get("fondo")))
-            pc["cores"][-1].update({"spec": idx, "giro": giro, "pisa": _pisa_nucleo(pieces, pc, pc["cores"][-1])})
-            if isinstance(spec, dict) and spec.get("ascensores") is not None:
-                pc["cores"][-1]["ascensores"] = max(0, int(spec["ascensores"]))      # R10.7: propios
-        return pieces
+        return _nucleos_manuales(pieces, params, next_side)
     ring = bool(params.get("_huecos"))
     for pc in pieces:               # un núcleo en cada extremo libre
         for e, free in enumerate(pc["free"]):
